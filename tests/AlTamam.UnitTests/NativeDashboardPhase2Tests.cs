@@ -61,8 +61,10 @@ public sealed class NativeDashboardPhase2Tests
         await page.SelectSiteAsync("SITE-1");
         Assert.Equal(1, reader.Calls[^1].Page);
         Assert.Equal("SITE-1", reader.Calls[^1].SiteId);
-        await page.SelectStatusAsync("__AUTO_PREPARED__");
-        Assert.Equal("__AUTO_PREPARED__", reader.Calls[^1].StatusId);
+        // Ordinary saved statuses filter the main roster; automatic
+        // attendance uses a separate read-only modal (Phase 3 contract).
+        await page.SelectStatusAsync("ABSENT");
+        Assert.Equal("ABSENT", reader.Calls[^1].StatusId);
         await page.SearchAsync("أحمد 123");
         Assert.Equal("أحمد 123", reader.Calls[^1].SearchTerm);
         await page.SearchAsync("");
