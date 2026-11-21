@@ -1,7 +1,7 @@
 namespace AlTamam.NativePresentation;
 
 /// <summary>
-/// Shell-only placeholders: intentionally no domain mutation, fake personnel rows,
+/// Unconverted operational route previews: intentionally no domain mutation, fake personnel rows,
 /// database connection, authentication shortcut, or claim of completed migration.
 /// Domain operations remain in the existing audited Application/Domain/Infrastructure.
 /// </summary>
@@ -11,7 +11,7 @@ public abstract class NativePageViewModel(NativeScreen screen, string title)
     public string Title { get; } = title;
     public bool IsDataConnected => false;
     public string StatusMessage =>
-        "لم يتم ربط هذه الواجهة بالمصادقة والخدمات الأصلية بعد. هذه معاينة XAML فقط.";
+        "تم تفعيل تسجيل الدخول الأصلي والتحقق من الجلسة. لم يتم بعد ربط هذه الشاشة بالخدمات التشغيلية؛ هذه معاينة XAML للمرحلة التالية.";
 }
 
 public sealed class DashboardPageViewModel() : NativePageViewModel(NativeScreen.Dashboard, "الرئيسية");

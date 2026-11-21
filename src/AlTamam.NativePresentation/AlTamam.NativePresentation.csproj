@@ -3,4 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>AlTamam.NativePresentation</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AlTamam.Domain/AlTamam.Domain.csproj" />
+  </ItemGroup>
 </Project>
