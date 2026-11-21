@@ -396,7 +396,7 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertIn("PASS all 69 manifest routes opened", package)
         for runtime in ("win-x86", "win-x64"):
             self.assertIn("runtime: " + runtime, RELEASE)
-        self.assertLess(RELEASE.index("needs: [preflight, build-test, verify-full-test-shards]"),
+        self.assertLess(RELEASE.index("needs: [preflight, build-test, verify-full-test-shards, webview-e2e]"),
                         RELEASE.index("test-package-appdata-preservation.ps1"))
 
     def test_packaged_bridge_does_not_rerun_prepackage_recovery_after_long_x86_fixture(self):
@@ -488,7 +488,7 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertIn("UI-E2E PASS real Windows", driver)
         self.assertIn("if ($process.ExitCode -ne 0)", driver)
         for workflow in (CORE, RELEASE):
-            test_job = workflow.split("  core-tests:", 1)[-1] if workflow == CORE else workflow.split("  build-test:", 1)[-1].split("  package:", 1)[0]
+            test_job = workflow.split("  core-tests:", 1)[-1] if workflow == CORE else workflow.split("  webview-e2e:", 1)[-1].split("  verify-full-test-shards:", 1)[0]
             self.assertIn("pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1", test_job)
             self.assertIn("dotnet build AlTamam.slnx", test_job)
             self.assertLess(test_job.index("dotnet build AlTamam.slnx"),
