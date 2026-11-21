@@ -68,7 +68,7 @@ def collect(root: Path) -> dict:
             "needs: manifest-contract", "dotnet build AlTamam.slnx",
             "dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj")),
         "release_test_gate": all(x in release for x in (
-            "needs: preflight", "needs: build-test",
+            "needs: [preflight, build-test]",
             "Full deterministic test suite", "Phase 15 independent four-package customer SHA256 audit")),
         "four_package_matrix": all(x in release for x in (
             "runtime: win-x86", "runtime: win-x64",

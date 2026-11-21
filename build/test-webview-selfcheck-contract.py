@@ -396,7 +396,7 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertIn("PASS all 69 manifest routes opened", package)
         for runtime in ("win-x86", "win-x64"):
             self.assertIn("runtime: " + runtime, RELEASE)
-        self.assertLess(RELEASE.index("needs: build-test"),
+        self.assertLess(RELEASE.index("needs: [preflight, build-test]"),
                         RELEASE.index("test-package-appdata-preservation.ps1"))
 
     def test_packaged_bridge_does_not_rerun_prepackage_recovery_after_long_x86_fixture(self):

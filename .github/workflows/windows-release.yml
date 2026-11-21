@@ -109,6 +109,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-ci-fast-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
@@ -211,8 +213,8 @@ jobs:
           if-no-files-found: error
 
   build-test:
+    # Run in parallel with preflight; both must pass before package.
     name: Build + full test suite on Windows x64 (15.01)
-    needs: preflight
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -314,7 +316,7 @@ jobs:
   package:
     # HARD DEPENDENCY: no test success => no Portable/Installer output.
     name: Publish and package (${{ matrix.arch }}) after tests
-    needs: build-test
+    needs: [preflight, build-test]
     runs-on: windows-latest
     # Two packaged bridge suites can each retry a 480s x86 probe plus routes.
     # Leave room for their bounded retries, install checks, cleanup and uploads.

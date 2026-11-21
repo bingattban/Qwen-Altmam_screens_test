@@ -116,23 +116,27 @@ class Phase15Contract(unittest.TestCase):
                 self.assertIn("if ($LASTEXITCODE -ne 0)", content)
 
 
-    def test_core_sqlcipher_evidence_check_has_source_sha_in_scope(self):
-        """The test's step-local env must also be visible to the later verifier."""
-        core = read(".github/workflows/windows-ci.yml")
-        job_header = (
-            "  core-tests:\n"
-            "    needs: manifest-contract\n"
-            "    runs-on: windows-latest\n"
-            "    env:\n"
-            "      ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}\n"
+    def test_release_sqlcipher_evidence_check_has_source_sha_in_scope(self):
+        """The measured 10k SQLCipher diagnostic remains mandatory in Release.
+
+        Core is a focused smoke gate; full SQLCipher and native tests still
+        gate the four customer-facing packages.
+        """
+        release = read(".github/workflows/windows-release.yml")
+        job = release.split("  build-test:\n", 1)[1].split("  package:\n", 1)[0]
+        self.assertIn(
+            "ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+            release,
         )
-        self.assertIn(job_header, core, "SHA must exist at job scope, not test step only")
+        self.assertIn("ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT", job)
         self.assertIn(
             "python build/check-phase15-perf-evidence.py "
             "PerformanceEvidence/phase15-10k-multi-year.json "
             "$env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA",
-            core,
+            job,
         )
+        package = release.split("  package:\n", 1)[1]
+        self.assertIn("needs: [preflight, build-test]", package)
 
 
     def test_section07_runtime_route_semantics(self):

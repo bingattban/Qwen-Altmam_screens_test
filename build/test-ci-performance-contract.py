@@ -22,26 +22,27 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Core must restore the full solution exactly once per runner")
     if section.count("dotnet build AlTamam.slnx") != 1 or "dotnet build AlTamam.slnx --configuration Release --no-restore" not in section:
         issues.append("Core must explicitly compile the full solution after restore")
-    if section.count("dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj") != 2:
-        issues.append("Core must run its full suite and the 10k diagnostic benchmark")
-    # Scope the no-build check to the established full-suite step. A new
-    # integration step must NEVER conceal a weakened Core test command.
+    if section.count("dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj") != 1:
+        issues.append("Core must run exactly one focused suite, not duplicate full Release")
+    # Core is scoped to critical smoke tests; Release is exhaustive.
     full_suite = section.split(
-        "      - name: Run deterministic core tests on Windows runner", 1
+        "      - name: Run focused security/attendance smoke tests on Windows runner", 1
     )[-1].split("      - name:", 1)[0]
     if "--configuration Release --no-build --no-restore" not in full_suite:
-        issues.append("Core full tests must reuse the validated build outputs")
+        issues.append("Core smoke tests must reuse the validated build outputs")
+    if '--filter "FullyQualifiedName~BridgeRbacMatrixTests|' not in full_suite:
+        issues.append("Core critical smoke filter is missing")
     phase02_suite = section.split(
         "      - name: Phase 02 actual SQLCipher integration tests", 1
     )[-1].split("      - name:", 1)[0]
     if "--configuration Release --no-build --no-restore" not in phase02_suite:
         issues.append("Phase 02 Core tests must reuse the validated build outputs")
-    if "-c Release --no-build --no-restore" not in section:
-        issues.append("Core benchmark must reuse the same build outputs")
+    if "Capture measured ten-thousand-person search benchmark" in section or "ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT" in section:
+        issues.append("Duplicated Core performance diagnostic must not run")
     if "TestResults/core-tests.trx" not in section or "ResultSummary.Counters.total" not in section:
         issues.append("Core must reject zero-executed full test suites")
-    if "if ($count -lt 1)" not in section:
-        issues.append("Core full test count guard must fail closed")
+    if "if ($count -lt 5)" not in section:
+        issues.append("Core smoke test count guard must fail closed")
     if "dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore" not in release:
         issues.append("Release must execute the established full xUnit suite without building or restoring")
     if "dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj -c $env:CONFIGURATION --no-build --no-restore" not in release:
@@ -50,14 +51,19 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Core must execute the independent Phase 02 integration project")
     if "phase02-integration.trx" not in core or "phase02-integration.trx" not in release:
         issues.append("Both workflows must retain Phase 02 real TRX evidence")
-    if "  preflight:\n" not in release or "  build-test:\n    name: Build + full test suite on Windows x64 (15.01)\n    needs: preflight" not in release:
-        issues.append("Release full test stage must follow preflight")
+    if "  preflight:\n" not in release or "  build-test:\n" not in release:
+        issues.append("Release preflight and full test jobs must both exist")
+    build_test = release.split("  build-test:\n", 1)[-1].split("  package:\n", 1)[0]
+    if "    needs: preflight" in build_test:
+        issues.append("Release full tests must run in parallel with preflight")
+    if "--filter" in build_test.split("      - name: Full deterministic test suite", 1)[-1].split("      - name:", 1)[0]:
+        issues.append("Release full test suite must remain unfiltered")
     if "  package:\n" not in release:
         issues.append("Release x86/x64 packaging matrix is missing")
     else:
         package = release.split("  package:\n", 1)[1].split("  clean-windows-acceptance:\n", 1)[0]
-        if "    needs: build-test" not in package:
-            issues.append("Release packages MUST depend on full green Release tests")
+        if "    needs: [preflight, build-test]" not in package:
+            issues.append("Release packages MUST depend on BOTH green preflight and full Release tests")
         for required in ("runtime: win-x64", "runtime: win-x86",
                          "Build Portable ZIP", "compile installer", "SHA-256 checksums",
                          "Upload standalone Portable", "Upload standalone Installer",
@@ -98,7 +104,7 @@ def validate(core: str, release: str) -> list[str]:
 
 
 def self_test(core: str, release: str) -> None:
-    marker = "      - name: Run deterministic core tests on Windows runner"
+    marker = "      - name: Run focused security/attendance smoke tests on Windows runner"
     before, after = core.split(marker, 1)
     broken = before + marker + after.replace(
         "--configuration Release --no-build --no-restore",
@@ -111,8 +117,8 @@ def self_test(core: str, release: str) -> None:
         "--configuration Release --no-restore", 1)
     assert any("Phase 02 Core tests must reuse" in x
                for x in validate(broken_phase02, release))
-    broken_release = release.replace("    needs: build-test", "    needs: preflight", 1)
-    assert any("MUST depend on full green" in x for x in validate(core, broken_release))
+    broken_release = release.replace("    needs: [preflight, build-test]", "    needs: build-test", 1)
+    assert any("MUST depend on BOTH green" in x for x in validate(core, broken_release))
     unsafe = release.replace("compression-level: 0", "compression-level: 6", 1)
     assert any("redundant compression" in x for x in validate(core, unsafe))
 
@@ -123,4 +129,4 @@ if __name__ == "__main__":
     issues = validate(core, release)
     if issues:
         raise SystemExit("SECTION05 CI OPTIMIZATION GUARD FAIL:\n" + "\n".join(issues))
-    print("SECTION05 CI OPTIMIZATION GUARD PASS: Core build reuse/cache, both full test gates, x86/x64 packages")
+    print("SECTION05 CI OPTIMIZATION GUARD PASS: focused Core, exhaustive Release, double-gated packaging")
