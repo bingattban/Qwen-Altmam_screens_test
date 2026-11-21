@@ -136,7 +136,7 @@ class Phase15Contract(unittest.TestCase):
             job,
         )
         package = release.split("  package:\n", 1)[1]
-        self.assertIn("needs: [preflight, build-test]", package)
+        self.assertIn("needs: [preflight, build-test, verify-full-test-shards]", package)
 
 
     def test_section07_runtime_route_semantics(self):
