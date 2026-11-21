@@ -31,8 +31,10 @@
             <Setter Property="MinHeight" Value="92"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding StatusId}" Value="">
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="#E0F2FE"/>
                     <Setter Property="BorderBrush" Value="#0D9488"/>
+                    <Setter Property="BorderThickness" Value="2"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
