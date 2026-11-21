@@ -58,7 +58,7 @@ def self_test(release: str, package: str) -> None:
     for old,new in (
         ("needs: [package, package-acceptance]","needs: package"),
         ("mode: [Portable, Installer]","mode: [Portable]"),
-        ("-AcceptanceMode", "-AcceptanceModeIgnored"),
+        ("-AcceptanceMode", "-OmittedMode"),
         ("test-package-appdata-preservation.ps1","fake-acceptance.ps1")
     ):
         assert validate(release.replace(old,new,1),package),old
