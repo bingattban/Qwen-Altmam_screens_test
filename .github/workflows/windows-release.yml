@@ -115,6 +115,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Sharded Release no-bypass contract failed' }
           python build/test-parallel-package-acceptance.py
           if ($LASTEXITCODE -ne 0) { throw 'Four real package acceptance gates must remain mandatory' }
+          python build/test-parallel-release-webview-gate.py
+          if ($LASTEXITCODE -ne 0) { throw 'Parallel real Windows WebView2 acceptance cannot be bypassed' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
           python build/test-release-artifact-provenance.py
@@ -303,8 +305,34 @@ jobs:
           name: phase15-sqlcipher-10k-three-year-release
           path: PerformanceEvidence/phase15-10k-multi-year.json
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-windows-${{ matrix.shard }}
+          path: TestResults/*.trx
+          if-no-files-found: error
+
+  webview-e2e:
+    # Independent Windows runner: no longer serializes WebView2 with the
+    # 210 other xUnit cases. Both real E2E and all test shards gate packaging.
+    name: Real pre-package Windows WPF/WebView2 RTL SQLCipher and recovery E2E
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore and build the exact Release solution before real UI testing
+        shell: pwsh
+        run: |
+          dotnet restore AlTamam.slnx
+          if ($LASTEXITCODE -ne 0) { throw 'UI E2E solution restore failed' }
+          dotnet build AlTamam.slnx -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'UI E2E solution build failed' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
-        if: matrix.shard == 'other'
         shell: pwsh
         env:
           ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
@@ -312,7 +340,6 @@ jobs:
           pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
       - name: Phase 13 runner hardware evidence
-        if: matrix.shard == 'other'
         shell: pwsh
         env:
           ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -320,23 +347,16 @@ jobs:
           pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
       - name: Phase 13 reject forged or mismatched Windows E2E evidence
-        if: matrix.shard == 'other'
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
       - name: Upload Phase 13 Windows E2E evidence
-        if: always() && matrix.shard == 'other'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase13-real-windows-e2e-release
           path: Phase13Evidence/*.json
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results-windows-${{ matrix.shard }}
-          path: TestResults/*.trx
           if-no-files-found: error
 
   verify-full-test-shards:
@@ -355,7 +375,7 @@ jobs:
   package:
     # HARD DEPENDENCY: no test success => no Portable/Installer output.
     name: Publish and package (${{ matrix.arch }}) after tests
-    needs: [preflight, build-test, verify-full-test-shards]
+    needs: [preflight, build-test, verify-full-test-shards, webview-e2e]
     runs-on: windows-latest
     # Packaging only; separate artifact acceptance jobs test the genuine uploads.
     timeout-minutes: 25

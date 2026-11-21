@@ -14,11 +14,12 @@ def check(core: str, release: str) -> list[str]:
     problems = []
     smoke = job(core, 'core-tests')
     full = job(release, 'build-test')
+    ui = job(release, 'webview-e2e')
     package = job(release, 'package')
     acceptance = job(release, 'package-acceptance')
     audit = job(release, 'handover-evidence')
     preflight = job(release, 'preflight')
-    if not preflight or not full or not smoke or not package or not acceptance or not audit:
+    if not preflight or not full or not smoke or not ui or not package or not acceptance or not audit:
         problems.append('all static, test, and package jobs required')
     if '    needs: manifest-contract' not in smoke:
         problems.append('Core tests must follow the manifest guard')
@@ -40,7 +41,7 @@ def check(core: str, release: str) -> list[str]:
         problems.append('real Core WPF/WebView2 E2E is mandatory')
     if '    needs: preflight' in full:
         problems.append('Release preflight and test jobs must start independently')
-    if '    needs: [preflight, build-test, verify-full-test-shards]' not in package:
+    if '    needs: [preflight, build-test, verify-full-test-shards, webview-e2e]' not in package:
         problems.append('package must wait for preflight, all Release tests, and independent attestation')
     if re.search(r'(?m)^    if:\s*(?:always\(\)|true)\s*$', package):
         problems.append('package must never bypass failure')
@@ -52,10 +53,11 @@ def check(core: str, release: str) -> list[str]:
     full_suite = full.split('      - name: Full deterministic test suite', 1)[-1].split('      - name:', 1)[0]
     if '--filter "$filter"' not in full_suite or 'shard: [r01, bridge, performance, other]' not in full:
         problems.append('Release full xUnit suite must run in four exhaustive shards')
-    for term in ('check-phase15-perf-evidence.py','check-r01-native-contract-evidence.py TestResults/full-suite.trx',
-                 'pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1'):
+    for term in ('check-phase15-perf-evidence.py','check-r01-native-contract-evidence.py TestResults/full-suite.trx'):
         if term not in full:
             problems.append('Release exhaustive tests/evidence missing ' + term)
+    if 'pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1' not in ui:
+        problems.append('Independent real Windows E2E must run before packaging')
     for term in ('runtime: win-x86', 'runtime: win-x64', 'Build Portable ZIP',
                  'compile installer', 'SHA-256 checksums', 'verify-release-artifacts.py'):
         if term not in package:
@@ -70,7 +72,7 @@ def check(core: str, release: str) -> list[str]:
 
 def self_test(core: str, release: str) -> None:
     assert not check(core, release)
-    assert any('wait for preflight' in p for p in check(core, release.replace('needs: [preflight, build-test, verify-full-test-shards]', 'needs: build-test', 1)))
+    assert any('wait for preflight' in p for p in check(core, release.replace('needs: [preflight, build-test, verify-full-test-shards, webview-e2e]', 'needs: build-test', 1)))
     assert any('full coverage missing' in p for p in check(core, release.replace(
         'dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj', 'dotnet test tests/Unknown.csproj', 1)))
     assert any('four exhaustive shards' in p for p in check(core, release.replace(

@@ -16,7 +16,7 @@ def validate(release: str, package: str) -> list[str]:
     build = release.split("  package:\n",1)[1].split("  package-acceptance:\n",1)[0]
     acceptance = release.split("  package-acceptance:\n",1)[1].split("  handover-evidence:\n",1)[0]
     audit = release.split("  handover-evidence:\n",1)[1].split("  clean-windows-acceptance:\n",1)[0]
-    if "needs: [preflight, build-test, verify-full-test-shards]" not in build:
+    if "needs: [preflight, build-test, verify-full-test-shards, webview-e2e]" not in build:
         issues.append("Packages must still be built only after all Release test gates")
     if "test-package-appdata-preservation.ps1" in build:
         issues.append("Slow acceptance cannot serialize the x86 build job")
