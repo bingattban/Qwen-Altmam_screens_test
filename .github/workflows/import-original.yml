@@ -37,6 +37,7 @@ jobs:
           git checkout -b import/original-baseline
           SRC="$RUNNER_TEMP/altamam-original"
           git -C "$SRC" ls-files -z | while IFS= read -r -d '' file; do
+            case "$file" in .github/workflows/*) continue ;; esac
             mkdir -p "$(dirname "$file")"
             cp "$SRC/$file" "$file"
           done
