@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Fail-closed CI contract for exhaustive four-shard Release validation."""
+"""Fail-closed CI contract for exhaustive six-shard Release validation."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WF = ROOT / ".github/workflows/windows-release.yml"
 EXPECTED = {
     "r01": "FullyQualifiedName~AlTamam.Tests.Bridge.R01",
-    "bridge": "FullyQualifiedName~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Bridge.R01",
+    "bridge-heavy": "FullyQualifiedName~AlTamam.Tests.Bridge.NativeRestoreActivationCoordinatorTests|FullyQualifiedName~AlTamam.Tests.Bridge.BackupRetentionIntegrationTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FirstRunBridgeTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FullResetTests",
+    "bridge-light": "FullyQualifiedName~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Bridge.R01&FullyQualifiedName!~NativeRestoreActivationCoordinatorTests&FullyQualifiedName!~BackupRetentionIntegrationTests&FullyQualifiedName!~Section03FirstRunBridgeTests&FullyQualifiedName!~Section03FullResetTests",
     "performance": "FullyQualifiedName~AlTamam.Tests.Performance",
-    "other": "FullyQualifiedName!~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Performance",
+    "security": "FullyQualifiedName~AlTamam.Tests.Security",
+    "other": "FullyQualifiedName!~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Performance&FullyQualifiedName!~AlTamam.Tests.Security",
 }
 
 def validate(content: str) -> list[str]:
@@ -19,8 +21,8 @@ def validate(content: str) -> list[str]:
     ui=content.split("  webview-e2e:\n",1)[1].split("  verify-full-test-shards:\n",1)[0]
     verify=content.split("  verify-full-test-shards:\n",1)[1].split("  package:\n",1)[0]
     package=content.split("  package:\n",1)[1]
-    if "shard: [r01, bridge, performance, other]" not in tests:
-        problems.append("Matrix must include all four exhaustive partitions")
+    if "shard: [r01, bridge-heavy, bridge-light, performance, security, other]" not in tests:
+        problems.append("Matrix must include all six exhaustive partitions")
     for shard, predicate in EXPECTED.items():
         if predicate not in tests:
             problems.append("Missing exact predicate: "+shard)
@@ -66,4 +68,4 @@ if __name__ == "__main__":
     if issues:
         raise SystemExit("RELEASE SHARD CONTRACT FAIL:\n"+"\n".join(issues))
     self_test(content)
-    print("RELEASE SHARD CONTRACT PASS: 1162+ tests across four shards, verified before x86/x64 packages")
+    print("RELEASE SHARD CONTRACT PASS: 1162+ tests across six shards, verified before x86/x64 packages")
