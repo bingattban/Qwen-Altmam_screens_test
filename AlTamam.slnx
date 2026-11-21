@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AlTamam.Domain/AlTamam.Domain.csproj" />
+    <Project Path="src/AlTamam.Contracts/AlTamam.Contracts.csproj" />
+    <Project Path="src/AlTamam.Application/AlTamam.Application.csproj" />
+    <Project Path="src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
+    <Project Path="src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AlTamam.Tests/AlTamam.Tests.csproj" />
+    <Project Path="tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj" />
+    <Project Path="tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj" />
+  </Folder>
+</Solution>

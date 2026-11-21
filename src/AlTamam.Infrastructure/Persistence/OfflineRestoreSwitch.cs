@@ -1,0 +1,328 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
+
+namespace AlTamam.Infrastructure.Persistence;
+
+/// <summary>
+/// Native OFFLINE database switching. Not wired to any UI/bridge command.
+/// Call only after all application services are stopped and after separate
+/// administrator authentication. Uses same-volume File.Replace and durable
+/// recovery intent; never deletes pre-restore rescue/rollback images.
+/// </summary>
+public sealed class OfflineRestoreSwitch
+{
+    public enum Checkpoint { BeforeReplace, AfterReplace }
+    // Fault injection used only by real disposable SQLCipher integration tests.
+    // The production caller never supplies a checkpoint callback.
+    public enum RecoveryCheckpoint
+    {
+        BeforeReplayCopy, AfterReplayCopy,
+        BeforeRecoveryReplace, AfterRecoveryReplace
+    }
+    public enum RecoveryOutcome { NothingPending, OriginalRetained, ReplacementVerified, OriginalRecovered }
+    private sealed record Intent(string Live,string Stage,string Rollback,string Rescue,
+        string OldDigest,string NewDigest);
+    private const string JournalName=".altamam-restore-activation.pending.json";
+    private static string Journal(string live)
+        =>Path.Combine(Path.GetDirectoryName(Path.GetFullPath(live))!,JournalName);
+
+    private static void ValidateStagePath(string live,string stage)
+    {
+        if(!string.Equals(Path.GetDirectoryName(Path.GetFullPath(live)),
+            Path.GetDirectoryName(Path.GetFullPath(stage)),StringComparison.OrdinalIgnoreCase)||
+           !Path.GetFileName(stage).StartsWith(".altamam-restore-stage-",StringComparison.Ordinal)||
+           !string.Equals(Path.GetExtension(stage),".dbbackup",StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The stage must be a verified sibling of the live DB.");
+    }
+    /// <summary>
+    /// Early native-only key and stage preflight. Invalid keys are rejected
+    /// BEFORE stopping healthy schedulers or SQLCipher connections. The actual
+    /// atomic switch repeats the complete verification after quiescence.
+    /// </summary>
+    public static async Task<bool> CanUsePreparedKeyAsync(
+        string live, string keyHex, StagedRestorePreparation prepared,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            ValidateStagePath(live, prepared.StageFilePath);
+            var candidate = await EncryptedBackupInspector.VerifyAsync(
+                prepared.StageFilePath, live, keyHex, ct).ConfigureAwait(false);
+            return candidate.SchemaVersion == AlTamamDbContext.CurrentSchemaVersion &&
+                string.Equals(candidate.Sha256, prepared.StageSha256,
+                    StringComparison.OrdinalIgnoreCase);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            InvalidDataException or ArgumentException or FormatException or
+            CryptographicException or SqliteException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static void RequireOffline(string live)
+    {
+        if(File.Exists(live+"-wal")||File.Exists(live+"-shm")||File.Exists(live+"-journal"))
+            throw new IOException("Cannot switch while SQLite WAL/SHM/journal sidecars remain.");
+    }
+    private static void CheckpointAndQuiesceWal(string live,string key)
+    {
+        // Native caller holds the single-instance mutex. Fail if a reader or
+        // writer still owns the database; do NOT delete WAL bytes manually.
+        SqliteConnection.ClearAllPools();
+        using(var connection=new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource=live,Mode=SqliteOpenMode.ReadWrite,Password=key,
+            Pooling=false,ForeignKeys=true,DefaultTimeout=15
+        }.ConnectionString))
+        {
+            connection.Open();
+            using(var checkpoint=connection.CreateCommand())
+            {
+                checkpoint.CommandText="PRAGMA wal_checkpoint(TRUNCATE);";
+                using var row=checkpoint.ExecuteReader();
+                if(!row.Read() || row.GetInt64(0)!=0)
+                    throw new IOException("SQLite has an active reader/writer; WAL cannot be checkpointed.");
+            }
+            using(var journal=connection.CreateCommand())
+            {
+                journal.CommandText="PRAGMA journal_mode=DELETE;";
+                if(!string.Equals(journal.ExecuteScalar()?.ToString(),"delete",
+                    StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("SQLite refused to leave WAL journal mode.");
+            }
+        }
+        SqliteConnection.ClearAllPools();
+        RequireOffline(live);
+    }
+
+    private static async Task<bool> ValidExactAsync(string path,string digest,
+        string live,string key,CancellationToken ct)
+    {
+        if(!File.Exists(path))return false;
+
+        // Even opening a WAL-mode SQLCipher DB with SqliteOpenMode.ReadOnly can
+        // create -wal/-shm files beside that DB. This must NEVER happen to the
+        // restored customer live DB or the only original encrypted rollback.
+        // Verify a separate disposable encrypted image instead; fail closed
+        // if the extra disk space is unavailable. R13/R15 recognise the
+        // uniquely named replay prefix as old recovery evidence after crashes.
+        string replay=Path.Combine(Path.GetDirectoryName(live)!,
+            ".altamam-restore-reconcile-"+Guid.NewGuid().ToString("N")+".dbbackup");
+        try
+        {
+            // Hold a shared READ lock while hashing and making the copy,
+            // excluding concurrent writers/deletions during verification.
+            await using var original=new FileStream(path,FileMode.Open,
+                FileAccess.Read,FileShare.Read,81920,FileOptions.SequentialScan);
+            string originalDigest=Convert.ToHexString(
+                await SHA256.HashDataAsync(original,ct).ConfigureAwait(false));
+            if(!string.Equals(originalDigest,digest,StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            original.Position=0;
+            await using(var output=new FileStream(replay,FileMode.CreateNew,
+                FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
+            {
+                await original.CopyToAsync(output,ct).ConfigureAwait(false);
+                output.Flush(flushToDisk:true);
+            }
+            var result=await EncryptedBackupInspector.VerifyAsync(replay,live,key,ct)
+                .ConfigureAwait(false);
+            return result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion &&
+                string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase);
+        }
+        catch(Exception ex) when(ex is SqliteException or IOException or
+            InvalidDataException or FormatException or InvalidOperationException){return false;}
+        finally
+        {
+            // Remove only our GUID-generated scratch encrypted image and its
+            // SQLite sidecars, not customer backups, live DB or original
+            // rollback. If cleanup is interrupted, leave evidence intact.
+            foreach(string suffix in new[]{"-wal","-shm","-journal",""})
+            {
+                try
+                {
+                    string file=replay+suffix;
+                    if(File.Exists(file))File.Delete(file);
+                }
+                catch(IOException){}
+                catch(UnauthorizedAccessException){}
+            }
+        }
+    }
+    private static async Task WriteIntentAsync(string path,Intent intent,CancellationToken ct)
+    {
+        string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try
+        {
+            await using(var file=new FileStream(temp,FileMode.CreateNew,FileAccess.Write,
+                FileShare.None,4096,FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(file,intent,cancellationToken:ct)
+                    .ConfigureAwait(false);
+                file.Flush(flushToDisk:true);
+            }
+            File.Move(temp,path,overwrite:false);
+        }
+        finally
+        {
+            try{if(File.Exists(temp))File.Delete(temp);}catch(IOException){}
+        }
+    }
+    private static async Task<Intent> ReadIntentAsync(string live,CancellationToken ct)
+    {
+        string json=await File.ReadAllTextAsync(Journal(live),ct).ConfigureAwait(false);
+        var state=JsonSerializer.Deserialize<Intent>(json)
+            ??throw new InvalidDataException("Restore intent is incomplete.");
+        // This file is on the local disk and must be treated as untrusted
+        // after a power loss. Never let a mutated journal approve an otherwise
+        // valid live file, or direct a rollback to an arbitrary sibling path.
+        if(state.Live is null||state.Stage is null||state.Rollback is null||
+           state.Rescue is null||state.OldDigest is null||state.NewDigest is null)
+            throw new InvalidDataException("Restore intent is incomplete.");
+        string root=Path.GetDirectoryName(Path.GetFullPath(live))!;
+        const string rollbackPrefix=".altamam-restore-rollback-";
+        const string suffix=".dbbackup";
+        string rollbackName=Path.GetFileName(state.Rollback);
+        string id=rollbackName.StartsWith(rollbackPrefix,StringComparison.Ordinal) &&
+                  rollbackName.EndsWith(suffix,StringComparison.OrdinalIgnoreCase) &&
+                  rollbackName.Length==rollbackPrefix.Length+32+suffix.Length
+                  ? rollbackName.Substring(rollbackPrefix.Length,32):string.Empty;
+        if(!string.Equals(Path.GetFullPath(live),Path.GetFullPath(state.Live),
+                StringComparison.OrdinalIgnoreCase)||
+           id.Length!=32||!id.All(Uri.IsHexDigit)||
+           !string.Equals(Path.GetFullPath(state.Rollback),
+               Path.Combine(root,rollbackPrefix+id+suffix),StringComparison.OrdinalIgnoreCase)||
+           !string.Equals(Path.GetFullPath(state.Rescue),
+               Path.Combine(root,"backups","rescue-at-activation-"+id+suffix),
+               StringComparison.OrdinalIgnoreCase)||
+           state.OldDigest.Length!=64||!state.OldDigest.All(Uri.IsHexDigit)||
+           state.NewDigest.Length!=64||!state.NewDigest.All(Uri.IsHexDigit))
+            throw new InvalidDataException("Restore intent paths/digests are not trusted.");
+        ValidateStagePath(live,state.Stage);
+        return state;
+    }
+
+    public async Task<string> ActivateOfflineAsync(string live,string key,
+        StagedRestorePreparation prepared,Action<Checkpoint>? testCheckpoint=null,
+        CancellationToken ct=default)
+    {
+        live=Path.GetFullPath(live);
+        ValidateStagePath(live,prepared.StageFilePath);
+        if(File.Exists(Journal(live)))throw new IOException(
+            "Previous restore must be reconciled before any new switch.");
+        var stage=await EncryptedBackupInspector.VerifyAsync(
+            prepared.StageFilePath,live,key,ct).ConfigureAwait(false);
+        if(stage.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion||
+           !string.Equals(stage.Sha256,prepared.StageSha256,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Invalid staged restore image.");
+        var earlierRescue=await EncryptedBackupInspector.VerifyAsync(
+            prepared.RescueFilePath,live,key,ct).ConfigureAwait(false);
+        if(!string.Equals(earlierRescue.Sha256,prepared.RescueSha256,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Earlier rescue is altered.");
+
+        string id=Guid.NewGuid().ToString("N");
+        string freshRescue=Path.Combine(Path.GetDirectoryName(live)!,"backups",
+            "rescue-at-activation-"+id+".dbbackup");
+        // An additional WAL-consistent snapshot covers writes since staging.
+        using(var db=new AlTamamDbContext(live,key))
+            await db.CreateVerifiedEncryptedBackupAsync(freshRescue,ct).ConfigureAwait(false);
+        var emergency=await EncryptedBackupInspector.VerifyAsync(
+            freshRescue,live,key,ct).ConfigureAwait(false);
+        if(emergency.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion)
+            throw new InvalidDataException("Fresh rescue failed verification.");
+
+        CheckpointAndQuiesceWal(live,key);
+        var old=await EncryptedBackupInspector.VerifyAsync(
+            live,prepared.StageFilePath,key,ct).ConfigureAwait(false);
+        if(old.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion)
+            throw new InvalidDataException("Active DB schema is incompatible.");
+        RequireOffline(live);
+        string rollback=Path.Combine(Path.GetDirectoryName(live)!,
+            ".altamam-restore-rollback-"+id+".dbbackup");
+        var intent=new Intent(live,Path.GetFullPath(prepared.StageFilePath),
+            rollback,freshRescue,old.Sha256,stage.Sha256);
+        ct.ThrowIfCancellationRequested();
+        await WriteIntentAsync(Journal(live),intent,ct).ConfigureAwait(false);
+        // The durable intent must be reconciled after interruption.
+        testCheckpoint?.Invoke(Checkpoint.BeforeReplace);
+        File.Replace(prepared.StageFilePath,live,rollback);
+        testCheckpoint?.Invoke(Checkpoint.AfterReplace);
+        if(!await ValidExactAsync(live,intent.NewDigest,live,key,CancellationToken.None)
+            .ConfigureAwait(false))
+            throw new InvalidDataException("Post-switch verification failed; intent retained.");
+        File.Delete(Journal(live));
+        return rollback;
+    }
+
+    /// <summary>Run under the single-instance lock, BEFORE opening the DB.</summary>
+    public async Task<RecoveryOutcome> ReconcileAtStartupAsync(string live,string key,
+        CancellationToken ct=default,Action<RecoveryCheckpoint>? testCheckpoint=null)
+    {
+        live=Path.GetFullPath(live);
+        if(!File.Exists(Journal(live)))return RecoveryOutcome.NothingPending;
+        RequireOffline(live);
+        var state=await ReadIntentAsync(live,ct).ConfigureAwait(false);
+        if(await ValidExactAsync(live,state.NewDigest,live,key,ct).ConfigureAwait(false))
+        {
+            File.Delete(Journal(live));
+            return RecoveryOutcome.ReplacementVerified;
+        }
+        if(await ValidExactAsync(live,state.OldDigest,live,key,ct).ConfigureAwait(false))
+        {
+            File.Delete(Journal(live));
+            return RecoveryOutcome.OriginalRetained;
+        }
+        if(!await ValidExactAsync(state.Rollback,state.OldDigest,live,key,ct)
+            .ConfigureAwait(false))
+            throw new InvalidDataException(
+                "Unknown DB state without a valid rollback; no overwrite performed.");
+        // Never pass the ONLY verified pre-restore rollback to File.Replace:
+        // File.Replace consumes its source. A damaged new live DB after power
+        // loss must not erase the original encrypted rollback evidence.
+        // Copy to a same-volume, uniquely named, write-through disposable
+        // image and verify it independently before entering the atomic swap.
+        // On disk-full/copy failure, the journal and original stay untouched.
+        string replay=Path.Combine(Path.GetDirectoryName(live)!,
+            ".altamam-restore-reconcile-"+Guid.NewGuid().ToString("N")+".dbbackup");
+        try
+        {
+            testCheckpoint?.Invoke(RecoveryCheckpoint.BeforeReplayCopy);
+            await using(var original=new FileStream(state.Rollback,FileMode.Open,
+                FileAccess.Read,FileShare.Read,81920,FileOptions.SequentialScan))
+            await using(var output=new FileStream(replay,FileMode.CreateNew,
+                FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
+            {
+                await original.CopyToAsync(output,ct).ConfigureAwait(false);
+                output.Flush(flushToDisk:true);
+            }
+            testCheckpoint?.Invoke(RecoveryCheckpoint.AfterReplayCopy);
+            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct)
+                .ConfigureAwait(false))
+                throw new InvalidDataException(
+                    "Rollback replay copy is not valid; original and intent retained.");
+            testCheckpoint?.Invoke(RecoveryCheckpoint.BeforeRecoveryReplace);
+            if(!File.Exists(live))File.Move(replay,live);
+            else File.Replace(replay,live,
+                live+".failed-restore-"+Guid.NewGuid().ToString("N"));
+            testCheckpoint?.Invoke(RecoveryCheckpoint.AfterRecoveryReplace);
+            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct)
+                .ConfigureAwait(false))
+                throw new InvalidDataException(
+                    "Rollback verification failed; intent and original retained.");
+            File.Delete(Journal(live));
+            return RecoveryOutcome.OriginalRecovered;
+        }
+        finally
+        {
+            // Best-effort cleanup of the disposable replay ONLY. Even if File
+            // replacement fails, NEVER remove the source rollback or rescues.
+            try { if(File.Exists(replay))File.Delete(replay); }
+            catch(IOException) { }
+            catch(UnauthorizedAccessException) { }
+        }
+    }
+}

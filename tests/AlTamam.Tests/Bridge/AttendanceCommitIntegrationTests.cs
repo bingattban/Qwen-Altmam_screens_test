@@ -1,0 +1,574 @@
+using System.Text.Json.Nodes;
+using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Enums;
+using AlTamam.Infrastructure.Persistence;
+using AlTamam.Tests.Fixtures;
+using Xunit;
+
+namespace AlTamam.Tests.Bridge;
+
+public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposable
+{
+    private readonly string _path=SyntheticFixtures.CreateTempDatabasePath();
+    private AlTamamDbContext _db=null!;
+    private static readonly BridgePrincipal Actor=new("TST-ATTEND-USER","test-attendance",
+        UserRole.GeneralAdministration,"aabbccddeeff00112233445566778899");
+    private static string Today()=>TimeProvider.System.GetLocalNow().ToString("yyyy-MM-dd");
+    public async Task InitializeAsync()
+    {
+        _db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex);
+        await _db.InitializeAsync();
+        using var c=_db.CreateOpenConnection();
+        for(int i=1;i<=2;i++)
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+                    NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+                    OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES($id,$name,$name,$number,$number,$date,$now,1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES($assign,$id,'SITE-UNSPECIFIED',$date,NULL,NULL,$now);
+                """;
+            cmd.Parameters.AddWithValue("$id","TST-ATTEND-P"+i);
+            cmd.Parameters.AddWithValue("$assign","TST-ATTEND-A"+i);
+            cmd.Parameters.AddWithValue("$name","فرد اختبار رقم "+i);
+            cmd.Parameters.AddWithValue("$number","92"+i.ToString("D4"));
+            cmd.Parameters.AddWithValue("$date",Today());
+            cmd.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));
+            await cmd.ExecuteNonQueryAsync();
+        }
+    }
+    private static JsonObject Payload(string mode,string statusId,string[] ids,string reason="")=>new()
+    {
+        ["mode"]=mode,["statusId"]=statusId,["businessDate"]=Today(),
+        ["siteId"]="SITE-UNSPECIFIED",["reason"]=reason,
+        ["personIds"]=new JsonArray(ids.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
+    };
+    private static string Token(BridgeResponse r)
+    {
+        Assert.True(r.Success,r.UserMessage);
+        return Assert.IsType<JsonObject>(r.Data)["previewToken"]!.GetValue<string>();
+    }
+    private long Count(string table)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM "+table;
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+    [Fact]
+    public async Task LeaveAndPermissionRequireValidDatesAndCommitBoundedPeriod()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        foreach(var status in new[]{"STS-LEAVE","STS-PERMISSION"})
+        {
+            var missing=await service.PreviewAsync(Payload("initial",status,ids),Actor,CancellationToken.None);
+            Assert.False(missing.Success);
+            var reversed=Payload("initial",status,ids);
+            reversed["rangeStartDate"]=Today();
+            reversed["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(-1).ToString("yyyy-MM-dd");
+            Assert.False((await service.PreviewAsync(reversed,Actor,CancellationToken.None)).Success);
+        }
+        var valid=Payload("initial","STS-LEAVE",ids);
+        valid["rangeStartDate"]=Today();
+        valid["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(3).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(valid,Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal(1L,Count("AttendanceDateRanges"));
+        Assert.Equal(1L,Count("AttendanceRecords"));
+    }
+    [Fact]
+    public async Task DatedLeaveAutoAttendance_ExpiresWithoutCarryingLeaveForward()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        var start=DateOnly.Parse(Today());
+        var payload=Payload("initial","STS-LEAVE",ids);
+        payload["rangeStartDate"]=Today();
+        payload["rangeEndDate"]=start.AddDays(1).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(payload,Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var scheduler=new AlTamam.Application.Scheduling.AutoAttendanceService(_db,new SyntheticDaytimeClock());
+        var within=await scheduler.RunForDateAsync(start.AddDays(1),false);
+        Assert.False(within.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(1).ToString("yyyy-MM-dd"));
+            Assert.Equal("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+        var after=await scheduler.RunForDateAsync(start.AddDays(2),false);
+        Assert.False(after.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(2).ToString("yyyy-MM-dd"));
+            Assert.NotEqual("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+    }
+    [Fact]
+    public async Task BulkCommitAndRevision_AuditAtomicAndOneTimePreview()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var initial=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        string token=Token(initial);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=token},Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal(2L,Count("AttendanceRecords"));
+        Assert.Equal(2L,Count("AuditEvents"));
+        var replay=await service.CommitAsync(new JsonObject{["previewToken"]=token},Actor,false,CancellationToken.None);
+        Assert.False(replay.Success);
+        Assert.Equal(2L,Count("AttendanceRecords"));
+        var revision=await service.PreviewAsync(Payload("revise","STS-ABSENT",
+            ["TST-ATTEND-P1"],"تصحيح بيانات التحضير"),Actor,CancellationToken.None);
+        Assert.True(revision.Success,revision.UserMessage);
+        var revised=await service.CommitAsync(new JsonObject{["previewToken"]=Token(revision)},
+            Actor,true,CancellationToken.None);
+        Assert.True(revised.Success,revised.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        Assert.Equal(3L,Count("AuditEvents"));
+        using var c=_db.CreateOpenConnection();
+        using var check=c.CreateCommand();
+        check.CommandText="""
+            SELECT RevisionNumber FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1';
+            """;
+        Assert.Equal(2L,Convert.ToInt64(check.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task AutomaticRegister_BulkStatusRevision_IsAtomicAuditedAndRetainsSource()
+    {
+        var service = new AttendanceCommitService(_db, new SyntheticDaytimeClock());
+        var ids = new[] { "TST-ATTEND-P1", "TST-ATTEND-P2" };
+        var initial = await service.PreviewAsync(
+            Payload("initial", "STS-ABSENT", ids), Actor, CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(initial),
+            ["operationId"] = "auto-bulk-initial-20261029"
+        }, Actor, false, CancellationToken.None)).Success);
+
+        // Simulate records committed by the actual local auto-attendance scheduler;
+        // revision must not erase this immutable automatic origin marker.
+        using (var c = _db.CreateOpenConnection())
+        using (var q = c.CreateCommand())
+        {
+            q.CommandText = """
+                UPDATE AttendanceRecords
+                SET IdempotencyKey = 'AUTO08H-' || PersonId
+                WHERE PersonId IN ('TST-ATTEND-P1','TST-ATTEND-P2');
+                """;
+            Assert.Equal(2, await q.ExecuteNonQueryAsync());
+        }
+
+        var read = new DailyMonthlyReadService(_db);
+        var filter = new JsonObject {
+            ["businessDate"] = Today(), ["statusId"] = "__AUTO_PREPARED__",
+            ["siteId"] = "SITE-UNSPECIFIED", ["page"] = 1, ["pageSize"] = 50
+        };
+        var before = await read.DailyRosterAsync(filter, CancellationToken.None);
+        Assert.True(before.Success, before.UserMessage);
+        Assert.Equal(2L, ((JsonObject)before.Data!)["total"]!.GetValue<long>());
+        Assert.Equal(0L, Count("AttendanceRevisions"));
+
+        var preview = await service.PreviewAsync(Payload("revise", "STS-PRESENT", ids),
+            Actor, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var reviewed = (JsonArray)((JsonObject)preview.Data!)["persons"]!;
+        Assert.Equal(2, reviewed.Count);
+        Assert.All(reviewed, item =>
+            Assert.Equal("غياب", ((JsonObject)item!)["previousStatusName"]!.GetValue<string>()));
+        Assert.Equal(0L, Count("AttendanceRevisions"));
+
+        var intent = new JsonObject {
+            ["previewToken"] = Token(preview),
+            ["operationId"] = "auto-bulk-revise-20261029"
+        };
+        var result = await service.CommitAsync(intent, Actor, true, CancellationToken.None);
+        Assert.True(result.Success, result.UserMessage);
+        Assert.Equal(2, ((JsonObject)result.Data!)["count"]!.GetValue<int>());
+        Assert.Equal(2L, Count("AttendanceRevisions"));
+        Assert.Equal(4L, Count("AuditEvents"));
+
+        var after = await read.DailyRosterAsync(filter, CancellationToken.None);
+        Assert.True(after.Success, after.UserMessage);
+        var rows = (JsonArray)((JsonObject)after.Data!)["items"]!;
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, item => {
+            var person = (JsonObject)item!;
+            Assert.Equal("موجود", person["statusName"]!.GetValue<string>());
+            Assert.Equal("تحضير تلقائي 08:00", person["autoSource"]!.GetValue<string>());
+        });
+
+        var retry = await service.CommitAsync((JsonObject)intent.DeepClone(),
+            Actor, true, CancellationToken.None);
+        Assert.True(retry.Success, retry.UserMessage);
+        Assert.Equal(2L, Count("AttendanceRevisions"));
+        Assert.Equal(4L, Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task AutomaticRegister_StaleOneOfTwo_BlocksEntireBatchWithoutPartialRevision()
+    {
+        var service = new AttendanceCommitService(_db, new SyntheticDaytimeClock());
+        var ids = new[] { "TST-ATTEND-P1", "TST-ATTEND-P2" };
+        var initial = await service.PreviewAsync(Payload("initial","STS-ABSENT",ids),
+            Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(initial)
+        },Actor,false,CancellationToken.None)).Success);
+
+        var bulkPreview = await service.PreviewAsync(
+            Payload("revise","STS-PRESENT",ids),Actor,CancellationToken.None);
+        Assert.True(bulkPreview.Success,bulkPreview.UserMessage);
+        var concurrentPreview = await service.PreviewAsync(Payload(
+            "revise","STS-PRESENT",["TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(concurrentPreview)
+        },Actor,true,CancellationToken.None)).Success);
+
+        var rejected = await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(bulkPreview),
+            ["operationId"] = "auto-stale-bulk-20261029"
+        },Actor,true,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 2",rejected.UserMessage);
+        Assert.Contains("920002",rejected.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        Assert.Equal(3L,Count("AuditEvents"));
+
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = """
+            SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1';
+            """;
+        Assert.Equal("STS-ABSENT",q.ExecuteScalar());
+        q.CommandText = """
+            SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P2';
+            """;
+        Assert.Equal("STS-PRESENT",q.ExecuteScalar());
+    }
+
+    [Fact]
+    public async Task AttendanceCommit_LostResponseRetry_ReturnsOriginalResultWithoutDuplicateAudit()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var preview=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        string token=Token(preview);
+        var request=new JsonObject{
+            ["previewToken"]=token,["operationId"]="attendance-intent-20261029-one"
+        };
+        var first=await service.CommitAsync(request,Actor,false,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)request.DeepClone(),
+            Actor,false,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)retry.Data!).ToJsonString());
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+
+        var changed=(JsonObject)request.DeepClone();
+        changed["previewToken"]=new string('a',64);
+        var collision=await service.CommitAsync(changed,Actor,false,CancellationToken.None);
+        Assert.False(collision.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,collision.ErrorCode);
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task AttendanceRevision_LostResponseRetry_DoesNotDuplicateCorrection()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(first)},Actor,false,CancellationToken.None)).Success);
+        var preview=await service.PreviewAsync(Payload("revise","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var req=new JsonObject{
+            ["previewToken"]=Token(preview),["operationId"]="attendance-intent-20261029-revise"
+        };
+        var done=await service.CommitAsync(req,Actor,true,CancellationToken.None);
+        Assert.True(done.Success,done.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)req.DeepClone(),
+            Actor,true,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+    }
+
+    [Fact]
+    public async Task ReviseTodayWithoutTypedReason_RequiresPreviewAndPreservesAutomaticAuditReason()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var initial=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(initial)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var changed=await service.PreviewAsync(Payload("revise","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(changed.Success,changed.UserMessage);
+        var preview=Assert.IsType<JsonObject>(changed.Data);
+        Assert.Equal("تغيير حالة التمام بتأكيد المستخدم",
+            preview["reason"]!.GetValue<string>());
+        Assert.Equal(0L,Count("AttendanceRevisions")); // preview cannot save changes
+        var done=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(changed)},Actor,true,CancellationToken.None);
+        Assert.True(done.Success,done.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText="SELECT Reason FROM AttendanceRevisions WHERE PersonId='TST-ATTEND-P1';";
+        Assert.Equal("تغيير حالة التمام بتأكيد المستخدم",
+            Convert.ToString(command.ExecuteScalar()));
+        var secondAttempt=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(changed)},Actor,true,CancellationToken.None);
+        Assert.False(secondAttempt.Success); // one-use token
+    }
+
+    [Fact]
+    public async Task PreviewRejectsAlreadyPreparedIndividualWithFullNameAndServiceNumber()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(first)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var rejected=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 1",rejected.UserMessage);
+        Assert.Contains("920001",rejected.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        var same=await service.PreviewAsync(Payload("revise","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.False(same.Success);
+        Assert.Contains("فرد اختبار رقم 1",same.UserMessage);
+        Assert.Contains("920001",same.UserMessage);
+        Assert.Equal(0L,Count("AttendanceRevisions"));
+    }
+
+    [Fact]
+    public async Task RejectsPersonWithNoValidAssignmentByNameAndNumber()
+    {
+        using(var connection=_db.CreateOpenConnection())
+        using(var command=connection.CreateCommand())
+        {
+            command.CommandText="""
+                UPDATE Persons SET ActiveFlag=0 WHERE PersonId='TST-ATTEND-P2';
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var rejected=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 2",rejected.UserMessage);
+        Assert.Contains("920002",rejected.UserMessage);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task StalePreviewIdentifiesIndividualWhoseAttendanceChanged()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var competing=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(competing.Success,competing.UserMessage);
+        var accepted=await service.CommitAsync(
+            new JsonObject{["previewToken"]=Token(first)},
+            Actor,false,CancellationToken.None);
+        Assert.True(accepted.Success,accepted.UserMessage);
+        var stale=await service.CommitAsync(
+            new JsonObject{["previewToken"]=Token(competing)},
+            Actor,false,CancellationToken.None);
+        Assert.False(stale.Success);
+        Assert.Contains("فرد اختبار رقم 1",stale.UserMessage);
+        Assert.Contains("920001",stale.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRecords"));
+    }
+
+    [Fact]
+    public async Task InvalidBulkSelection_WritesNothing()
+    {
+        var svc=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var rejected=await svc.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1","TST-PERSON-NONEXISTENT"]),Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+    }
+    [Fact]
+    public async Task HistoricDateIsRejected()
+    {
+        var svc=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var data=Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]);
+        data["businessDate"]=DateOnly.FromDateTime(DateTime.Now).AddDays(-1).ToString("yyyy-MM-dd");
+        var rejected=await svc.PreviewAsync(data,Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+    }
+    [Fact]
+    public async Task EightPm_LocalCutoffBlocksNewPreviewAndStaleApproval()
+    {
+        var clock=new SyntheticDaytimeClock(19,59);
+        var service=new AttendanceCommitService(_db,clock);
+        var valid=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(valid.Success,valid.UserMessage);
+        string token=Token(valid);
+        clock.SetLocalTime(20,0);
+        var stopped=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.False(stopped.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,stopped.ErrorCode);
+        var lateCommit=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.False(lateCommit.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,lateCommit.ErrorCode);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+    }
+
+    [Fact]
+    public async Task InvalidAttendanceInputs_IdentifyEveryFieldAndNeverCommit()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var invalid=Payload("unknown-mode","",[]);
+        var response=await service.PreviewAsync(invalid,Actor,CancellationToken.None);
+        Assert.False(response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,response.ErrorCode);
+        Assert.Null(response.Data);
+        var fields=Assert.IsType<JsonObject>(response.ValidationErrors);
+        Assert.NotNull(fields["personIds"]);
+        Assert.NotNull(fields["statusId"]);
+        Assert.NotNull(fields["mode"]);
+        Assert.Equal(3,fields.Count);
+
+        var wrongDate=Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]);
+        wrongDate["businessDate"]=DateOnly.FromDateTime(DateTime.Now)
+            .AddDays(3).ToString("yyyy-MM-dd");
+        var rejectedDate=await service.PreviewAsync(wrongDate,Actor,CancellationToken.None);
+        Assert.False(rejectedDate.Success);
+        Assert.NotNull(rejectedDate.ValidationErrors?["businessDate"]);
+
+        var unknownStatus=await service.PreviewAsync(
+            Payload("initial","STS-UNKNOWN",["TST-ATTEND-P1"]),
+            Actor,CancellationToken.None);
+        Assert.False(unknownStatus.Success);
+        Assert.Equal(BridgeErrorCodes.CustomStatusInactive,unknownStatus.Code);
+        Assert.NotNull(unknownStatus.ValidationErrors?["statusId"]);
+
+        var badReason=await service.PreviewAsync(
+            Payload("revise","STS-ABSENT",["TST-ATTEND-P1"],"لا"),
+            Actor,CancellationToken.None);
+        Assert.False(badReason.Success);
+        Assert.NotNull(badReason.ValidationErrors?["reason"]);
+
+        var badCommit=await service.CommitAsync(new JsonObject(),Actor,false,CancellationToken.None);
+        Assert.False(badCommit.Success);
+        Assert.Null(badCommit.Data);
+        Assert.NotNull(badCommit.ValidationErrors?["previewToken"]);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+        Assert.Equal(0L,Count("MutationReceipts"));
+    }
+
+    [Fact]
+    public async Task ReusedAttendancePreview_ReturnsStructuredStaleReasonWithoutSecondMutation()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        string token=Token(await service.PreviewAsync(
+            Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]),
+            Actor,CancellationToken.None));
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var repeated=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.False(repeated.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,repeated.Code);
+        Assert.Null(repeated.Data);
+        Assert.Equal("InvalidOrExpiredPreviewToken",
+            repeated.ConflictInfo?["reason"]?.GetValue<string>());
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+
+    [Fact]
+    public async Task ManualRevision_StopsAnExistingPeriodThatBeganYesterday()
+    {
+        var today=Today();
+        var yesterday=DateOnly.Parse(today).AddDays(-1).ToString("yyyy-MM-dd");
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO AttendanceDateRanges
+                  (RangeId,PersonId,StatusId,StartLocalDate,EndLocalDate,
+                   CreatedAtUtc,CreatedByUserId)
+                VALUES('TST-ATTEND-CROSS-DAY','TST-ATTEND-P1','STS-LEAVE',
+                       $from,$end,$now,'TST-ATTEND-USER');
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                   StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                   AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                   Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('TST-ATTEND-P1',$today,'STS-LEAVE','إجازة','ج','#22C55E',
+                   'TST-ATTEND-A1','SITE-UNSPECIFIED','غير محدد',
+                   '08h-auto','TST-ATTEND-USER',$now,1,'TST-PERIOD-REVISION-1');
+                """;
+            q.Parameters.AddWithValue("$from",yesterday);
+            q.Parameters.AddWithValue("$today",today);
+            q.Parameters.AddWithValue("$end",DateOnly.Parse(today).AddDays(3).ToString("yyyy-MM-dd"));
+            q.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));
+            await q.ExecuteNonQueryAsync();
+        }
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var preview=await service.PreviewAsync(
+            Payload("revise","STS-PRESENT",["TST-ATTEND-P1"]),Actor,default);
+        var revised=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,true,default);
+        Assert.True(revised.Success,revised.UserMessage);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM AttendanceDateRanges WHERE PersonId='TST-ATTEND-P1' AND EndedAtUtc IS NULL;";
+            Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+        var next=DateOnly.Parse(today).AddDays(1);
+        await new AlTamam.Application.Scheduling.AutoAttendanceService(_db,new SyntheticDaytimeClock())
+            .RunForDateAsync(next,false);
+        using var verify=_db.CreateOpenConnection();
+        using var check=verify.CreateCommand();
+        check.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+        check.Parameters.AddWithValue("$date",next.ToString("yyyy-MM-dd"));
+        Assert.Equal("STS-PRESENT",check.ExecuteScalar() as string);
+    }
+
+    public Task DisposeAsync()=>Task.CompletedTask;
+    public void Dispose()
+    {
+        _db?.Dispose();
+        SyntheticFixtures.DeleteTempDatabase(_path);
+    }
+}

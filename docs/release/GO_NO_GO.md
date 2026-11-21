@@ -1,0 +1,110 @@
+## Live main evidence checkpoint — 2026-11-12 (CI candidate, NOT production approval)
+
+- Immutable `main` source SHA: `ed255a1420c047e8eb7b929bd3bdc509eeffa263` (merged PR #281). This is a **historical, exact-SHA CI candidate**, not the source SHA of this evidence-only PR.
+- [Windows Core run 43062807272](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807272): completed **success** on that source SHA (manifest guard + core-tests).
+- [Windows Release run 43062807273](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807273): completed **success** on the SAME SHA; release full-test job completed before independent win-x86/win-x64 package jobs, and the four-customer-package SHA-256 audit completed **success**.
+- The `0.0.1172-ci` Release run uploaded four distinct candidate packages: win-x86 Portable and Installer, win-x64 Portable and Installer, together with per-architecture checksum metadata and a four-package provenance artifact. The GitHub artifact wrapper hash is not a substitute for the actual customer-file SHA-256.
+- The Release `Clean-machine acceptance matrix (15.06) — manual evidence gate` job was **SKIPPED**; this is by design, NOT passed acceptance. The independent physical `WIN-01` through `WIN-10` checks remain **NOT EXECUTED**. Do not infer successful clean/offline installation, real first-run operator use, upgrade, real disk/power failure, cross-PC encrypted recovery, or complete 10,000-person WPF/Excel throughput from hosted CI.
+- The native WPF GeneralAdministration-reauthenticated restore and password-protected export of the original SQLCipher key exist, but independent destructive-restore acceptance is still missing. The WebView2 `RestoreDatabaseAtomically` action remains disabled. Pre-login import of a portable recovery key has no approved user-facing authorization policy or UI; it must not be enabled by inventing a GeneralAdmin session.
+- Main ruleset `26457705` is active with required checks; repository setting `allow_auto_merge=false` was observed and automatic PR merging is **not** configured. Do not bypass required checks or merge a failed/unfinished PR.
+- The current UI regression suite intentionally requires readable, flexible search widths rather than a global narrow `170px` override. The earlier 170×35 proposal conflicts with the live test contract; no UI geometry was changed in this evidence-only checkpoint.
+- Independent manual acceptance, review of every role/route, field hardware logs, operator and owner signatures are **PENDING**. See [issue #272](https://github.com/bingattban/Qwen-Altmam/issues/272), [acceptance matrix](PHASE15_ACCEPTANCE_MATRIX.md), and [offline checker](../../build/verify-clean-offline-candidate.ps1). Release decision: **NO-GO**.
+
+**Manual testing/acceptance is distinct from automated CI: WIN-01 through WIN-10 are NOT EXECUTED. Production release signoff has not been given.**
+
+---
+> **Audited R17 main CI candidate — 2026-11-10 — NO-GO for production.**
+> R17 PR #268 has been merged into `main` at `859cc9c7e889d73f0f23debd0235c3c912f397c8`.
+> [Windows Core 42698618350](https://github.com/bingattban/Qwen-Altmam/actions/runs/42698618350)
+> and [Windows Release 42698618694](https://github.com/bingattban/Qwen-Altmam/actions/runs/42698618694)
+> both completed **SUCCESS** on this exact same SHA. All Release tests ran before
+> x86/x64 Portable and Installer packaging. The **Independent four-file SHA-256**
+> audit completed SUCCESS; the exact binary filenames, byte lengths and actual
+> customer-file SHA-256 values are frozen in
+> [R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json](../../artifacts/R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json)
+> from the authentic Release provenance artifact. This record refers to the
+> R17 source SHA only, **not** to a future R18 documentation commit or a
+> signed GitHub Release. The historic earlier checkpoints below remain immutable.
+>
+> **Physical clean offline x86/x64 trials, two-version upgrade, independent
+> recovery across Windows accounts/computers, actual power interruption, disk-full,
+> full 10k WPF/Excel acceptance and owner signoff: NOT EXECUTED / PENDING. NO-GO.**
+> The Clean-machine acceptance matrix in ordinary CI was **skipped**;
+> the source provenance test is NOT an independent device rehash or production
+> approval. See [R18 evidence and remaining field gates](R18_MAIN_R17_PROVENANCE_2026-11-10.md).
+
+---
+
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** As of this later checkpoint (not a revision of the historical 2026-11-03 candidate), the latest merged recovery guard is R15 PR #266, main `0e1021fa29438f34c61df2db57cf01b7fae534ce`. [Windows Core 42632103102](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632103102) and [Windows Release 42632102975](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632102975) both succeeded on PR HEAD `49a185b6aa6d6e8fabebb9b1b725b4a1b29ad7f8` with four x86/x64 Portable/Installer packages and independent customer SHA-256 audit. The host now has a **native WPF** GA-only restore and encrypted-key export, while the WebView2 restore action remains **disabled**. The release's independent clean-machine matrix job was **skipped**: real x86/x64 clean offline devices, cross-PC recovery, power interruption, disk-full and owner signoff are still **NOT EXECUTED/PENDING**. The rest of this file is historical audit evidence tied to older, immutable SHAs. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](../support/CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
+# AL-TAMAM DAILY — Phase 15 GO/NO-GO gate
+Date of review: 2026-11-03. Repository: bingattban/Qwen-Altmam.
+**Decision: NO-GO — not production-ready; owner signoff NOT GIVEN.**
+
+## Latest verified main candidate — 2026-11-03 (immutable CI reference, before this documentation PR)
+- Audited source/checkout `a48538b479d46580acffcbe5fe524a5b0c70d29c`, merged [PR #217](https://github.com/bingattban/Qwen-Altmam/pull/217). This is a **historical, fixed candidate**, not a promise that the later documentation-merge SHA has the same binaries.
+- [Windows Core 41664059205](https://github.com/bingattban/Qwen-Altmam/actions/runs/41664059205): **SUCCESS**. [Windows Release 41664059341](https://github.com/bingattban/Qwen-Altmam/actions/runs/41664059341): **SUCCESS** on exactly the same SHA. Release tests preceded both x86/x64 publish/package jobs; independent four-customer-file SHA-256 audit also **SUCCESS**.
+- Candidate version `0.0.909-ci`; four actual customer-file SHA-256 values and sizes are retained in [artifacts/PHASE15_AUDITED_CANDIDATE_2026-11-03.json](../../artifacts/PHASE15_AUDITED_CANDIDATE_2026-11-03.json). Original same-run provenance archive: artifact **13246124184**. Do **not** confuse customer-file hashes with the enclosing GitHub artifact ZIP hashes.
+- Same-run synthetic SQLCipher benchmark: **10,000 active persons**, **550,000 attendance rows** spanning three calendar years; 31-day aggregation **360.67 ms**, production monthly first-page (100 rows) **848.02 ms**, working set **590,577,664 bytes** (Release performance artifact **13245521886**). These are runner-specific database measurements, **NOT** full GUI/Excel performance acceptance.
+- Windows WPF/WebView2 smoke on the same run opened 69 canonical route shells and passed a native process/bridge role probe (artifact **13245496941**); **every nested role-specific command was not independently exercised**.
+- Protection ruleset `Protect-main-Core-Release` **ACTIVE**, targets the default branch `main`, enforces PR-only merge, zero bypasses, up-to-date branches, seven required CI checks, and prohibits deletion and force-push (ruleset **26457705**).
+- `Clean-machine acceptance matrix (15.06)` was **SKIPPED** on this CI run. Independent clean/offline x86/x64 UAT, two-version upgrade, actual power interruption, cross-PC encrypted recovery, full 10k GUI/Excel workload, native destructive restore acceptance and signed owner approval remain **NOT EXECUTED / PENDING**. **NO-GO** stays in force.
+
+## Archived baseline recheck — earlier 2026-11-03 (before PR #217)
+- Then-current `main` commit: [927b36b372caa25edfeeac97eccd293bc11e5a25](https://github.com/bingattban/Qwen-Altmam/commit/927b36b372caa25edfeeac97eccd293bc11e5a25), PR #213 transfer confirmation and SQLCipher-derived Excel site naming merged.
+- [Windows Core run 41535312832](https://github.com/bingattban/Qwen-Altmam/actions/runs/41535312832): SUCCESS on that main SHA; 18 SQLCipher integration, 14 independent unit and 1,010 main-suite tests all passed (0 failures or skips).
+- [Windows Release run 41535313452](https://github.com/bingattban/Qwen-Altmam/actions/runs/41535313452): SUCCESS on same SHA; all required test jobs passed before packaging, real Windows-hosted WPF/WebView2 synthetic-bridge E2E succeeded, and x86/x64 portable/installer package and independent rehash jobs passed. Release candidate label `0.0.900-ci`. The real SHA-256 customer-file digest inventory is in the current-run downloadable `AlTamam-Phase15-FourPackage-Provenance-0.0.900-ci` artifact; do NOT substitute GitHub wrapper digests.
+- Those earlier main runs also passed a 10,000-person, three-calendar-year synthetic SQLCipher benchmark evidence gate, but measured full Windows GUI Excel/report/import workflows and exact independent hardware acceptance remain incomplete.
+- 218 repository branches were listed at review; some old branches diverge and require owner review before any reuse or deletion. Reading the `main` branch-protection endpoint returned GitHub 403 (integration cannot access); no enforced protection was claimed.
+- **NO-GO remains:** independent clean and offline x86/x64 UAT, different-version upgrade, real interruption/cross-PC recovery, native restore authorization/activation, and owner production signoff remain outstanding. The following historical evidence is preserved for provenance and does not supersede this live recheck.
+
+## Exact evidence and scope
+- Merged prerequisite: [PR #191](https://github.com/bingattban/Qwen-Altmam/pull/191), head `f65f2d4ca468aaf65d4b8825a93790f380a9db5f`, merged into main at `c599b9aae191be36cf1ef72193719f2ca2182d60`.
+- [Core PR run 41372987699](https://github.com/bingattban/Qwen-Altmam/actions/runs/41372987699): completed SUCCESS on PR head; .NET 10 integration 10/10, unit 14/14, main test suite 980/980, no failed/skipped; prepackage real Windows WPF/WebView2 UI probe passed. These are three distinct suites, not 1,004 independently reviewed acceptance scenarios.
+- [Release PR run 41372987701](https://github.com/bingattban/Qwen-Altmam/actions/runs/41372987701): completed SUCCESS on the same PR head; tests BEFORE x86/x64 packaging. The four customer-class artifacts and two checksum/metadata artifacts were uploaded; their actual customer-file SHA-256 values are in the downloadable SHA256SUMS.txt; the verified reference values are also transcribed in the addendum below. The GitHub artifact-wrapper digests are DIFFERENT. Do not mistake GitHub's artifact-wrapper digest for a distributed file digest.
+- At creation of this document, main push runs 41375807496 and 41375807497 were not yet verified complete; PR-head success is not post-merge/main acceptance. Recheck live outcomes for the freeze SHA.
+- Phase 14's installer uninstall/reinstall, relocation, native bridge and data-preservation checks were automated on GitHub-hosted Windows; they are not tests on independent CLEAN OFFLINE Windows machines. The Release job named "Clean-machine acceptance matrix" was SKIPPED on the PR run.
+
+## 15.01–15.10 release-gate matrix
+| Requirement | Verified evidence as of review | Final acceptance status |
+| --- | --- | --- |
+| 15.01 Unused-code pruning without behavior loss | Existing guarded source and tests inspected. No production code deleted without proof of unreachability. Stale PRs #84/#91 were already closed unmerged; not reapplied. | PARTIAL — per-handler parity and owner signoff on any new conflict still required |
+| 15.02 All SECTION 07 and live screen_070/screen_025, screen_020 retired | 69-screen manifest: unique screen_070 embedded AddPerson and screen_025 PersonnelReport; no screen_020. JS report-group regression and native bridge tests exist. | PARTIAL — real end-to-end operation of all routes/roles NOT demonstrated |
+| 15.03 All roles, founder, audited actor identity | 103-action role manifest, RBAC and encrypted integration suites, founder first-use tests and immutable audit writer inspected. | PARTIAL — exhaustive per-command three-role, historical account-owner display acceptance NOT demonstrated |
+| 15.04 Archived same vs different human | ArchivedIdentityReturnIntegrationTests and monthly history/report UI tests present. Same human retains PersonId, new individual requires distinct PersonId. | PARTIAL — comprehensive Windows report/Excel identity separation acceptance NOT demonstrated |
+| 15.05 08:00 auto/20:00 separate lock, counters, transfers and history | Phase07CalendarClosureTests and automatic-policy integration, dashboard and monthly regression suites pass in PR CI. | PARTIAL — actual local-clock, multi-day, transfer-and-report operator journey NOT demonstrated |
+| 15.06 SQLCipher and cross-PC restore | SQLCipher integration, signed intent validation, preview/staging and native reauth prerequisite tests exist. Real restore activation (`RestoreDatabaseAtomically`) is DISABLED. | **BLOCKED — no live atomic restore, cross-PC acceptance or E: folder-chooser test** |
+| 15.07 Four clean-Windows distributions | PR CI published four distinct x86/x64 Portable/Installer artifacts with SHA-256 metadata and automated same-version AppData-preservation smoke. | **BLOCKED — independent clean offline Windows, power loss, real two-version upgrade absent** |
+| 15.08 10,000 people × multiple years | Latest fixed same-SHA synthetic SQLCipher test covers 10,000 active persons, 550,000 attendance rows/three calendar years, measured 31-day grouping and first 100-row production monthly page. | **PARTIAL — full WPF GUI, report and Excel multi-year latency/throughput and independent hardware parity NOT EXECUTED** |
+| 15.09 Handover documentation | This tracked gate, changelog, support guides, and CI artifact registry are introduced by a separate Phase 15 PR. | PARTIAL — signed owner handover and actual independently accepted binaries missing |
+| 15.10 Final GO/NO-GO | Same-SHA automated candidate evidence exists for PR head; production-critical external checks and owner signature absent. | **NO-GO** |
+
+## Blocking acceptance / release procedure
+1. Freeze a single immutable release commit SHA. Verify BOTH Windows Core and Release on precisely that SHA; retain run IDs, TRX, Windows E2E logs, artifact BUILD_METADATA.json and SHA256SUMS.txt, sizes and all four customer files. No CI failure or skipped mandatory test.
+2. On independent, network-disconnected CLEAN 32-bit and 64-bit Windows hosts, exercise both direct-run Portable and Installer, founder setup, each role and key operation, file export, backups, restart, uninstall/reinstall and genuine older-to-newer upgrade. Record OS build, hardware, offline proof, package checksum, screenshot/log and exact observed results per distribution.
+3. Demonstrate a 10,000-person **multi-year** attendance/roster/monthly/report/Excel benchmark with *measured* values and hardware/configuration, output parity, cancellation and no stale cache. Do not extrapolate from the 10k search-only or 2k six-month tests.
+4. Independently verify SQLCipher encrypted recovery with synthetic data on a SECOND Windows machine/account, including correct portable key, wrong key, tampered intent, staged crash reconciliation, physical interruption/disk-full, restored identity/history, and E: unavailable folder re-selection. Preview/staging is NOT atomic activation. Do not enable destructive restore without native reauthentication/quiescence and explicit owner approval.
+5. Confirm no unresolved P0/P1 issue and document recorded owner signoff on NATIVE RESTORE and FINAL RELEASE. Otherwise retain NO-GO and do not publish production tags/releases.
+
+Owner signoff — native restore: **PENDING**.
+Owner signoff — final production release: **PENDING**.
+Independent verifier / machine evidence: **NOT SUBMITTED**.
+
+## Addendum: authentic SHA-256 of four customer files, prior PR #191 only
+
+Read directly from GitHub Actions checksum archives **13110143693** (x86) and **13110517916** (x64), run **41372987701**, version `0.0.831-ci`, tested checkout `2505989e7c00e769bba5fb7ce4b57747dcbb732d`, PR source `f65f2d4ca468aaf65d4b8825a93790f380a9db5f`. This is **unsigned CI candidate reference evidence**, NOT a Phase 15 final-release signature or a different-commit test.
+
+| Distribution | Customer file | Actual SHA-256 |
+|---|---|---|
+| 32-bit Portable | `AlTamam-Portable-Windows-32bit.zip` | `57c072bc13136d1ab1edf4b2e5453dc7620f409638ea5b5e44307053a066cfa0` |
+| 32-bit Installer | `AlTamam-Installer-Windows-32bit.exe` | `f08b396b1ec5b8e4e3e82b8ee889c65877dc9fd042536020784bb78b3dcfb67c` |
+| 64-bit Portable | `AlTamam-Portable-Windows-64bit.zip` | `152457eb7fd2017ac18c927825d4bbd5d83cea07bc66669d01106d7539b7b89f` |
+| 64-bit Installer | `AlTamam-Installer-Windows-64bit.exe` | `d0c518479685e12c5d2cffbee0d332ae713f76d7e8e9618658b20494fe606a75` |
+
+Measured narrowly on Core runner: synthetic **10,000-person search = 2.64 ms**, not 10,000-person multi-year monthly/report/export load. Release runner hardware facts: Windows Server 2025 Datacenter build 26100; AMD EPYC 7763; 2 cores, 4 logical processors, 17,174,360,064 bytes RAM. This is hardware-specific, not a universal speed claim. The Core measurement and Release hardware were recorded in separate run artifacts; do not misrepresent them as one combined benchmark. See `artifacts/REFERENCE_PR191_CANDIDATE.json`.
+
+New Phase 15 Windows Release `handover-evidence` job must independently download **all six** new same-run package/checksum artifacts, rehash the actual **four** customer files, and prove checkout/source/version equality before publishing a candidate-only JSON inventory. Independent clean OFFLINE Windows, native restore/cross-account recovery, older→newer upgrade and owner GO remain **NOT EXECUTED / BLOCKED**.
+
+**Phase 15 added benchmark contract (not yet an executed result at document revision):** `tests/AlTamam.Tests/Performance/Phase15TenThousandMultiYearDiagnostics.cs` seeds 10,000 active synthetic people, 24 historical months per person and an actual 31-day current-month record per person (550,000 encrypted SQLCipher attendance rows). It checks exact history/date counts and a real `DailyMonthlyReadService.MonthlyGridAsync` production first-page projection, and records seed, grouped 31-day aggregate and monthly-page durations with OS/CPU/memory/checkout/run IDs. Both Windows full suites must pass `build/check-phase15-perf-evidence.py` and upload actual measured JSON **before packaging**. Until a NEW exact-SHA Windows run finishes, this new benchmark's status remains **NOT EXECUTED**. Even after success it does **NOT** attest 10k full WPF GUI scroll, screen reader, or Excel export throughput.
