@@ -64,7 +64,15 @@ def validate(trx, snapshots):
            any(not isinstance(value, str) or not value for value in values)
            for values in snapshots.values()):
         raise ValueError("Every action requires nonempty response-shape snapshots")
-    results = ET.parse(trx).findall(".//t:UnitTestResult", NS)
+    # Reassemble the genuine independently executed R01 native class reports.
+    # The old single-report caller still works, while missing, failed, wrong,
+    # duplicated or incomplete class reports remain fatal.
+    sources = [trx] if isinstance(trx, (str, Path)) else list(trx)
+    if not sources:
+        raise ValueError("No real native R01 TRX reports were supplied")
+    results = []
+    for report in sources:
+        results.extend(ET.parse(report).findall(".//t:UnitTestResult", NS))
     native = [row for row in results if row.get("testName", "").startswith(PREFIX)]
     matched = {row.get("testName")[len(PREFIX):]: row for row in native}
     if len(native) != len(matched):
@@ -94,12 +102,12 @@ def validate(trx, snapshots):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: check-r01-native-contract-evidence.py <actual-suite.trx>")
+    if len(sys.argv) < 2:
+        raise SystemExit("Usage: check-r01-native-contract-evidence.py <actual-r01-class.trx> [more-disjoint-r01-class.trx ...]")
     try:
         snapshots = json.loads(SNAPSHOTS.read_text(encoding="utf-8"))
         require_complete_enabled_inventory(snapshots)
-        found = validate(Path(sys.argv[1]), snapshots)
+        found = validate([Path(arg) for arg in sys.argv[1:]], snapshots)
     except (OSError, ValueError, ET.ParseError) as error:
         raise SystemExit("R01 NATIVE CONTRACT EVIDENCE FAIL: " + str(error)) from error
     print(f"R01 NATIVE CONTRACT SLICE PASS: {len(CASES)} real native cases / {len(found)} actions; not full R01 closure")
