@@ -51,11 +51,14 @@ def check(core: str, release: str) -> list[str]:
         if 'dotnet test ' + path not in full:
             problems.append('Release full coverage missing ' + path)
     full_suite = full.split('      - name: Full deterministic test suite', 1)[-1].split('      - name:', 1)[0]
-    if '--filter "$filter"' not in full_suite or 'shard: [r01, bridge-heavy, bridge-light, performance, security, other]' not in full:
-        problems.append('Release full xUnit suite must run in six exhaustive shards')
-    for term in ('check-phase15-perf-evidence.py','check-r01-native-contract-evidence.py TestResults/full-suite.trx'):
+    if '--filter "$filter"' not in full_suite or 'shard: [r01-config, r01-excel, r01-ops, r01-other, bridge-heavy, bridge-light, performance, security, other]' not in full:
+        problems.append('Release full xUnit suite must run in nine exhaustive shards')
+    for term in ('check-phase15-perf-evidence.py',):
         if term not in full:
             problems.append('Release exhaustive tests/evidence missing ' + term)
+    verifier = job(release, 'verify-full-test-shards')
+    if 'check-r01-native-contract-evidence.py ShardedResults/test-results-windows-r01-config/full-suite.trx' not in verifier:
+        problems.append('Strict R01 native evidence must be aggregated from all four independent R01 shards')
     if 'pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1' not in ui:
         problems.append('Independent real Windows E2E must run before packaging')
     for term in ('runtime: win-x86', 'runtime: win-x64', 'Build Portable ZIP',
@@ -75,7 +78,7 @@ def self_test(core: str, release: str) -> None:
     assert any('wait for preflight' in p for p in check(core, release.replace('needs: [preflight, build-test, verify-full-test-shards, webview-e2e]', 'needs: build-test', 1)))
     assert any('full coverage missing' in p for p in check(core, release.replace(
         'dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj', 'dotnet test tests/Unknown.csproj', 1)))
-    assert any('six exhaustive shards' in p for p in check(core, release.replace(
+    assert any('nine exhaustive shards' in p for p in check(core, release.replace(
         '--filter "$filter"', '--filter "FullyQualifiedName~NoTests"', 1)))
     assert any('positively selected' in p for p in check(core.replace(
         '--filter "FullyQualifiedName~BridgeRbacMatrixTests|', '--filter "FullyQualifiedName~Unrelated|', 1), release))
@@ -87,4 +90,4 @@ if __name__ == '__main__':
     if violations:
         raise SystemExit('FAST CI CONTRACT FAILED:\n' + '\n'.join(violations))
     self_test(core, release)
-    print('FAST CI CONTRACT PASS: Core smoke + six disjoint Release shards + triple package gates')
+    print('FAST CI CONTRACT PASS: Core smoke + nine disjoint Release shards + triple package gates')
