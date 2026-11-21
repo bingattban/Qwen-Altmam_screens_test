@@ -1,0 +1,560 @@
+{
+  "schemaVersion": 1,
+  "sourceManifest": "src/AlTamam.WebUI/screen-manifest.json",
+  "canonicalRouteCount": 69,
+  "notes": "Six WPF pilot navigation sections do NOT count as migrated routes; no SQLCipher auth/service parity is verified.",
+  "routes": [
+    {
+      "screenId": "screen_001",
+      "routeKey": "Dashboard",
+      "titleAr": "الرئيسية",
+      "legacyAssetPath": "screens/Dashboard/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_002",
+      "routeKey": "UnpreparedPersonnel",
+      "titleAr": "المحضّرون تلقائياً",
+      "legacyAssetPath": "screens/Dashboard/UnpreparedPersonnel/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_003",
+      "routeKey": "SelectStatusAndConfirm",
+      "titleAr": "اختيار الحالة والتأكيد",
+      "legacyAssetPath": "screens/Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_004",
+      "routeKey": "MonthlyAttendance",
+      "titleAr": "التمام الشهري",
+      "legacyAssetPath": "screens/MonthlyAttendance/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_005",
+      "routeKey": "SelectArchive",
+      "titleAr": "اختيار الأرشيف",
+      "legacyAssetPath": "screens/MonthlyAttendance/SelectArchive/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_006",
+      "routeKey": "Administration",
+      "titleAr": "الإدارة",
+      "legacyAssetPath": "screens/Administration/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_007",
+      "routeKey": "PersonnelManagement",
+      "titleAr": "إدارة القوة",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_008",
+      "routeKey": "Attendance",
+      "titleAr": "التمام",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Attendance/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_009",
+      "routeKey": "ConfirmAttendance",
+      "titleAr": "تأكيد التحضير",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Attendance/ConfirmAttendance/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_010",
+      "routeKey": "EditPersonnelNames",
+      "titleAr": "تعديل الأسماء",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_011",
+      "routeKey": "EditPersonDetails",
+      "titleAr": "تعديل بيانات الفرد",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/EditPersonDetails/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_012",
+      "routeKey": "RemovePersonnel",
+      "titleAr": "حذف أسماء من القوة",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/RemovePersonnel/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_013",
+      "routeKey": "Transfers",
+      "titleAr": "التنقلات",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_014",
+      "routeKey": "InternalTransfer",
+      "titleAr": "النقل الداخلي",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_015",
+      "routeKey": "ConfirmTransfer",
+      "titleAr": "تأكيد النقل الداخلي",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/ConfirmTransfer/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_016",
+      "routeKey": "ExternalTransfer",
+      "titleAr": "النقل الخارجي",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_017",
+      "routeKey": "ConfirmExternalTransfer",
+      "titleAr": "تأكيد النقل الخارجي",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/ConfirmExternalTransfer/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_018",
+      "routeKey": "TransferArchive",
+      "titleAr": "أرشيف التنقلات",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/Transfers/TransferArchive/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_019",
+      "routeKey": "ReportsAndDismissal",
+      "titleAr": "الفصل والأرشيف",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_021",
+      "routeKey": "Dismissal",
+      "titleAr": "الفصل",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_022",
+      "routeKey": "DismissPerson",
+      "titleAr": "فصل",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_023",
+      "routeKey": "ConfirmDismissal",
+      "titleAr": "تأكيد الفصل",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/ConfirmDismissal/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_024",
+      "routeKey": "DismissedPersonnelArchive",
+      "titleAr": "أرشيف المفصولين",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissedPersonnelArchive/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_025",
+      "routeKey": "PersonnelReport",
+      "titleAr": "التقرير",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_026",
+      "routeKey": "ExportPersonReport",
+      "titleAr": "تصدير تقرير الأفراد",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/ExportPersonReport/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_027",
+      "routeKey": "StatusesAndSites",
+      "titleAr": "الحالات والمواقع",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_028",
+      "routeKey": "Statuses",
+      "titleAr": "الحالات",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Statuses/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_029",
+      "routeKey": "AddStatus",
+      "titleAr": "إضافة حالة",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Statuses/AddStatus/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_030",
+      "routeKey": "EditStatus",
+      "titleAr": "تعديل حالة",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Statuses/EditStatus/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_031",
+      "routeKey": "DeleteStatus",
+      "titleAr": "حذف حالة",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Statuses/DeleteStatus/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_032",
+      "routeKey": "Sites",
+      "titleAr": "المواقع",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Sites/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_033",
+      "routeKey": "AddSite",
+      "titleAr": "إضافة موقع",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Sites/AddSite/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_034",
+      "routeKey": "EditSite",
+      "titleAr": "تعديل موقع",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Sites/EditSite/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_035",
+      "routeKey": "DeleteSite",
+      "titleAr": "حذف موقع",
+      "legacyAssetPath": "screens/Administration/StatusesAndSites/Sites/DeleteSite/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_036",
+      "routeKey": "Rosters",
+      "titleAr": "الكشوفات",
+      "legacyAssetPath": "screens/Administration/Rosters/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_037",
+      "routeKey": "Import",
+      "titleAr": "استيراد",
+      "legacyAssetPath": "screens/Administration/Rosters/Import/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_038",
+      "routeKey": "SelectFile",
+      "titleAr": "اختيار الملف",
+      "legacyAssetPath": "screens/Administration/Rosters/Import/SelectFile/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_039",
+      "routeKey": "PreviewAndValidate",
+      "titleAr": "المعاينة والتحقق",
+      "legacyAssetPath": "screens/Administration/Rosters/Import/PreviewAndValidate/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_040",
+      "routeKey": "ImportResults",
+      "titleAr": "نتيجة الاستيراد",
+      "legacyAssetPath": "screens/Administration/Rosters/Import/ImportResults/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_041",
+      "routeKey": "Export",
+      "titleAr": "تصدير",
+      "legacyAssetPath": "screens/Administration/Rosters/Export/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_042",
+      "routeKey": "PreviewAndConfirmExport",
+      "titleAr": "معاينة وتأكيد التصدير",
+      "legacyAssetPath": "screens/Administration/Rosters/Export/PreviewAndConfirmExport/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_043",
+      "routeKey": "ExportProgressAndResult",
+      "titleAr": "تقدم ونتيجة التصدير",
+      "legacyAssetPath": "screens/Administration/Rosters/Export/ExportProgressAndResult/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_044",
+      "routeKey": "RosterLayout",
+      "titleAr": "تعديل الهيكل للكشف",
+      "legacyAssetPath": "screens/Administration/Rosters/RosterLayout/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_045",
+      "routeKey": "AddOrEditColumn",
+      "titleAr": "إضافة أو تعديل عمود",
+      "legacyAssetPath": "screens/Administration/Rosters/RosterLayout/AddOrEditColumn/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_046",
+      "routeKey": "Users",
+      "titleAr": "المستخدمين",
+      "legacyAssetPath": "screens/Administration/Users/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_047",
+      "routeKey": "AddUser",
+      "titleAr": "إضافة مستخدم",
+      "legacyAssetPath": "screens/Administration/Users/AddUser/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_048",
+      "routeKey": "ChangePassword",
+      "titleAr": "تعديل كلمة المرور",
+      "legacyAssetPath": "screens/Administration/Users/ChangePassword/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_049",
+      "routeKey": "DeleteAccount",
+      "titleAr": "حذف الحساب",
+      "legacyAssetPath": "screens/Administration/Users/DeleteAccount/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_050",
+      "routeKey": "AuditLog",
+      "titleAr": "سجل العمليات",
+      "legacyAssetPath": "screens/Administration/AuditLog/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_051",
+      "routeKey": "EditAuditEntry",
+      "titleAr": "تعديل قيد سجل العمليات",
+      "legacyAssetPath": "screens/Administration/AuditLog/EditAuditEntry/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_052",
+      "routeKey": "DeleteAuditEntry",
+      "titleAr": "حذف قيد سجل العمليات",
+      "legacyAssetPath": "screens/Administration/AuditLog/DeleteAuditEntry/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_053",
+      "routeKey": "ModifiedDeletedAuditEntries",
+      "titleAr": "سجل القيود المعدلة والمحذوفة",
+      "legacyAssetPath": "screens/Administration/AuditLog/ModifiedDeletedAuditEntries/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_054",
+      "routeKey": "Settings",
+      "titleAr": "الإعدادات",
+      "legacyAssetPath": "screens/Settings/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_055",
+      "routeKey": "CreateBackup",
+      "titleAr": "نسخة احتياطية",
+      "legacyAssetPath": "screens/Settings/CreateBackup/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_056",
+      "routeKey": "RestoreBackup",
+      "titleAr": "استيراد نسخة احتياطية",
+      "legacyAssetPath": "screens/Settings/RestoreBackup/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_057",
+      "routeKey": "ScheduledBackups",
+      "titleAr": "النسخ الاحتياطي التلقائي",
+      "legacyAssetPath": "screens/Settings/ScheduledBackups/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_058",
+      "routeKey": "ResetApplicationData",
+      "titleAr": "حذف جميع بيانات البرنامج",
+      "legacyAssetPath": "screens/Settings/ResetApplicationData/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_059",
+      "routeKey": "AboutApplication",
+      "titleAr": "بيانات البرنامج",
+      "legacyAssetPath": "screens/Settings/AboutApplication/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_060",
+      "routeKey": "Logout",
+      "titleAr": "تسجيل الخروج",
+      "legacyAssetPath": "screens/Settings/Logout/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_061",
+      "routeKey": "AppearanceAndDiagnostics",
+      "titleAr": "المظهر وفحص السلامة",
+      "legacyAssetPath": "screens/Settings/AppearanceAndDiagnostics/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_062",
+      "routeKey": "Login",
+      "titleAr": "تسجيل الدخول",
+      "legacyAssetPath": "screens/SharedScreens/Login/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_063",
+      "routeKey": "FirstRunSetup",
+      "titleAr": "التهيئة الأولى",
+      "legacyAssetPath": "screens/SharedScreens/FirstRunSetup/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_064",
+      "routeKey": "PersonPickerAndSearch",
+      "titleAr": "اختيار الفرد والبحث الموحد",
+      "legacyAssetPath": "screens/SharedScreens/PersonPickerAndSearch/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_065",
+      "routeKey": "ConfirmationAndWarning",
+      "titleAr": "نمط التأكيد والتحذير",
+      "legacyAssetPath": "screens/SharedScreens/ConfirmationAndWarning/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_066",
+      "routeKey": "DraftsAndTemporarySave",
+      "titleAr": "الحفظ المؤقت والمسودات",
+      "legacyAssetPath": "screens/SharedScreens/DraftsAndTemporarySave/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_067",
+      "routeKey": "ConflictsAndNotifications",
+      "titleAr": "تعارض العمليات والإشعارات",
+      "legacyAssetPath": "screens/SharedScreens/ConflictsAndNotifications/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_068",
+      "routeKey": "ClosedDayExceptionalCorrection",
+      "titleAr": "التصحيح الاستثنائي لليوم المغلق",
+      "legacyAssetPath": "screens/SharedScreens/ClosedDayExceptionalCorrection/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_069",
+      "routeKey": "EightPmScheduler",
+      "titleAr": "جدولة التحضير التلقائي",
+      "legacyAssetPath": "screens/SharedScreens/EightPmScheduler/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_070",
+      "routeKey": "AddPerson",
+      "titleAr": "إضافة فرد",
+      "legacyAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html",
+      "migrationState": "not_migrated",
+      "functionalParityVerified": false
+    }
+  ]
+}
