@@ -41,9 +41,11 @@ def validate(workflow: str) -> list[str]:
     ):
         if needed not in ui:
             problems.append("Real Windows UI gate weakened: "+needed)
-    if ui.index("dotnet build AlTamam.slnx") > ui.index(
-        "pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1"
-    ):
+    if ("dotnet build AlTamam.slnx" in ui and
+        "pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1" in ui and
+        ui.index("dotnet build AlTamam.slnx") > ui.index(
+            "pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1"
+        )):
         problems.append("Real Windows UI testing must use built source")
     if PACKAGE_NEEDS not in package:
         problems.append("Packaging must depend on full tests, real UI, preflight, TRX verification")
