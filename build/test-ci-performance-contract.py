@@ -62,7 +62,7 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Release x86/x64 packaging matrix is missing")
     else:
         package = release.split("  package:\n", 1)[1].split("  clean-windows-acceptance:\n", 1)[0]
-        if "    needs: [preflight, build-test, verify-full-test-shards]" not in package:
+        if "    needs: [preflight, build-test, verify-full-test-shards, webview-e2e]" not in package:
             issues.append("Release packages MUST depend on green preflight, all Release shards and independent attestation")
         for required in ("runtime: win-x64", "runtime: win-x86",
                          "Build Portable ZIP", "compile installer", "SHA-256 checksums",
@@ -117,7 +117,7 @@ def self_test(core: str, release: str) -> None:
         "--configuration Release --no-restore", 1)
     assert any("Phase 02 Core tests must reuse" in x
                for x in validate(broken_phase02, release))
-    broken_release = release.replace("    needs: [preflight, build-test, verify-full-test-shards]", "    needs: build-test", 1)
+    broken_release = release.replace("    needs: [preflight, build-test, verify-full-test-shards, webview-e2e]", "    needs: build-test", 1)
     assert any("MUST depend on green preflight" in x for x in validate(core, broken_release))
     unsafe = release.replace("compression-level: 0", "compression-level: 6", 1)
     assert any("redundant compression" in x for x in validate(core, unsafe))
