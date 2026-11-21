@@ -233,7 +233,7 @@ try {
     }
 
     Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch + "; mode=" + $AcceptanceMode +
-        "; actual x86/x64 packaged WebView2/SQLCipher role E2E, Portable move + Installer in-place install/uninstall/reinstall; unchanged LocalAppData data/key")
+        "; verified mode-specific packaged WebView2/SQLCipher/69-route acceptance and unchanged LocalAppData data/key")
 }
 finally {
     # Never clean/rename the application database or DPAPI key. Only delete
