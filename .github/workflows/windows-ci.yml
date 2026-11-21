@@ -1,0 +1,293 @@
+name: Windows Core Build
+# Phase 01 canonical filename: windows-ci.yml; this is the SAME Core workflow, not a third one.
+on:
+  # Validate proposed code on its PR BEFORE promotion to main.
+  # Main is validated again after a successful PR merge.
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+# Only the newest revision of a branch needs a build. Avoid CI overload when
+# successive implementation commits land; the final commit still builds fully.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+jobs:
+  manifest-contract:
+    name: Manifest contract guard (69 routes / 103 actions)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Action/screen manifest security + drift guard
+        run: python build/manifest-guard.py
+      - name: Phase 00–02 live inventory, Windows CI and SQLCipher drift guard
+        run: |
+          python build/test-phase00-02-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 negative-path regression failed' }
+          python build/verify-phase00-02-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 live contract drift detected' }
+      - name: Phase 00–01 exact screen matrix and solution inventory regression
+        run: python build/test-phase00-01-inventory.py
+      - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Package process watchdog native regression before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-package-process-watchdog.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Package process watchdog regression failed' }
+      - name: Phase 13 evidence contract guard before lengthy Windows tests
+        shell: pwsh
+        run: |
+          python build/test-phase13-qa-evidence-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
+      - name: Phase 14 distribution staging provenance regression
+        shell: pwsh
+        run: |
+          python build/test-phase14-distribution-stage.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
+      - name: Phase 15 non-destructive static handover/route/RBAC regression
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Section 08 canonical UI-to-native bridge and response envelope contract
+        shell: pwsh
+        run: |
+          python build/test-section08-bridge-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 08 UI/native contract regression' }
+      - name: Phase 15 all-four SHA256 provenance negative-path tests
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 four-artifact metadata / SHA256 regression' }
+          python build/test-section11-delivery-standard.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
+      - name: Section 11 independent disconnected-Windows probe input integrity regression (synthetic only)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/test-independent-offline-windows-contract.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Section 11 physical offline probe contract failed; NOT UAT' }
+      - name: Validate Arabic navigation and JavaScript syntax
+        shell: pwsh
+        run: |
+          python build/validate-ui-shell.py
+          if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
+          python build/test-ci-exit-guards.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-performance-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-release-artifact-provenance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
+          python build/test-webview-selfcheck-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
+          python build/test-local-reminders-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Local reminders contract failed' }
+          python build/test-native-restore-host-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native restore WPF host security contract failed' }
+          python build/test-native-host-shutdown-lifecycle.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native host shutdown lifecycle contract failed' }
+          python build/test-native-portable-recovery-export-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native portable key export GA/WPF security contract failed' }
+          python build/test-current-recovery-operator-guidance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Live native restore and operator guidance drift contract failed' }
+          python build/test-frozen-candidate-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen customer SHA-256 ledger / production NO-GO contract failed' }
+          python build/validate-frozen-candidate.py artifacts/R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen audited main candidate metadata is inconsistent' }
+          python build/test-webview-recovery-fixture-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows recovery fixture contract failed' }
+          node build/test-phase04-bridge-schema.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 typed request/response schema drift failed' }
+          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
+            node --check "src/AlTamam.WebUI/assets/js/$file"
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
+          }
+      - name: Test administration drill-down and settings safeguards
+        shell: pwsh
+        run: |
+          node build/test-bridge-operation-intents.js
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge mutation intent regression' }
+          node build/test-audit-route-visibility.js
+          if ($LASTEXITCODE -ne 0) { throw 'Audit route RBAC regression' }
+          node build/test-readonly-route-states.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 authenticated route/state regression' }
+          node build/test-route-return-link-honesty.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 route link honesty regression' }
+          node build/test-admin-settings-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
+          node build/test-excel-import-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Excel personnel import UI regression' }
+          node build/test-monthly-excel-export.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly native Excel UI regression' }
+          node build/test-monthly-cell-details.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
+          node build/test-dashboard-counter-filters.js
+          if ($LASTEXITCODE -ne 0) { throw 'Dashboard counter filter UI regression' }
+          node build/test-dashboard-route-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 Dashboard route navigation regression' }
+          node build/test-attendance-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
+          node build/test-table-experience.js
+          if ($LASTEXITCODE -ne 0) { throw 'Global tables and search usability regression' }
+          node build/test-roster-columns-global.js
+          if ($LASTEXITCODE -ne 0) { throw 'Shared personnel roster columns and Excel propagation regression' }
+          node build/test-attendance-drafts.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance draft UI regression' }
+          node build/test-personnel-movements.js
+          if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
+          node build/test-session-idle.js
+          if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
+          node build/test-login-gate-singleflight.js
+          if ($LASTEXITCODE -ne 0) { throw 'Native logout/login form single-flight regression' }
+          node build/test-operation-dialogs.js
+          if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
+          node build/test-modal-first-design.js
+          if ($LASTEXITCODE -ne 0) { throw "Modal-first UI contract regression" }
+          node build/test-personnel-separation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Personnel separation UI regression' }
+          node build/test-personnel-report-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Unified individual/group report UI regression' }
+
+  core-tests:
+    needs: manifest-contract
+    runs-on: windows-latest
+    env:
+      ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore solution (production + tests) once on this runner
+        run: dotnet restore AlTamam.slnx
+      - name: Record .NET SDK version (step 01.01)
+        run: |
+          dotnet --list-sdks
+          dotnet --version
+      - name: Compile production and test projects once
+        run: dotnet build AlTamam.slnx --configuration Release --no-restore
+      - name: Phase 02 actual SQLCipher integration tests (independent project)
+        run: >
+          dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase02-integration.trx"
+          --results-directory TestResults
+      - name: Guard Phase 02 tests against zero execution
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase02-integration.trx)) { throw 'Phase 02 integration TRX is missing' }
+          $xml = [xml](Get-Content TestResults/phase02-integration.trx)
+          $phase02Count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 02 independent integration tests executed: $phase02Count"
+          if ($phase02Count -lt 8) { throw 'Phase 02 integration suite missing or did not fully execute' }
+      - name: Phase 03 independent unit tests
+        run: >
+          dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase03-unit.trx"
+          --results-directory TestResults
+      - name: Require nonzero Phase 03 unit test count
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase03-unit.trx)) { throw 'Phase 03 unit TRX missing' }
+          $xml = [xml](Get-Content TestResults/phase03-unit.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 03 unit tests executed: $count"
+          if ($count -lt 4) { throw 'Phase 03 unit tests did not fully execute' }
+      - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
+          --results-directory TestResults
+      - name: Guard against zero tests executing (real TRX required)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/core-tests.trx)) { throw 'Core TRX is missing' }
+          $xml = [xml](Get-Content TestResults/core-tests.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Core full tests executed: $count"
+          if ($count -lt 1) { throw 'Core suite executed zero tests' }
+      - name: R01 real native lifecycle response and execution evidence
+        shell: pwsh
+        run: |
+          python build/test-r01-native-contract-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'R01 evidence validator regression failed' }
+          python build/check-r01-native-contract-evidence.py TestResults/core-tests.trx
+          if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
+      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        shell: pwsh
+        run: |
+          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
+      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-sqlcipher-10k-three-year-core
+          path: PerformanceEvidence/phase15-10k-multi-year.json
+          if-no-files-found: error
+      - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
+        shell: pwsh
+        env:
+          ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
+      - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
+        shell: pwsh
+        env:
+          ALTAMAM_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/ten-thousand-person-search.txt
+        run: |
+          New-Item -ItemType Directory -Path PerformanceEvidence -Force | Out-Null
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-build --no-restore `
+            --filter "FullyQualifiedName~TenThousandSearchDiagnostics" `
+            --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic performance measurement failed' }
+          $measure=Get-Content PerformanceEvidence/ten-thousand-person-search.txt |
+            Select-String -Pattern 'SECTION01_PERF|SECTION01_HW'
+          if (-not $measure) { throw 'No measured performance or hardware characteristics recorded' }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Section 01 hardware measurements"
+          foreach ($line in $measure) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- " + $line.Line) }
+      - name: Phase 13 runner hardware and measured synthetic search facts
+        shell: pwsh
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json -MeasurementFile PerformanceEvidence/ten-thousand-person-search.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
+      - name: Phase 13 reject forged or mismatched Windows E2E evidence
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
+      - name: Upload Phase 13 Windows E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-real-windows-e2e-core
+          path: Phase13Evidence/*.json
+          if-no-files-found: warn
+      - name: Upload synthetic search performance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: section01-search-10k-perf-windows
+          path: PerformanceEvidence/ten-thousand-person-search.txt
+          if-no-files-found: error
+      - name: Upload test results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-results-windows
+          path: TestResults/*.trx
+          if-no-files-found: error
