@@ -117,6 +117,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Four real package acceptance gates must remain mandatory' }
           python build/test-parallel-release-webview-gate.py
           if ($LASTEXITCODE -ne 0) { throw 'Parallel real Windows WebView2 acceptance cannot be bypassed' }
+          python build/test-recovery-session-readiness-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Real recovery session and failure evidence guard regressed' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
           python build/test-six-shard-coverage-contract.py
@@ -364,6 +366,14 @@ jobs:
           name: phase13-real-windows-e2e-release
           path: Phase13Evidence/*.json
           if-no-files-found: error
+      - name: Preserve real Windows UI E2E failure diagnostics without declaring success
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-failed-webview-diagnostics
+          path: Phase13Diagnostics/*
+          if-no-files-found: warn
+          retention-days: 14
 
   verify-full-test-shards:
     name: Verify all 1,162+ distinct Release tests across six shards
