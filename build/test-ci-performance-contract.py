@@ -56,8 +56,8 @@ def validate(core: str, release: str) -> list[str]:
     build_test = release.split("  build-test:\n", 1)[-1].split("  package:\n", 1)[0]
     if "    needs: preflight" in build_test:
         issues.append("Release full tests must run in parallel with preflight")
-    if 'shard: [r01, bridge, performance, other]' not in build_test or '--filter "$filter"' not in build_test:
-        issues.append("Release must execute four exhaustive, disjoint FQN shards")
+    if 'shard: [r01, bridge-heavy, bridge-light, performance, security, other]' not in build_test or '--filter "$filter"' not in build_test:
+        issues.append("Release must execute six exhaustive, disjoint FQN shards")
     if "  package:\n" not in release:
         issues.append("Release x86/x64 packaging matrix is missing")
     else:
