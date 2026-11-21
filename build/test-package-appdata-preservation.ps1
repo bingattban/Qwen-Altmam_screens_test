@@ -9,7 +9,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PortableArchive,
     [Parameter(Mandatory = $true)][string]$InstallerPath,
     [Parameter(Mandatory = $true)]
-    [ValidateSet("win-x86", "win-x64")][string]$ExpectedArch
+    [ValidateSet("win-x86", "win-x64")][string]$ExpectedArch,
+    [ValidateSet("All", "Portable", "Installer")][string]$AcceptanceMode = "All"
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -183,8 +184,10 @@ try {
     Run-Checked $portableExe @("--layout-selfcheck") 90
     # Real Windows WebView2 navigation from the extracted customer-facing ZIP.
     # This is an automated smoke test, NOT interactive end-to-end or disconnected physical UAT.
+    if ($AcceptanceMode -ne "Installer") {
     Run-PackagedWebViewChecked $portableExe "Portable ZIP" $true
     Assert-DataPreserved "Portable direct run"
+    }
     $portableHash = Hash-OrAbsent $portableExe
 
     # Move the ACTUAL extracted Portable tree, not just the EXE. A customer can
@@ -194,9 +197,13 @@ try {
     Assert-True (Test-Path -LiteralPath $movedPortableExe -PathType Leaf) "Relocated Portable EXE missing"
     Assert-True ((Hash-OrAbsent $movedPortableExe) -eq $portableHash) "Relocated Portable executable changed"
     Run-Checked $movedPortableExe @("--layout-selfcheck") 90
+    if ($AcceptanceMode -ne "Installer") {
     Run-PackagedWebViewChecked $movedPortableExe "Portable moved"
     Assert-DataPreserved "Portable move to new folder"
 
+    }
+
+    if ($AcceptanceMode -ne "Portable") {
     # Fresh silent install from the REAL installer, not the raw publish directory.
     Run-Checked $installerExe (Inno-Args $installedDir)
     Assert-True (Test-Path -LiteralPath $installedExe -PathType Leaf) "Installer did not create runnable EXE"
@@ -223,8 +230,10 @@ try {
     Run-Checked $installedExe @("--layout-selfcheck") 90
     Run-PackagedWebViewChecked $installedExe "Reinstall"
     Assert-DataPreserved "Reinstall"
-    Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch +
-        "; actual x86/x64 packaged WebView2/SQLCipher role E2E, Portable move + Installer in-place install/uninstall/reinstall; unchanged LocalAppData data/key")
+    }
+
+    Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch + "; mode=" + $AcceptanceMode +
+        "; verified mode-specific packaged WebView2/SQLCipher/69-route acceptance and unchanged LocalAppData data/key")
 }
 finally {
     # Never clean/rename the application database or DPAPI key. Only delete

@@ -15,8 +15,10 @@ def check(core: str, release: str) -> list[str]:
     smoke = job(core, 'core-tests')
     full = job(release, 'build-test')
     package = job(release, 'package')
+    acceptance = job(release, 'package-acceptance')
+    audit = job(release, 'handover-evidence')
     preflight = job(release, 'preflight')
-    if not preflight or not full or not smoke or not package:
+    if not preflight or not full or not smoke or not package or not acceptance or not audit:
         problems.append('all static, test, and package jobs required')
     if '    needs: manifest-contract' not in smoke:
         problems.append('Core tests must follow the manifest guard')
@@ -55,10 +57,13 @@ def check(core: str, release: str) -> list[str]:
         if term not in full:
             problems.append('Release exhaustive tests/evidence missing ' + term)
     for term in ('runtime: win-x86', 'runtime: win-x64', 'Build Portable ZIP',
-                 'compile installer', 'SHA-256 checksums', 'test-package-appdata-preservation.ps1',
-                 'verify-release-artifacts.py'):
+                 'compile installer', 'SHA-256 checksums', 'verify-release-artifacts.py'):
         if term not in package:
             problems.append('required packaging gate/output missing ' + term)
+    if 'test-package-appdata-preservation.ps1' not in acceptance or '-AcceptanceMode' not in acceptance:
+        problems.append('all four customer packages require real independent acceptance')
+    if 'needs: [package, package-acceptance]' not in audit:
+        problems.append('SHA256 handover must follow all four package acceptance jobs')
     if core.count('cancel-in-progress: true') != 1 or release.count('cancel-in-progress: true') != 1:
         problems.append('cancel obsolete PR runs on both tracks')
     return problems

@@ -113,6 +113,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
           python build/test-ci-sharding-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded Release no-bypass contract failed' }
+          python build/test-parallel-package-acceptance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Four real package acceptance gates must remain mandatory' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
           python build/test-release-artifact-provenance.py
@@ -355,9 +357,8 @@ jobs:
     name: Publish and package (${{ matrix.arch }}) after tests
     needs: [preflight, build-test, verify-full-test-shards]
     runs-on: windows-latest
-    # Two packaged bridge suites can each retry a 480s x86 probe plus routes.
-    # Leave room for their bounded retries, install checks, cleanup and uploads.
-    timeout-minutes: 60
+    # Packaging only; separate artifact acceptance jobs test the genuine uploads.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -526,22 +527,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
           $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
           Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/$setupName" -Force
-      - name: Real packaged Portable vs Installer install/uninstall/reinstall and AppData preservation (15.06 automated subset)
-        timeout-minutes: 50
-        shell: pwsh
-        run: |
-          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
-          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
-          & ./build/test-package-appdata-preservation.ps1 -PortableArchive "artifacts/$portableName" -InstallerPath "artifacts/$setupName" -ExpectedArch $env:RUNTIME
-          if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
-      - name: Preserve packaged acceptance diagnostics even after failure
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-acceptance-diagnostics-${{ matrix.runtime }}
-          path: ${{ runner.temp }}/altamam-package-diagnostics-*
-          if-no-files-found: warn
-          retention-days: 14
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
       - name: Verify bytes, checksums and exact tested commit BEFORE upload (05.12)
@@ -588,11 +573,53 @@ jobs:
           retention-days: 30
           compression-level: 1
 
+  package-acceptance:
+    # Four independently verified shipped-binary tests, two per architecture.
+    # Parallelize the two ~7 minute win-x86 SQLCipher/WebView2 checks across
+    # separate runners without dropping either of the real package exercises.
+    name: Real packaged ${{ matrix.arch }} ${{ matrix.mode }} acceptance (15.06)
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [Windows-32bit, Windows-64bit]
+        mode: [Portable, Installer]
+    env:
+      RUNTIME: ${{ matrix.arch == 'Windows-32bit' && 'win-x86' || 'win-x64' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: artifacts
+      - name: Verify real installed customer binaries and per-user AppData
+        shell: pwsh
+        run: |
+          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
+          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
+          & ./build/test-package-appdata-preservation.ps1 -PortableArchive "artifacts/$portableName" -InstallerPath "artifacts/$setupName" -ExpectedArch $env:RUNTIME -AcceptanceMode "${{ matrix.mode }}"
+          if ($LASTEXITCODE -ne 0) { throw 'Independent Windows package preservation acceptance failed' }
+      - name: Preserve packaged acceptance diagnostics even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-acceptance-diagnostics-${{ matrix.arch }}-${{ matrix.mode }}
+          path: ${{ runner.temp }}/altamam-package-diagnostics-*
+          if-no-files-found: warn
+          retention-days: 14
   handover-evidence:
     # Independent same-run x86+x64 customer-file hash verification after the
-    # entire Release test and per-architecture real package smoke matrix.
+    # entire Release test and four real package acceptance jobs.
     name: Phase 15 independent four-package customer SHA256 audit
-    needs: package
+    needs: [package, package-acceptance]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
