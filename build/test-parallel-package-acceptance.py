@@ -24,8 +24,8 @@ def validate(release: str, package: str) -> list[str]:
         if name not in build:
             issues.append("Missing candidate package output " + name)
     for required in (
-        "needs: package", "arch: Windows-64bit", "arch: Windows-32bit",
-        "runtime: win-x64", "runtime: win-x86",
+        "needs: package", "arch: [Windows-32bit, Windows-64bit]",
+        "RUNTIME: ${{ matrix.arch == 'Windows-32bit' && 'win-x86' || 'win-x64' }}",
         "mode: [Portable, Installer]", "actions/download-artifact@v4",
         "test-package-appdata-preservation.ps1",
         "-AcceptanceMode", "if ($LASTEXITCODE -ne 0) { throw",
