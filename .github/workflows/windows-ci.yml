@@ -86,6 +86,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           python build/test-ci-fast-gates.py
           if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
+          python build/test-ci-sharding-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Release shards / packaging gate mismatch' }
+          python build/test-release-test-shards.py
+          if ($LASTEXITCODE -ne 0) { throw 'Release TRX shard negative-path regression' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
