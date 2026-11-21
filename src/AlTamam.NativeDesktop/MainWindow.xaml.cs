@@ -41,6 +41,7 @@ public partial class MainWindow : Window
             _backend = await _openingTask;
             if (_closeInProgress) return;
             await _viewModel.InitializeAuthenticationAsync(_backend);
+            _viewModel.AttachDashboardReader(_backend.CreateDashboardReader());
             _sessionTimer.Start();
         }
         catch
