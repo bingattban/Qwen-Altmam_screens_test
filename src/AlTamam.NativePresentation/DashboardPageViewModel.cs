@@ -14,6 +14,16 @@ namespace AlTamam.NativePresentation;
 public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropertyChanged
 {
     private INativeDashboardReader? _reader;
+    private INativeDashboardContinuationReader? _continuation;
+    private TimeOnly? _scheduledDue;
+    private string _countdownLabel = "";
+    private string _autoPolicyError = "";
+    private DateTime _lastDueReadRefresh = DateTime.MinValue;
+    private DateOnly? _loadedDate;
+
+    public NativeAutoPreparedRegisterViewModel AutoRegister { get; } = new();
+    public string CountdownLabel => _countdownLabel;
+    public string AutoPolicyError => _autoPolicyError;
     private Func<NativeIdentity?>? _currentPrincipal;
     private NativeIdentity? _boundPrincipal;
     private int _requestVersion;
@@ -90,6 +100,11 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         if (_reader is not null) throw new InvalidOperationException("Native dashboard reader already initialized.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _currentPrincipal = currentPrincipal ?? throw new ArgumentNullException(nameof(currentPrincipal));
+        if (reader is INativeDashboardContinuationReader extra)
+        {
+            _continuation = extra;
+            AutoRegister.AttachReader(extra, currentPrincipal);
+        }
     }
 
     /// <summary>
@@ -98,6 +113,13 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
     /// </summary>
     public void Clear()
     {
+        AutoRegister.Close();
+        _scheduledDue = null;
+        _countdownLabel = "";
+        _autoPolicyError = "";
+        _lastDueReadRefresh = DateTime.MinValue;
+        _loadedDate = null;
+        Changed(nameof(CountdownLabel), nameof(AutoPolicyError));
         ++_requestVersion;
         _activeRead?.Cancel();
         _activeRead = null;
@@ -121,6 +143,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         _totalRows = 0;
         _hasNext = false;
         _businessDateLabel = "";
+        _loadedDate = null;
         _counters = [];
         _rows = [];
         _customColumns = [];
@@ -171,6 +194,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
             _totalRows = result.TotalRows;
             _hasNext = result.HasNext;
             _businessDateLabel = result.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            _loadedDate = result.BusinessDate;
             _counters = CreateCounters(result).Select(card =>
                 card with { IsSelected = card.StatusId == _selectedStatusId }).ToArray();
             _rows = result.Rows;
@@ -178,6 +202,8 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
             _siteOptions = [new("", "جميع المواقع"), .. result.Sites];
             ChangedVisible();
             Changed(nameof(SiteOptions));
+            if (_continuation is not null)
+                await LoadAutoPolicyAsync(ct);
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested || ct.IsCancellationRequested)
         {
@@ -203,6 +229,92 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         ClearSensitivePresentation(message);
     }
 
+    /// <summary>
+    /// Uses exactly the C# SQLCipher-stored due HH:mm. This operation has no
+    /// scheduler execution path, no 08:00 write, and never extends idle time.
+    /// </summary>
+    public async Task LoadAutoPolicyAsync(CancellationToken ct = default)
+    {
+        NativeIdentity? principal = _currentPrincipal?.Invoke();
+        if (principal is null || _continuation is null)
+        {
+            _scheduledDue = null;
+            _countdownLabel = "";
+            Changed(nameof(CountdownLabel));
+            return;
+        }
+        try
+        {
+            var answer = await _continuation.ReadPolicyAsync(principal, ct);
+            if (_currentPrincipal?.Invoke() != principal) return;
+            if (!TimeOnly.TryParseExact(answer.DueTimeLocal, "HH:mm",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out TimeOnly due))
+                throw new InvalidDataException("The canonical auto-attendance policy clock is invalid.");
+            _scheduledDue = due;
+            _autoPolicyError = "";
+            TickClock(DateTime.Now);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch
+        {
+            _scheduledDue = null;
+            _countdownLabel = "";
+            _autoPolicyError = "تعذر التحقق من وقت التحضير التلقائي المحفوظ؛ لم يُعرض موعد افتراضي.";
+        }
+        Changed(nameof(CountdownLabel), nameof(AutoPolicyError));
+    }
+
+    /// <summary>
+    /// Display-only once-per-second WPF timer. The original native scheduler
+    /// is authoritative; this method CANNOT cause attendance mutations.
+    /// A near-due refresh only re-reads already committed SQLCipher rows.
+    /// </summary>
+    public void TickClock(DateTime localNow)
+    {
+        if (_currentPrincipal?.Invoke() is null || _scheduledDue is not { } due)
+        {
+            if (_countdownLabel != "")
+            {
+                _countdownLabel = "";
+                Changed(nameof(CountdownLabel));
+            }
+            return;
+        }
+        DateTime cutoff = localNow.Date.Add(due.ToTimeSpan());
+        TimeSpan left = cutoff - localNow;
+        string hhmm = due.ToString("HH:mm", CultureInfo.InvariantCulture);
+        string next = left > TimeSpan.Zero
+            ? $"الوقت المتبقي للاعتماد التلقائي عند {hhmm} : " +
+              $"{(int)left.TotalHours:00}:{left.Minutes:00}:{left.Seconds:00}"
+            : $"حان موعد الاعتماد التلقائي عند {hhmm}؛ سيعرض الكشف الأفراد المعتمدين بعد التنفيذ.";
+        if (next != _countdownLabel)
+        {
+            _countdownLabel = next;
+            Changed(nameof(CountdownLabel));
+        }
+
+        if (_loadedDate is { } stored && stored != DateOnly.FromDateTime(localNow))
+        {
+            AutoRegister.Close();
+            if (!_isLoading) _ = RefreshAsync();
+            return;
+        }
+        if (IsDataConnected && !_isLoading && left <= TimeSpan.Zero &&
+            left > -TimeSpan.FromMinutes(10) &&
+            localNow - _lastDueReadRefresh >= TimeSpan.FromSeconds(30))
+        {
+            _lastDueReadRefresh = localNow;
+            _ = RefreshAsync(); // DISPLAY read only; never RunPendingAsync.
+        }
+    }
+
+    public Task OpenAutoRegisterAsync(CancellationToken ct = default)
+    {
+        if (_currentPrincipal?.Invoke() is null || _continuation is null)
+            return Task.CompletedTask;
+        return AutoRegister.OpenAsync(DateOnly.FromDateTime(DateTime.Now), _selectedSiteId, ct);
+    }
+
     public async Task SelectSiteAsync(string siteId, CancellationToken ct = default)
     {
         siteId ??= "";
@@ -212,6 +324,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
             return;
         }
         if (_selectedSiteId == siteId) return;
+        AutoRegister.Close();
         _selectedSiteId = siteId;
         _page = 1;
         Changed(nameof(SelectedSiteId), nameof(Page));
@@ -224,6 +337,11 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         if (statusId != "" && !_counters.Any(x => x.StatusId == statusId))
         {
             InvalidateWithError("الحالة المحددة غير موجودة ضمن الحالات الفعلية.");
+            return;
+        }
+        if (statusId == "__AUTO_PREPARED__")
+        {
+            await OpenAutoRegisterAsync(ct);
             return;
         }
         if (_selectedStatusId == statusId) return;
