@@ -27,9 +27,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
 
     public NativeShellViewModel()
     {
+        Dashboard = new DashboardPageViewModel();
         Pages = new NativePageViewModel[]
         {
-            new DashboardPageViewModel(),
+            Dashboard,
             new DailyAttendancePageViewModel(),
             new MonthlyAttendancePageViewModel(),
             new AdministrationPageViewModel(),
@@ -50,7 +51,13 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             _ => IsAuthenticated && !IsBusy);
     }
 
+    public DashboardPageViewModel Dashboard { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
+
+    // Called once by the real desktop host after SQLCipher initialization.
+    // The delegate only yields the current server-verified native principal.
+    public void AttachDashboardReader(INativeDashboardReader reader)
+        => Dashboard.AttachReader(reader, () => _active);
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
     public NativePageViewModel CurrentPage
@@ -152,6 +159,9 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                 nameof(RoleLabel), nameof(CanManageAccounts), nameof(IsFirstRun));
             _navigateCommand.NotifyAvailabilityChanged();
             _logoutCommand.NotifyAvailabilityChanged();
+            // A dashboard failure displays a safe read-only error, but never
+            // changes the server's successful authentication outcome.
+            await Dashboard.RefreshAsync(ct);
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -226,6 +236,9 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
 
     private void ForgetSession(string message)
     {
+        // Scrub all native personnel/counters synchronously when the backend
+        // revokes or expires the session, even if a SQL read is still running.
+        Dashboard.Clear();
         _active = null;
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
         _loginError = message;
