@@ -11,8 +11,17 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 NS = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
-SHARDS = ("r01", "bridge", "performance", "other")
-MINIMUMS = {"r01": 35, "bridge": 900, "performance": 17, "other": 210}
+SHARDS = ("r01", "bridge-heavy", "bridge-light", "performance", "security", "other")
+MINIMUMS = {"r01": 35, "bridge-heavy": 24, "bridge-light": 876,
+            "performance": 17, "security": 123, "other": 87}
+# Four measured Bridge integration classes consume most of the original 900-test
+# worker time (verified from the actual 2026-11-21 Windows TRX).
+HEAVY_BRIDGE_CLASSES = (
+    "NativeRestoreActivationCoordinatorTests",
+    "BackupRetentionIntegrationTests",
+    "Section03FirstRunBridgeTests",
+    "Section03FullResetTests",
+)
 PHASE_MINIMUMS = {"phase02-integration.trx": 18, "phase03-unit.trx": 18}
 
 
@@ -22,8 +31,17 @@ def belongs(name: str, shard: str) -> bool:
     bridge = name.startswith("AlTamam.Tests.Bridge.")
     r01 = name.startswith("AlTamam.Tests.Bridge.R01")
     perf = name.startswith("AlTamam.Tests.Performance.")
-    return {"r01": r01, "bridge": bridge and not r01,
-            "performance": perf, "other": not bridge and not perf}[shard]
+    security = name.startswith("AlTamam.Tests.Security.")
+    heavy = any(name.startswith("AlTamam.Tests.Bridge." + cls + ".")
+                for cls in HEAVY_BRIDGE_CLASSES)
+    return {
+        "r01": r01,
+        "bridge-heavy": heavy,
+        "bridge-light": bridge and not r01 and not heavy,
+        "performance": perf,
+        "security": security,
+        "other": not bridge and not perf and not security
+    }[shard]
 
 
 def read_trx(path: Path) -> tuple[list[ET.Element], list[str]]:
