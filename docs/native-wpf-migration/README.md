@@ -53,3 +53,60 @@ workflow are intentionally preserved unchanged.
    service parity, snapshots and server role validation.
 4. Continue test-first conversion through all 69 routes; do not remove
    operational HTML/WebView2 until end-to-end parity has been established.
+
+
+## Phase 2 — real native Dashboard (read-only slice)
+
+The **primary** Dashboard in the experimental WPF shell now uses native XAML
+instead of the disabled pilot GroupBox. The source of truth is unchanged:
+
+- **GetDashboardSummary** semantics from DailyMonthlyReadService.DashboardSummaryAsync.
+  Totals come from SQLCipher grouped attendance/assignments, never from rows.
+  Saved absent attendance counts as prepared; same-day internal transfers are
+  not incorrectly included as unprepared and do not leave the total force.
+- **QueryDailyRoster** semantics from DailyMonthlyReadService.DailyRosterAsync.
+  Filter by current local business date, assigned site, configured status,
+  name/number (Arabic normalizer), and server-side pages of 100.
+- **QuerySites** semantics from BridgeSharedServices.ListSitesAsync with only
+  active site filters. No fabricated sites or locally cached personnel.
+- Exactly the existing functional UI's primary counters: total strength,
+  present (when configured), other saved statuses, automatically prepared,
+  and same-day transfers when present. **No unprepared count** as a primary
+  Dashboard card. Status cards are read-only roster filters.
+- Roster columns show number, number (A), name, site, saved status and
+  all visible administrator-defined custom columns from canonical metadata.
+- Arabic right-to-left, original navy #0F2942 / teal #0D9488, white cards,
+  gray surfaces, errors, pagination, responsive wrapping and selected filters.
+
+Every fetch checks **the real server-side SQLCipher session nonce, role and
+identity before AND after the canonical database reads**. The ViewModel also
+rejects stale async responses after logout, account replacement and filter
+changes, with immediate clearing of old personnel on error or revoked login.
+The normal five-minute idle expiration is NOT prolonged by reading/polling.
+
+### Phase 2 safety and remaining gaps
+
+This is a first functional native screen **slice**, not the full migration
+of the dashboard route:
+- No automatic-preparation overlay, manual attendance mutation, 08:00 timer,
+  backup or month conversion has been moved to native WPF yet.
+- Historical/administration/monthly screens are still disabled placeholders.
+- The route matrix remains 69 **not_migrated** because complete
+  functional/e2e screen parity has not been demonstrated.
+- The customer x86/x64 Portable/Installer builds still package the current
+  production DesktopHost/WebView2 and must **not** be repointed to the pilot.
+- Real Windows visual approval at 100/125/150% DPI and clean-machine
+  acceptance remain separate final gates. The pilot uses the live encrypted
+  local database and enforces the same production single-instance mutex.
+
+**Test-first:** NativeDashboardPhase2Tests (7 cases) cover the original
+counter labels/order, live-readonly rows, active filters, 100-row pagination,
+session replacement, stale post-logout results, malformed response rejection,
+and failure-closed search. Both Windows Core and Windows Release enforce the
+negative-path native dashboard contract and compile the WPF solution before
+the actual test matrix and four production package acceptance jobs.
+
+Next: add native attendance policy/countdown and the distinct automatic
+prepared register with identical permissions and cancellation behavior;
+then perform authenticated/unauthenticated desktop UI parity tests before
+claiming Dashboard route migration.

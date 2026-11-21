@@ -9,12 +9,11 @@ public abstract class NativePageViewModel(NativeScreen screen, string title)
 {
     public NativeScreen Screen { get; } = screen;
     public string Title { get; } = title;
-    public bool IsDataConnected => false;
-    public string StatusMessage =>
+    public virtual bool IsDataConnected => false;
+    public virtual string StatusMessage =>
         "تم تفعيل تسجيل الدخول الأصلي والتحقق من الجلسة. لم يتم بعد ربط هذه الشاشة بالخدمات التشغيلية؛ هذه معاينة XAML للمرحلة التالية.";
 }
 
-public sealed class DashboardPageViewModel() : NativePageViewModel(NativeScreen.Dashboard, "الرئيسية");
 public sealed class DailyAttendancePageViewModel() : NativePageViewModel(NativeScreen.DailyAttendance, "التمام اليومي");
 public sealed class MonthlyAttendancePageViewModel() : NativePageViewModel(NativeScreen.MonthlyAttendance, "التمام الشهري");
 public sealed class AdministrationPageViewModel() : NativePageViewModel(NativeScreen.Administration, "الإدارة");

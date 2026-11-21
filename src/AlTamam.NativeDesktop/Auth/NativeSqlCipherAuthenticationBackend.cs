@@ -1,5 +1,6 @@
 using System.IO;
 using AlTamam.Application.Bridge;
+using AlTamam.NativeDesktop.Dashboard;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
 using AlTamam.NativePresentation;
@@ -57,6 +58,14 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             db.Dispose();
             throw;
         }
+    }
+
+    // Reuse one audited DB instance and session resolver for native dashboard.
+    // The reader never offers a mutating operation to XAML.
+    public INativeDashboardReader CreateDashboardReader()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+        return new NativeSqlCipherDashboardReader(_services, _database);
     }
 
     public Task<bool> IsProvisionedAsync(CancellationToken ct = default) =>
