@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Threading;
 using AlTamam.NativePresentation;
 
 namespace AlTamam.NativeDesktop.Views;
@@ -15,13 +16,26 @@ public partial class NativeDashboardView : UserControl
 {
     private const int StandardColumns = 5;
     private DashboardPageViewModel? _viewModel;
+    private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public NativeDashboardView()
     {
         InitializeComponent();
         DataContextChanged += OnContextChanged;
-        Loaded += (_, _) => UpdateViewModel(DataContext as DashboardPageViewModel);
-        Unloaded += (_, _) => UpdateViewModel(null);
+        // The WPF UI clock only recomputes a countdown from the already
+        // authorized policy. It NEVER runs background attendance or renews idle.
+        _clockTimer.Tick += (_, _) => _viewModel?.TickClock(DateTime.Now);
+        Loaded += (_, _) =>
+        {
+            UpdateViewModel(DataContext as DashboardPageViewModel);
+            _clockTimer.Start();
+            _viewModel?.TickClock(DateTime.Now);
+        };
+        Unloaded += (_, _) =>
+        {
+            _clockTimer.Stop();
+            UpdateViewModel(null);
+        };
     }
 
     private void OnContextChanged(object sender, DependencyPropertyChangedEventArgs e)
