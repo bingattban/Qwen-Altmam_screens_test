@@ -84,6 +84,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-ci-fast-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
@@ -202,13 +204,16 @@ jobs:
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Phase 03 unit tests executed: $count"
           if ($count -lt 4) { throw 'Phase 03 unit tests did not fully execute' }
-      - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
+      # Fast Core: compile all projects and execute representative security checks.
+      # Exhaustive native/SQLCipher/performance coverage remains mandatory in Release.
+      - name: Run focused security/attendance smoke tests on Windows runner
         env:
           ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
-          --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
+          --configuration Release --no-build --no-restore
+          --filter "FullyQualifiedName~BridgeRbacMatrixTests|FullyQualifiedName~AttendanceCommitIntegrationTests|FullyQualifiedName~SqlCipherConnectionTests|FullyQualifiedName~R01AuthenticatedMutationBoundaryTests|FullyQualifiedName~NativeHostShutdownGateTests"
+          --logger "trx;LogFileName=core-tests.trx"
           --results-directory TestResults
       - name: Guard against zero tests executing (real TRX required)
         shell: pwsh
@@ -216,26 +221,8 @@ jobs:
           if (-not (Test-Path TestResults/core-tests.trx)) { throw 'Core TRX is missing' }
           $xml = [xml](Get-Content TestResults/core-tests.trx)
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
-          Write-Host "Core full tests executed: $count"
-          if ($count -lt 1) { throw 'Core suite executed zero tests' }
-      - name: R01 real native lifecycle response and execution evidence
-        shell: pwsh
-        run: |
-          python build/test-r01-native-contract-evidence.py
-          if ($LASTEXITCODE -ne 0) { throw 'R01 evidence validator regression failed' }
-          python build/check-r01-native-contract-evidence.py TestResults/core-tests.trx
-          if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
-      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
-        shell: pwsh
-        run: |
-          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
-      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase15-sqlcipher-10k-three-year-core
-          path: PerformanceEvidence/phase15-10k-multi-year.json
-          if-no-files-found: error
+          Write-Host "Core selected security/attendance smoke tests executed: $count"
+          if ($count -lt 5) { throw 'Core smoke suite did not execute the expected critical tests' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:
@@ -244,27 +231,12 @@ jobs:
         run: |
           pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
-      - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
-        shell: pwsh
-        env:
-          ALTAMAM_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/ten-thousand-person-search.txt
-        run: |
-          New-Item -ItemType Directory -Path PerformanceEvidence -Force | Out-Null
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-build --no-restore `
-            --filter "FullyQualifiedName~TenThousandSearchDiagnostics" `
-            --logger "console;verbosity=normal"
-          if ($LASTEXITCODE -ne 0) { throw 'Synthetic performance measurement failed' }
-          $measure=Get-Content PerformanceEvidence/ten-thousand-person-search.txt |
-            Select-String -Pattern 'SECTION01_PERF|SECTION01_HW'
-          if (-not $measure) { throw 'No measured performance or hardware characteristics recorded' }
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Section 01 hardware measurements"
-          foreach ($line in $measure) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- " + $line.Line) }
-      - name: Phase 13 runner hardware and measured synthetic search facts
+      - name: Phase 13 runner hardware inventory (Core smoke; performance belongs to Release)
         shell: pwsh
         env:
           ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json -MeasurementFile PerformanceEvidence/ten-thousand-person-search.txt
+          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
       - name: Phase 13 reject forged or mismatched Windows E2E evidence
         shell: pwsh
@@ -278,12 +250,6 @@ jobs:
           name: phase13-real-windows-e2e-core
           path: Phase13Evidence/*.json
           if-no-files-found: warn
-      - name: Upload synthetic search performance evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: section01-search-10k-perf-windows
-          path: PerformanceEvidence/ten-thousand-person-search.txt
-          if-no-files-found: error
       - name: Upload test results artifact
         if: always()
         uses: actions/upload-artifact@v4
