@@ -32,11 +32,17 @@ class Phase13EvidenceContract(unittest.TestCase):
             self.assertIn("Collect-Phase13WindowsFacts.ps1", segment)
             self.assertIn("Validate-Phase13Evidence.ps1", workflow)
 
-    def test_real_search_measurement_precedes_measured_core_report(self):
-        self.assertLess(CORE.index("- name: Capture measured ten-thousand-person search benchmark"),
-                        CORE.index("- name: Phase 13 runner hardware"))
-        self.assertIn("-MeasurementFile PerformanceEvidence/ten-thousand-person-search.txt", CORE)
+    def test_core_hardware_does_not_claim_missing_10k_measurement_and_release_measures_it(self):
+        """Core may skip duplicate benchmarking but cannot forge measured evidence."""
+        core_hardware = CORE.split("- name: Phase 13 runner hardware", 1)[1].split("- name: Phase 13 reject", 1)[0]
+        self.assertIn("Collect-Phase13WindowsFacts.ps1", core_hardware)
+        self.assertNotIn("-MeasurementFile", core_hardware)
+        self.assertIn('status = "NOT_EXECUTED"', PERF)
         self.assertIn('if (-not (Test-Path -LiteralPath $MeasurementFile -PathType Leaf))', PERF)
+        release_tests = RELEASE.split("  build-test:\n", 1)[1].split("  package:\n", 1)[0]
+        self.assertIn("ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT", release_tests)
+        self.assertIn("check-phase15-perf-evidence.py", release_tests)
+        self.assertIn("needs: [preflight, build-test]", RELEASE)
 
     def test_driver_requires_native_three_role_evidence_and_fails_closed(self):
         self.assertIn('PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations', DRIVER)
