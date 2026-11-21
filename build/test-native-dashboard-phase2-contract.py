@@ -13,6 +13,7 @@ from xml.etree import ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 PATHS={
  "view":"src/AlTamam.NativeDesktop/Views/NativeDashboardView.xaml",
+ "view_code":"src/AlTamam.NativeDesktop/Views/NativeDashboardView.xaml.cs",
  "templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
  "vm":"src/AlTamam.NativePresentation/DashboardPageViewModel.cs",
  "model":"src/AlTamam.NativePresentation/NativeDashboardContracts.cs",
@@ -41,9 +42,11 @@ def failures(data):
                    "الاسم","الموقع","الحالة","مسح البحث","تحديث البيانات","السابق","التالي"):
         # 'جميع المواقع' is in strongly typed model rather than XAML.
         require("vm" if phrase=="جميع المواقع" else "view",phrase)
-    for token in ("SelectedSiteId","SelectStatusCommand","SearchCommand","CustomColumns",
+    for token in ("SelectedSiteId","SelectStatusCommand","SearchCommand",
                   "ItemsSource=\"{Binding Rows}\"","OnSiteSelectionChanged"):
         require("view",token)
+    for token in ("CustomColumns","RebuildCustomColumns()","PersonnelGrid.Columns.Add"):
+        require("view_code",token)
     for token in ("DailyMonthlyReadService(database)","DashboardSummaryAsync(summaryQuery",
                   "DailyRosterAsync(rosterQuery","ListSitesAsync(includeInactive: false",
                   "VerifyLiveSessionAsync().ConfigureAwait(false)",
@@ -92,7 +95,7 @@ if __name__=="__main__":
         ("release","dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj"),
     ):
         mut=DATA.copy()
-        mut[key]=mut[key].replace(token,"REMOVED_FOR_NEGATIVE_TEST",1)
+        mut[key]=mut[key].replace(token,"REMOVED_FOR_NEGATIVE_TEST")
         if not failures(mut):
             raise SystemExit("Unsafe dashboard contract mutation passed: "+key+" "+token)
     print("NATIVE DASHBOARD PHASE 2 PASS: real read-only SQLCipher, 100-row filters, RTL palette, live nonce and safe gate")
