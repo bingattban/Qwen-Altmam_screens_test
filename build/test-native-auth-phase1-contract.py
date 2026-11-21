@@ -38,7 +38,8 @@ def check(files: dict[str, str]) -> list[str]:
     for label in ("اسم المستخدم", "كلمة المرور", "تأكيد كلمة المرور",
                   "إنشاء الإدارة العامة والدخول"):
         require("login", label, "Native login has dropped an existing Arabic field: "+label)
-    require("host", 'Binding="{Binding IsAuthenticated}"', "Main window must hide navigation before server auth")
+    if files["host"].count('Binding="{Binding IsAuthenticated}"') < 2:
+        problems.append("Both login visibility and native shell visibility must depend on real authentication")
     require("host", "NativeLoginView", "Real XAML authentication form must be wired to the window")
     require("vm", "ResolveSessionAsync(answer.Identity.SessionNonce", "Login must resolve live nonce before unlocking navigation")
     require("vm", "RoleAuthorizationPolicy.CanPerformStandardOperations", "RBAC required on navigation")
