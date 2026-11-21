@@ -27,7 +27,9 @@ def check(source: str, driver: str, workflow: str) -> list[str]:
     )
     if not all(x in source for x in required):
         bad.append("Real founder authentication, session identity, backup or restore verification removed")
-    if source.index('setStage("founder-session-check");')>source.index('api.invoke("GetCurrentSession",{}, {timeoutMs: 45000})'):
+    start='setStage("founder-session-check");'
+    request='api.invoke("GetCurrentSession",{}, {timeoutMs: 45000})'
+    if start in source and request in source and source.index(start)>source.index(request):
         bad.append("Session verification must run after authenticated login")
     if 'TimeSpan.FromSeconds(115)' not in source:
         bad.append("Native recovery must remain bounded")
