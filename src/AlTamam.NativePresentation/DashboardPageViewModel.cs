@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Globalization;
 using System.Windows.Input;
 
@@ -170,7 +171,8 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
             _totalRows = result.TotalRows;
             _hasNext = result.HasNext;
             _businessDateLabel = result.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            _counters = CreateCounters(result);
+            _counters = CreateCounters(result).Select(card =>
+                card with { IsSelected = card.StatusId == _selectedStatusId }).ToArray();
             _rows = result.Rows;
             _customColumns = result.CustomColumns;
             _siteOptions = [new("", "جميع المواقع"), .. result.Sites];
