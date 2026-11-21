@@ -55,8 +55,8 @@ def check(files: dict[str, str]) -> list[str]:
                   "WindowsDatabaseKeyStore", "OfflineRestoreSwitch",
                   "RevokeOrphanedSessionsOnStartupAsync("):
         require("backend", token, "Live canonical SQLCipher authentication capability removed: "+token)
-    require("native_app", 'Local\AlTamamDaily_DesktopHost', "Pilot must share production mutex")
-    require("production", "new WebView2", "The existing production WebView2 host must be preserved")
+    require("native_app", r'Local\AlTamamDaily_DesktopHost', "Pilot must share production mutex")
+    require("production", "private readonly WebView2 _webView", "The existing production WebView2 host must be preserved")
     require("release", "dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj",
             "Do not silently ship the native pilot before 69-route parity")
     require("release", "verify-release-test-shards.py", "All 1162+ original tests remain required")
