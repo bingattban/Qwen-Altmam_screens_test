@@ -46,4 +46,7 @@ public sealed record NativeDashboardSnapshot(
     long TotalRows, int Page, bool HasNext);
 
 public sealed record NativeDashboardCounter(
-    string StatusId, string Label, long Count, string Color, string Percentage);
+    string StatusId, string Label, long Count, string Color, string Percentage)
+{
+    public bool IsSelected { get; init; }
+}
