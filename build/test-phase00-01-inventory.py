@@ -131,7 +131,7 @@ class Phase01Foundation(unittest.TestCase):
             self.assertIn("push:", content)
             self.assertIn("main", content)
             self.assertIn("test-phase00-01-inventory.py", content)
-        self.assertIn("needs: build-test", release)
+        self.assertIn("needs: [preflight, build-test]", release)
         self.assertIn("win-x86", release)
         self.assertIn("win-x64", release)
         self.assertIn("SHA256", release)
