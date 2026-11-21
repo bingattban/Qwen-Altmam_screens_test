@@ -51,8 +51,8 @@ def check(core: str, release: str) -> list[str]:
         if 'dotnet test ' + path not in full:
             problems.append('Release full coverage missing ' + path)
     full_suite = full.split('      - name: Full deterministic test suite', 1)[-1].split('      - name:', 1)[0]
-    if '--filter "$filter"' not in full_suite or 'shard: [r01, bridge, performance, other]' not in full:
-        problems.append('Release full xUnit suite must run in four exhaustive shards')
+    if '--filter "$filter"' not in full_suite or 'shard: [r01, bridge-heavy, bridge-light, performance, security, other]' not in full:
+        problems.append('Release full xUnit suite must run in six exhaustive shards')
     for term in ('check-phase15-perf-evidence.py','check-r01-native-contract-evidence.py TestResults/full-suite.trx'):
         if term not in full:
             problems.append('Release exhaustive tests/evidence missing ' + term)
@@ -75,7 +75,7 @@ def self_test(core: str, release: str) -> None:
     assert any('wait for preflight' in p for p in check(core, release.replace('needs: [preflight, build-test, verify-full-test-shards, webview-e2e]', 'needs: build-test', 1)))
     assert any('full coverage missing' in p for p in check(core, release.replace(
         'dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj', 'dotnet test tests/Unknown.csproj', 1)))
-    assert any('four exhaustive shards' in p for p in check(core, release.replace(
+    assert any('six exhaustive shards' in p for p in check(core, release.replace(
         '--filter "$filter"', '--filter "FullyQualifiedName~NoTests"', 1)))
     assert any('positively selected' in p for p in check(core.replace(
         '--filter "FullyQualifiedName~BridgeRbacMatrixTests|', '--filter "FullyQualifiedName~Unrelated|', 1), release))
@@ -87,4 +87,4 @@ if __name__ == '__main__':
     if violations:
         raise SystemExit('FAST CI CONTRACT FAILED:\n' + '\n'.join(violations))
     self_test(core, release)
-    print('FAST CI CONTRACT PASS: Core smoke + four disjoint Release shards + triple package gates')
+    print('FAST CI CONTRACT PASS: Core smoke + six disjoint Release shards + triple package gates')
