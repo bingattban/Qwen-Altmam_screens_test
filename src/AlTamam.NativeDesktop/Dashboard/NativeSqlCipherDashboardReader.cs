@@ -92,7 +92,7 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(item, "columnId"), RequiredText(item, "caption"));
         }).ToArray();
 
-        var rows = RequiredArray(roster, "items").Select(node =>
+        var rows = RequiredArray(roster, "items").Select((node, index) =>
         {
             JsonObject item = RequireObject(node);
             JsonObject custom = RequireObject(item["customFields"]);
@@ -102,7 +102,10 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(item, "personId"), RequiredText(item, "serviceNumberA"),
                 RequiredText(item, "name"), RequiredText(item, "siteName"),
                 RequiredText(item, "statusName"),
-                item["statusColor"]?.GetValue<string>(), cells);
+                item["statusColor"]?.GetValue<string>(), cells)
+            {
+                RowNumber = checked((filters.Page - 1) * filters.PageSize + index + 1)
+            };
         }).ToArray();
 
         return new NativeDashboardSnapshot(
@@ -133,9 +136,16 @@ public sealed class NativeSqlCipherDashboardReader(
         parent[key]?.GetValue<string>() ??
         throw new InvalidDataException($"Missing dashboard field {key}.");
 
-    private static long RequiredNumber(JsonObject parent, string key) =>
-        parent[key]?.GetValue<long>() ??
-        throw new InvalidDataException($"Missing dashboard count {key}.");
+    private static long RequiredNumber(JsonObject parent, string key)
+    {
+        if (parent[key] is not JsonValue value)
+            throw new InvalidDataException($"Missing dashboard numeric field {key}.");
+        // Actual canonical JSON is a mixture of Int32 request echo and Int64
+        // SQLite COUNTs; never assume all JsonValues have the same backing type.
+        if (value.TryGetValue<long>(out long wide)) return wide;
+        if (value.TryGetValue<int>(out int narrow)) return narrow;
+        throw new InvalidDataException($"Invalid dashboard numeric field {key}.");
+    }
 
     private static bool RequiredBoolean(JsonObject parent, string key) =>
         parent[key]?.GetValue<bool>() ??
