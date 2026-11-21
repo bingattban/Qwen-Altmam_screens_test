@@ -100,7 +100,11 @@ class Phase01Foundation(unittest.TestCase):
         paths = [p.attrib["Path"] for p in doc.iter("Project")]
         production = [p for p in paths if p.startswith("src/")]
         tests = [p for p in paths if p.startswith("tests/")]
-        self.assertEqual(len(production), 5)
+        self.assertEqual(len(production), 7)
+        self.assertEqual(
+            {p for p in production if "Native" in p},
+            {"src/AlTamam.NativePresentation/AlTamam.NativePresentation.csproj",
+             "src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj"})
         self.assertEqual(len(tests), 3)
         for path in paths:
             self.assertTrue((ROOT / path).is_file(), path)
