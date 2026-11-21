@@ -38,8 +38,8 @@ def check(core: str, release: str) -> list[str]:
         problems.append('real Core WPF/WebView2 E2E is mandatory')
     if '    needs: preflight' in full:
         problems.append('Release preflight and test jobs must start independently')
-    if '    needs: [preflight, build-test]' not in package:
-        problems.append('package must wait for both preflight and full Release tests')
+    if '    needs: [preflight, build-test, verify-full-test-shards]' not in package:
+        problems.append('package must wait for preflight, all Release tests, and independent attestation')
     if re.search(r'(?m)^    if:\s*(?:always\(\)|true)\s*$', package):
         problems.append('package must never bypass failure')
     for path in ('tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj',
@@ -48,8 +48,8 @@ def check(core: str, release: str) -> list[str]:
         if 'dotnet test ' + path not in full:
             problems.append('Release full coverage missing ' + path)
     full_suite = full.split('      - name: Full deterministic test suite', 1)[-1].split('      - name:', 1)[0]
-    if '--filter' in full_suite:
-        problems.append('Release full suite must remain unfiltered')
+    if '--filter "$filter"' not in full_suite or 'shard: [r01, bridge, performance, other]' not in full:
+        problems.append('Release full xUnit suite must run in four exhaustive shards')
     for term in ('check-phase15-perf-evidence.py','check-r01-native-contract-evidence.py TestResults/full-suite.trx',
                  'pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1'):
         if term not in full:
@@ -65,11 +65,11 @@ def check(core: str, release: str) -> list[str]:
 
 def self_test(core: str, release: str) -> None:
     assert not check(core, release)
-    assert any('wait for both' in p for p in check(core, release.replace('needs: [preflight, build-test]', 'needs: build-test', 1)))
+    assert any('wait for preflight' in p for p in check(core, release.replace('needs: [preflight, build-test, verify-full-test-shards]', 'needs: build-test', 1)))
     assert any('full coverage missing' in p for p in check(core, release.replace(
         'dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj', 'dotnet test tests/Unknown.csproj', 1)))
-    assert any('unfiltered' in p for p in check(core, release.replace(
-        '--logger "trx;LogFileName=full-suite.trx"', '--filter "FullyQualifiedName!~Phase15" --logger "trx;LogFileName=full-suite.trx"', 1)))
+    assert any('four exhaustive shards' in p for p in check(core, release.replace(
+        '--filter "$filter"', '--filter "FullyQualifiedName~NoTests"', 1)))
     assert any('positively selected' in p for p in check(core.replace(
         '--filter "FullyQualifiedName~BridgeRbacMatrixTests|', '--filter "FullyQualifiedName~Unrelated|', 1), release))
 
@@ -80,4 +80,4 @@ if __name__ == '__main__':
     if violations:
         raise SystemExit('FAST CI CONTRACT FAILED:\n' + '\n'.join(violations))
     self_test(core, release)
-    print('FAST CI CONTRACT PASS: Core smoke + full Release + both green before 4 packages')
+    print('FAST CI CONTRACT PASS: Core smoke + four disjoint Release shards + triple package gates')

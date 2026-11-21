@@ -42,7 +42,7 @@ class Phase13EvidenceContract(unittest.TestCase):
         release_tests = RELEASE.split("  build-test:\n", 1)[1].split("  package:\n", 1)[0]
         self.assertIn("ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT", release_tests)
         self.assertIn("check-phase15-perf-evidence.py", release_tests)
-        self.assertIn("needs: [preflight, build-test]", RELEASE)
+        self.assertIn("needs: [preflight, build-test, verify-full-test-shards]", RELEASE)
 
     def test_driver_requires_native_three_role_evidence_and_fails_closed(self):
         self.assertIn('PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations', DRIVER)

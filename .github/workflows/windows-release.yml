@@ -111,6 +111,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           python build/test-ci-fast-gates.py
           if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
+          python build/test-ci-sharding-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Sharded Release no-bypass contract failed' }
+          python build/test-release-test-shards.py
+          if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
@@ -214,8 +218,12 @@ jobs:
 
   build-test:
     # Run in parallel with preflight; both must pass before package.
-    name: Build + full test suite on Windows x64 (15.01)
+    name: Full deterministic Release validation (${{ matrix.shard }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [r01, bridge, performance, other]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -227,42 +235,53 @@ jobs:
         run: |
           dotnet restore AlTamam.slnx
           dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
-      # NOTE (2026-10-23 §22 audit): the previous category-filtered steps (--filter
-      # "Category=Unit|Persistence|Security|Performance") were a SILENT NO-OP: zero test
-      # files declare any Trait/Category today, so those filters matched nothing while
-      # `dotnet test` still exited 0 — exactly the false-green this contract forbids.
-      # Until categories are declared on the tests themselves, run the FULL suite.
+      # Test-first: exact exclusive FQN predicates across four independent Windows
+      # runners. A post-shard verifier requires all 1,162 baseline cases, no overlap,
+      # nonzero TRX and Phase02/Phase03/R01/Phase15/E2E on the tested exact SHA.
       - name: Phase 02 SQLCipher and temporal-history integration suite (mandatory before packaging)
+        if: matrix.shard == 'other'
         run: >
           dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase02-integration.trx" --results-directory TestResults
       - name: Phase 03 independent authorization unit suite
+        if: matrix.shard == 'other'
         run: >
           dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
-      - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
+      - name: Full deterministic test suite (all authored tests across four exact disjoint shards)
+        shell: pwsh
         env:
           ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
-        run: >
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore
-          --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
-      - name: Guard both test projects against zero-tests-executed
+        run: |
+          $filter = switch ('${{ matrix.shard }}') {
+            'r01' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01' }
+            'bridge' { 'FullyQualifiedName~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Bridge.R01' }
+            'performance' { 'FullyQualifiedName~AlTamam.Tests.Performance' }
+            'other' { 'FullyQualifiedName!~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Performance' }
+            default { throw 'Unknown test shard: ${{ matrix.shard }}' }
+          }
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore --filter "$filter" `
+            --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
+          if ($LASTEXITCODE -ne 0) { throw 'Real Release test shard failed: ${{ matrix.shard }}' }
+      - name: Guard all shard tests against zero, failures, and missing TRX
         shell: pwsh
         run: |
-          foreach ($file in @('TestResults/full-suite.trx', 'TestResults/phase02-integration.trx', 'TestResults/phase03-unit.trx')) {
+          $files = @('TestResults/full-suite.trx')
+          if ('${{ matrix.shard }}' -eq 'other') { $files += @('TestResults/phase02-integration.trx', 'TestResults/phase03-unit.trx') }
+          foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file)) { throw "Required test report missing: $file" }
             $xml = [xml](Get-Content -LiteralPath $file)
-            $count = [int]$xml.TestRun.ResultSummary.Counters.total
-            Write-Host "Tests executed ($file): $count"
-            if ($count -lt 1) { throw "TEST SUITE RAN 0 TESTS: $file" }
-            if ($file -like '*phase02*' -and $count -lt 8) {
-              throw 'Phase 02 integration suite is incomplete'
+            $counts = $xml.TestRun.ResultSummary.Counters
+            $count = [int]$counts.total
+            Write-Host "Real tests executed ($file): $count"
+            if ($count -lt 1 -or [int]$counts.executed -ne $count -or [int]$counts.passed -ne $count -or [int]$counts.failed -ne 0) {
+              throw "Failed, missing or zero executed tests: $file"
             }
-            if ($file -like '*phase03*' -and $count -lt 4) {
-              throw 'Phase 03 unit suite is incomplete'
-            }
+            if ($file -like '*phase02*' -and $count -lt 18) { throw 'Phase 02 suite incomplete' }
+            if ($file -like '*phase03*' -and $count -lt 18) { throw 'Phase 03 suite incomplete' }
           }
       - name: R01 real native lifecycle response and execution evidence
+        if: matrix.shard == 'r01'
         shell: pwsh
         run: |
           python build/test-r01-native-contract-evidence.py
@@ -270,17 +289,20 @@ jobs:
           python build/check-r01-native-contract-evidence.py TestResults/full-suite.trx
           if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
       - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        if: matrix.shard == 'performance'
         shell: pwsh
         run: |
           python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
       - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        if: matrix.shard == 'performance'
         uses: actions/upload-artifact@v4
         with:
           name: phase15-sqlcipher-10k-three-year-release
           path: PerformanceEvidence/phase15-10k-multi-year.json
           if-no-files-found: error
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
+        if: matrix.shard == 'other'
         shell: pwsh
         env:
           ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
@@ -288,6 +310,7 @@ jobs:
           pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
       - name: Phase 13 runner hardware evidence
+        if: matrix.shard == 'other'
         shell: pwsh
         env:
           ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -295,12 +318,13 @@ jobs:
           pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
       - name: Phase 13 reject forged or mismatched Windows E2E evidence
+        if: matrix.shard == 'other'
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
       - name: Upload Phase 13 Windows E2E evidence
-        if: always()
+        if: always() && matrix.shard == 'other'
         uses: actions/upload-artifact@v4
         with:
           name: phase13-real-windows-e2e-release
@@ -309,14 +333,27 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-windows
+          name: test-results-windows-${{ matrix.shard }}
           path: TestResults/*.trx
           if-no-files-found: error
 
+  verify-full-test-shards:
+    name: Verify all 1,162+ distinct Release tests before packaging
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-windows-*
+          path: ShardedResults
+          merge-multiple: false
+      - name: Independently verify four real xUnit TRX partitions
+        run: python3 build/verify-release-test-shards.py ShardedResults
   package:
     # HARD DEPENDENCY: no test success => no Portable/Installer output.
     name: Publish and package (${{ matrix.arch }}) after tests
-    needs: [preflight, build-test]
+    needs: [preflight, build-test, verify-full-test-shards]
     runs-on: windows-latest
     # Two packaged bridge suites can each retry a 480s x86 probe plus routes.
     # Leave room for their bounded retries, install checks, cleanup and uploads.
