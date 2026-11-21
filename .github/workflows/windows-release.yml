@@ -127,6 +127,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF login security and appearance contract failed' }
           python build/test-native-dashboard-phase2-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Dashboard Phase 2 read-only auth/style/parity regressed' }
+          python build/test-native-auto-register-phase3-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF auto-prepared register and timer security contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
