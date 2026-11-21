@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:vm="clr-namespace:AlTamam.NativePresentation;assembly=AlTamam.NativePresentation">
+                    xmlns:vm="clr-namespace:AlTamam.NativePresentation;assembly=AlTamam.NativePresentation"
+                    xmlns:views="clr-namespace:AlTamam.NativeDesktop.Views">
     <Style x:Key="HeaderStyle" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="24" />
@@ -13,18 +14,10 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="0,0,0,22" />
     </Style>
+    <!-- Phase 2: actual native RTL dashboard, server-authorized SQLCipher reads.
+         The other five section templates below are still nonoperational previews. -->
     <DataTemplate DataType="{x:Type vm:DashboardPageViewModel}">
-        <StackPanel>
-            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <GroupBox Header="ملخص القوة — قراءة محمية" IsEnabled="False" Padding="18">
-                <UniformGrid Columns="3">
-                    <TextBlock Text="إجمالي القوة —" />
-                    <TextBlock Text="المحضرون —" />
-                    <TextBlock Text="غير المحضرين —" />
-                </UniformGrid>
-            </GroupBox>
-        </StackPanel>
+        <views:NativeDashboardView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:DailyAttendancePageViewModel}">
         <StackPanel>
