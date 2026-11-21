@@ -1,0 +1,101 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:vm="clr-namespace:AlTamam.NativePresentation;assembly=AlTamam.NativePresentation">
+    <Style x:Key="HeaderStyle" TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="Foreground" Value="#123752" />
+        <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+    <Style x:Key="StatusStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="#845B12" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,0,0,22" />
+    </Style>
+    <DataTemplate DataType="{x:Type vm:DashboardPageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <GroupBox Header="ملخص القوة — قراءة محمية" IsEnabled="False" Padding="18">
+                <UniformGrid Columns="3">
+                    <TextBlock Text="إجمالي القوة —" />
+                    <TextBlock Text="المحضرون —" />
+                    <TextBlock Text="غير المحضرين —" />
+                </UniformGrid>
+            </GroupBox>
+        </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:DailyAttendancePageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <StackPanel Orientation="Horizontal" IsEnabled="False" Margin="0,0,0,14">
+                <TextBlock Text="التاريخ:" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <DatePicker Width="180" />
+                <Button Content="التحضير" Margin="12,0,0,0" Padding="14,5" />
+            </StackPanel>
+            <DataGrid Height="290" IsReadOnly="True" IsEnabled="False" AutoGenerateColumns="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="الرقم" Width="80" />
+                    <DataGridTextColumn Header="الرقم (ع)" Width="110" />
+                    <DataGridTextColumn Header="الاسم" Width="*" />
+                    <DataGridTextColumn Header="الموقع" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:MonthlyAttendancePageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <StackPanel Orientation="Horizontal" IsEnabled="False" Margin="0,0,0,14">
+                <TextBlock Text="الشهر:" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <ComboBox Width="180"><ComboBoxItem Content="اختر الشهر" /></ComboBox>
+            </StackPanel>
+            <DataGrid Height="300" IsReadOnly="True" IsEnabled="False" AutoGenerateColumns="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="الرقم" Width="80" />
+                    <DataGridTextColumn Header="الرقم (ع)" Width="110" />
+                    <DataGridTextColumn Header="الاسم" Width="*" />
+                    <DataGridTextColumn Header="الموقع" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:AdministrationPageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <UniformGrid Rows="2" Columns="2" IsEnabled="False">
+                <Button Content="إدارة الأفراد" Margin="5" Height="70" />
+                <Button Content="التنقلات" Margin="5" Height="70" />
+                <Button Content="الفصل والاستعادة" Margin="5" Height="70" />
+                <Button Content="إدارة المستخدمين" Margin="5" Height="70" />
+            </UniformGrid>
+        </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <StackPanel IsEnabled="False">
+                <TextBlock Text="بحث التقارير" Margin="0,0,0,8" />
+                <TextBox Height="35" Margin="0,0,0,18" />
+                <Button Content="تصدير Excel" HorizontalAlignment="Left" Width="150" Padding="10" />
+            </StackPanel>
+        </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:SettingsPageViewModel}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <UniformGrid Columns="2" IsEnabled="False">
+                <Button Content="النسخ الاحتياطي" Height="55" Margin="6" />
+                <Button Content="استعادة نسخة احتياطية" Height="55" Margin="6" />
+                <Button Content="المظهر" Height="55" Margin="6" />
+                <Button Content="حول البرنامج" Height="55" Margin="6" />
+            </UniformGrid>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

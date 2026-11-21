@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/AlTamam.Domain/AlTamam.Domain.csproj" />
+    <ProjectReference Include="../../src/AlTamam.NativePresentation/AlTamam.NativePresentation.csproj" />
     <ProjectReference Include="../../src/AlTamam.Application/AlTamam.Application.csproj" />
     <ProjectReference Include="../../src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
   </ItemGroup>

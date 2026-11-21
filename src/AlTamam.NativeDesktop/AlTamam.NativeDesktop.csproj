@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>AlTamam.NativeDesktop</RootNamespace>
+    <AssemblyName>AlTamam.NativeDesktop.Pilot</AssemblyName>
+    <ApplicationIcon>../AlTamam.DesktopHost/Assets/AlTamam.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AlTamam.NativePresentation/AlTamam.NativePresentation.csproj" />
+    <Resource Include="../AlTamam.DesktopHost/Assets/AlTamam.ico" Link="Assets/AlTamam.ico" />
+  </ItemGroup>
+</Project>

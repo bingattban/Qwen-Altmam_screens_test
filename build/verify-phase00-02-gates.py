@@ -18,6 +18,8 @@ EXPECTED_PROJECTS = {
     "src/AlTamam.Application/AlTamam.Application.csproj",
     "src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj",
     "src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj",
+    "src/AlTamam.NativePresentation/AlTamam.NativePresentation.csproj",
+    "src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj",
     "tests/AlTamam.Tests/AlTamam.Tests.csproj",
     "tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj",
     "tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj",
