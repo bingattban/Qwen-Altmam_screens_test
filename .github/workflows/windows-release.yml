@@ -1,0 +1,631 @@
+name: Windows Release Packages (Phase 15)
+
+# On EVERY PR and every push to main, test BEFORE publishing the genuine WPF executable and producing BOTH
+# artifacts for EACH architecture (Portable ZIP + Inno Setup installer), verifies runtime
+# dependencies and emits SHA-256 checksums + build metadata.
+# Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
+# explicit owner approval under Phase 15.08; this workflow only uploads CI
+# artifacts for review. No code signing occurs unless the owner provisions the
+# approved certificate secrets (see "Optional signing" step); unsigned builds
+# are never labeled 'secure'.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.15.0)'
+        required: true
+        default: '0.15.0'
+  push:
+    branches: ['main']
+    tags: ['v*']
+  # No path filtering: documentation, domain, auth, workflow and test changes
+  # all require the exact same full pre-merge Release test + packaging gate.
+  pull_request:
+
+# Only the newest revision of a branch needs a build. Avoid CI overload when
+# successive implementation commits land; the final commit still builds fully.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  CONFIGURATION: Release
+  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
+  # PR builds test github.sha (synthetic merge ref), but record the source PR head independently.
+  ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  preflight:
+    name: Manifest & advisory preflight (15.01 / 14.01 carry-over)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Action-manifest security guard (CSP, RBAC drift)
+        run: python build/manifest-guard.py
+      - name: Phase 00–02 live inventory, Windows CI and SQLCipher drift guard
+        run: |
+          python build/test-phase00-02-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 negative-path regression failed' }
+          python build/verify-phase00-02-gates.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 live contract drift detected' }
+      - name: Phase 00–01 exact screen matrix and solution inventory regression
+        run: python build/test-phase00-01-inventory.py
+      - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Package process watchdog native regression before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-package-process-watchdog.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Package process watchdog regression failed' }
+      - name: Phase 13 evidence contract guard before lengthy Windows tests
+        shell: pwsh
+        run: |
+          python build/test-phase13-qa-evidence-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
+      - name: Phase 14 distribution staging provenance regression
+        shell: pwsh
+        run: |
+          python build/test-phase14-distribution-stage.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
+      - name: Phase 15 non-destructive static handover/route/RBAC regression
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Section 08 canonical UI-to-native bridge and response envelope contract
+        shell: pwsh
+        run: |
+          python build/test-section08-bridge-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 08 UI/native contract regression' }
+      - name: Phase 15 all-four SHA256 provenance negative-path tests
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 four-artifact metadata / SHA256 regression' }
+          python build/test-section11-delivery-standard.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
+      - name: Section 11 independent disconnected-Windows probe input integrity regression (synthetic only)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/test-independent-offline-windows-contract.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Section 11 physical offline probe contract failed; NOT UAT' }
+      - name: Validate Arabic navigation and JavaScript syntax
+        shell: pwsh
+        run: |
+          python build/validate-ui-shell.py
+          if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
+          python build/test-ci-exit-guards.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-performance-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-release-artifact-provenance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
+          python build/test-webview-selfcheck-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
+          python build/test-local-reminders-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Local reminders contract failed' }
+          python build/test-native-restore-host-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native restore WPF host security contract failed' }
+          python build/test-native-host-shutdown-lifecycle.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native host shutdown lifecycle contract failed' }
+          python build/test-native-portable-recovery-export-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native portable key export GA/WPF security contract failed' }
+          python build/test-current-recovery-operator-guidance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Live native restore and operator guidance drift contract failed' }
+          python build/test-frozen-candidate-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen customer SHA-256 ledger / production NO-GO contract failed' }
+          python build/validate-frozen-candidate.py artifacts/R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen audited main candidate metadata is inconsistent' }
+          python build/test-webview-recovery-fixture-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows recovery fixture contract failed' }
+          node build/test-phase04-bridge-schema.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 typed request/response schema drift failed' }
+          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
+            node --check "src/AlTamam.WebUI/assets/js/$file"
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
+          }
+      - name: Test administration drill-down and settings safeguards
+        shell: pwsh
+        run: |
+          node build/test-bridge-operation-intents.js
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge mutation intent regression' }
+          node build/test-audit-route-visibility.js
+          if ($LASTEXITCODE -ne 0) { throw 'Audit route RBAC regression' }
+          node build/test-readonly-route-states.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 authenticated route/state regression' }
+          node build/test-route-return-link-honesty.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 route link honesty regression' }
+          node build/test-admin-settings-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
+          node build/test-excel-import-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Excel personnel import UI regression' }
+          node build/test-monthly-excel-export.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly native Excel UI regression' }
+          node build/test-monthly-cell-details.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
+          node build/test-attendance-drafts.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance draft UI regression' }
+          node build/test-dashboard-counter-filters.js
+          if ($LASTEXITCODE -ne 0) { throw 'Dashboard counter filter UI regression' }
+          node build/test-dashboard-route-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 Dashboard route navigation regression' }
+          node build/test-attendance-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
+          node build/test-table-experience.js
+          if ($LASTEXITCODE -ne 0) { throw 'Global tables and search usability regression' }
+          node build/test-roster-columns-global.js
+          if ($LASTEXITCODE -ne 0) { throw 'Shared personnel roster columns and Excel propagation regression' }
+          node build/test-personnel-movements.js
+          if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
+          node build/test-session-idle.js
+          if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
+          node build/test-login-gate-singleflight.js
+          if ($LASTEXITCODE -ne 0) { throw 'Native logout/login form single-flight regression' }
+          node build/test-operation-dialogs.js
+          if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
+          node build/test-modal-first-design.js
+          if ($LASTEXITCODE -ne 0) { throw "Modal-first UI contract regression" }
+          node build/test-personnel-separation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Personnel separation UI regression' }
+          node build/test-personnel-report-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Unified individual/group report UI regression' }
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore with package integrity + advisory audit
+        shell: pwsh
+        run: |
+          dotnet restore AlTamam.slnx; if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
+          dotnet list AlTamam.slnx package --vulnerable --include-transitive | Tee-Object vulnerable.txt
+          if ($LASTEXITCODE -ne 0) { throw 'vulnerability scan command failed' }
+          if (Select-String -Path vulnerable.txt -SimpleMatch 'has an easily accessible vulnerability') {
+            throw 'ADVISORY GATE FAILED: transitive package vulnerability present'
+          }
+      - name: Phase 13 software dependency inventory and CycloneDX SBOM
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path Phase13Dependencies -Force | Out-Null
+          dotnet list AlTamam.slnx package --include-transitive --format json |
+            Set-Content -Path Phase13Dependencies/dotnet-dependencies.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 package inventory command failed' }
+          python tooling/perf/emit_phase13_sbom.py Phase13Dependencies/dotnet-dependencies.json Phase13Dependencies/cyclonedx-sbom.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 SBOM conversion failed' }
+      - name: Upload Phase 13 dependency inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-dotnet-dependency-inventory-windows
+          path: Phase13Dependencies/*.json
+          if-no-files-found: error
+
+  build-test:
+    name: Build + full test suite on Windows x64 (15.01)
+    needs: preflight
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore / Build
+        run: |
+          dotnet restore AlTamam.slnx
+          dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
+      # NOTE (2026-10-23 §22 audit): the previous category-filtered steps (--filter
+      # "Category=Unit|Persistence|Security|Performance") were a SILENT NO-OP: zero test
+      # files declare any Trait/Category today, so those filters matched nothing while
+      # `dotnet test` still exited 0 — exactly the false-green this contract forbids.
+      # Until categories are declared on the tests themselves, run the FULL suite.
+      - name: Phase 02 SQLCipher and temporal-history integration suite (mandatory before packaging)
+        run: >
+          dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj -c $env:CONFIGURATION --no-build --no-restore
+          --logger "trx;LogFileName=phase02-integration.trx" --results-directory TestResults
+      - name: Phase 03 independent authorization unit suite
+        run: >
+          dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
+          --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
+      - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
+        env:
+          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore
+          --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
+      - name: Guard both test projects against zero-tests-executed
+        shell: pwsh
+        run: |
+          foreach ($file in @('TestResults/full-suite.trx', 'TestResults/phase02-integration.trx', 'TestResults/phase03-unit.trx')) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Required test report missing: $file" }
+            $xml = [xml](Get-Content -LiteralPath $file)
+            $count = [int]$xml.TestRun.ResultSummary.Counters.total
+            Write-Host "Tests executed ($file): $count"
+            if ($count -lt 1) { throw "TEST SUITE RAN 0 TESTS: $file" }
+            if ($file -like '*phase02*' -and $count -lt 8) {
+              throw 'Phase 02 integration suite is incomplete'
+            }
+            if ($file -like '*phase03*' -and $count -lt 4) {
+              throw 'Phase 03 unit suite is incomplete'
+            }
+          }
+      - name: R01 real native lifecycle response and execution evidence
+        shell: pwsh
+        run: |
+          python build/test-r01-native-contract-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'R01 evidence validator regression failed' }
+          python build/check-r01-native-contract-evidence.py TestResults/full-suite.trx
+          if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
+      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        shell: pwsh
+        run: |
+          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
+      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-sqlcipher-10k-three-year-release
+          path: PerformanceEvidence/phase15-10k-multi-year.json
+          if-no-files-found: error
+      - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
+        shell: pwsh
+        env:
+          ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
+        run: |
+          pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
+      - name: Phase 13 runner hardware evidence
+        shell: pwsh
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
+      - name: Phase 13 reject forged or mismatched Windows E2E evidence
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
+      - name: Upload Phase 13 Windows E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-real-windows-e2e-release
+          path: Phase13Evidence/*.json
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-windows
+          path: TestResults/*.trx
+          if-no-files-found: error
+
+  package:
+    # HARD DEPENDENCY: no test success => no Portable/Installer output.
+    name: Publish and package (${{ matrix.arch }}) after tests
+    needs: build-test
+    runs-on: windows-latest
+    # Two packaged bridge suites can each retry a 480s x86 probe plus routes.
+    # Leave room for their bounded retries, install checks, cleanup and uploads.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: Windows-64bit
+            runtime: win-x64
+          - arch: Windows-32bit
+            runtime: win-x86
+    env:
+      # win-x86 is the .NET runtime identifier for REAL 32-bit Windows.
+      # Customer-facing package names are ONLY Windows-32bit / Windows-64bit.
+      RUNTIME: ${{ matrix.runtime }}
+      DISPLAY_ARCH: ${{ matrix.arch }}
+      PUBLISH_DIR: publish/AlTamam-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Stage and verify offline Cairo and Tajawal fonts
+        shell: pwsh
+        run: |
+          ./build/prepare-offline-fonts.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Offline font preparation failed' }
+      - name: Publish genuine WPF executable (self-contained, ${{ matrix.arch }})
+        run: >
+          dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
+          -c $env:CONFIGURATION -r $env:RUNTIME --self-contained true
+          -p:Version=$env:RELEASE_VERSION
+          -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false
+          -o $env:PUBLISH_DIR
+      - name: Verify shipped host and bridge informational versions equal release metadata
+        shell: pwsh
+        run: |
+          foreach ($dll in @('AlTamam.DesktopHost.dll', 'AlTamam.Application.dll')) {
+            $path = Join-Path $env:PUBLISH_DIR $dll
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing published versioned assembly: $dll" }
+            $actual = (Get-Item -LiteralPath $path).VersionInfo.ProductVersion
+            if ([string]::IsNullOrWhiteSpace($actual) -or
+                ($actual -ne $env:RELEASE_VERSION -and
+                 -not $actual.StartsWith("$($env:RELEASE_VERSION)+", [StringComparison]::Ordinal))) {
+              throw "Version mismatch in $dll; expected $env:RELEASE_VERSION, got '$actual'"
+            }
+            Write-Host "VERSION PASS: $dll -> $actual"
+          }
+      - name: Remove WebView2 XML API documentation from distribution only
+        shell: pwsh
+        run: |
+          # Generated API reference files are not required by WebView2 at runtime.
+          # Keep DLLs, native loaders, application XML assets, and all other files.
+          Get-ChildItem -LiteralPath $env:PUBLISH_DIR -File -Filter 'Microsoft.Web.WebView2.*.xml' |
+            Remove-Item -Force
+      - name: Bundle Microsoft's genuine WebView2 standalone OFFLINE installer
+        shell: pwsh
+        run: |
+          $uri = if ($env:RUNTIME -eq 'win-x86') {
+            'https://go.microsoft.com/fwlink/?linkid=2099617'
+          } else {
+            'https://go.microsoft.com/fwlink/?linkid=2124701'
+          }
+          $dir = Join-Path $env:PUBLISH_DIR 'Prerequisites'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $file = Join-Path $dir 'MicrosoftEdgeWebView2RuntimeInstaller.exe'
+          Invoke-WebRequest -Uri $uri -OutFile $file -MaximumRedirection 10
+          if ((Get-Item $file).Length -lt 50000000) {
+            throw 'Offline WebView2 installer is missing or unexpectedly small'
+          }
+          $sig = Get-AuthenticodeSignature -FilePath $file
+          if ($sig.Status -ne 'Valid' -or
+              $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw "WebView2 Microsoft Authenticode verification failed: $($sig.Status)"
+          }
+          $digest=(Get-FileHash $file -Algorithm SHA256).Hash
+          Write-Host "MICROSOFT OFFLINE WEBVIEW2: verified $env:RUNTIME SHA256=$digest"
+      - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
+        run: python build/validate-layout.py $env:PUBLISH_DIR --portable --arch $env:RUNTIME
+      - name: Optional signing (ONLY with owner-provisioned approved certificate)
+        shell: pwsh
+        env:
+          SMTOOL_USER: ${{ secrets.SMTOOL_USER }}
+          SMTOOL_AUTH: ${{ secrets.SMTOOL_AUTH }}
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            Write-Host "Signing disabled for PR validation; production signing requires owner approval."
+          } elseif ($env:SMTOOL_USER) {
+            # Real certificate comes exclusively from owner-approved secrets;
+            # never embedded in the repository. Absent => artifact stays UNSIGNED
+            # and release notes must not claim signature/'secure' distribution.
+            choco install sigclient2 -y --version 2.1.0
+            java -jar "$env:GITHUB_WORKSPACE/build/sigclient2.jar" `
+              -user $env:SMTOOL_USER -auth $env:SMTOOL_AUTH `
+              -r http://timestamp.digicert.com -td SHA-256 -fd SHA-256 `
+              -in "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" `
+              -sw -debug -verbose
+          } else { Write-Host "SIGNING SKIPPED: no approved certificate provisioned (unsigned != secure)." }
+      - name: Smoke-run headless checks on runner (15.06 partial, real machine evidence below)
+        shell: pwsh
+        run: |
+          # Executable actually launches; WPF UI loop can't be asserted headlessly,
+          # so we verify process start + clean exit via the built-in self-check flag.
+          & "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" --layout-selfcheck
+      - name: Verify WebView2 loads the bundled offline UI on Windows
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe").Path
+          $workingDirectory = (Resolve-Path $env:PUBLISH_DIR).Path
+          $passed = $false
+          # Fresh isolated browser profiles are created by the host for every
+          # attempt. A bounded second attempt handles transient runner/browser
+          # startup only; real navigation is mandatory and failures remain red.
+          for ($attempt = 1; $attempt -le 2; $attempt++) {
+            $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = Join-Path $env:RUNNER_TEMP "altamam-webview-${env:RUNTIME}-attempt-$attempt.log"
+            Remove-Item -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE -Force -ErrorAction SilentlyContinue
+            Write-Host "Starting REAL offline WebView2 navigation ($env:RUNTIME, attempt $attempt of 2)"
+            $probe = Start-Process -FilePath $exe -ArgumentList '--webview-selfcheck' `
+              -WorkingDirectory $workingDirectory -PassThru
+            $exited = $probe.WaitForExit(60000)
+            if (-not $exited) {
+              Write-Warning "WebView2 startup did not exit within 60 seconds; terminating process tree."
+              try { $probe.Kill($true); $probe.WaitForExit(10000) | Out-Null }
+              catch { Write-Warning "Cleanup after timed-out self-check: $_" }
+            }
+            if (Test-Path -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE) {
+              Get-Content -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE |
+                ForEach-Object { Write-Host "WEBVIEW TRACE: $_" }
+            } else {
+              Write-Warning "WebView self-check produced no startup trace (process may have stalled before WPF startup)."
+            }
+            if ($exited -and $probe.ExitCode -eq 0) {
+              $passed = $true
+              break
+            }
+            if ($exited) { Write-Warning "WebView2 real navigation returned exit code $($probe.ExitCode)" }
+          }
+          Remove-Item Env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE -ErrorAction SilentlyContinue
+          if (-not $passed) { throw "WebView2 offline UI navigation failed after both bounded attempts ($env:RUNTIME)" }
+          Write-Host 'WEBVIEW-SELFCHECK PASS (real Windows WebView2 navigation)'
+      - name: Build Portable ZIP (clean directory, real runnable EXE)
+        run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
+          Compress-Archive -Path "$env:PUBLISH_DIR\*" `
+            -DestinationPath "artifacts/$portableName" -Force
+        shell: pwsh
+        env: { }
+      - name: Install Inno Setup 6 (approved tool) and compile installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup install failed' }
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler not found: $iscc" }
+          $publishDirAbsolute = (Resolve-Path $env:PUBLISH_DIR).Path
+          $architectureOption = if ($env:RUNTIME -eq 'win-x86') { '/DBuildX86' } else { '/DBuildX64' }
+          & $iscc $architectureOption `
+            /DAppVersion=$env:RELEASE_VERSION `
+            /DPublishDir=$publishDirAbsolute `
+            /DTargetArch=$env:DISPLAY_ARCH `
+            build/AlTamam-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
+          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
+          Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/$setupName" -Force
+      - name: Real packaged Portable vs Installer install/uninstall/reinstall and AppData preservation (15.06 automated subset)
+        timeout-minutes: 50
+        shell: pwsh
+        run: |
+          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
+          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
+          & ./build/test-package-appdata-preservation.ps1 -PortableArchive "artifacts/$portableName" -InstallerPath "artifacts/$setupName" -ExpectedArch $env:RUNTIME
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
+      - name: Preserve packaged acceptance diagnostics even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-acceptance-diagnostics-${{ matrix.runtime }}
+          path: ${{ runner.temp }}/altamam-package-diagnostics-*
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Generate SHA-256 checksums + build metadata (15.07)
+        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
+      - name: Verify bytes, checksums and exact tested commit BEFORE upload (05.12)
+        shell: pwsh
+        run: |
+          python build/verify-release-artifacts.py artifacts $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Release package provenance or SHA-256 verification failed" }
+      - name: Stage byte-identical verified customer outputs in dist/portable and dist/installer
+        shell: pwsh
+        run: |
+          python build/stage-phase14-distributions.py artifacts dist $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution provenance or staging failed' }
+      # One download contains ONE customer-facing version, never both.
+      - name: Upload standalone Portable package for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: dist/portable/AlTamamDaily_${{ env.RELEASE_VERSION }}_Portable_${{ matrix.runtime }}.zip
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Upload standalone Installer package for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: dist/installer/AlTamamDaily_${{ env.RELEASE_VERSION }}_Setup_${{ matrix.runtime }}.exe
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Upload checksums and build metadata for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Checksums-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: |
+            dist/metadata/SHA256SUMS.txt
+            dist/metadata/BUILD_METADATA.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain raw publish dir for acceptance testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-publish-dir-${{ matrix.arch }}
+          path: ${{ env.PUBLISH_DIR }}
+          retention-days: 30
+          compression-level: 1
+
+  handover-evidence:
+    # Independent same-run x86+x64 customer-file hash verification after the
+    # entire Release test and per-architecture real package smoke matrix.
+    name: Phase 15 independent four-package customer SHA256 audit
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download real current-run Portable Installer and Checksums artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AlTamam-*-rc-${{ env.RELEASE_VERSION }}
+          path: Phase15Downloads
+          merge-multiple: false
+      - name: Independently hash four actual binaries from both architecture jobs
+        shell: pwsh
+        run: |
+          python build/verify-phase15-handover.py Phase15Downloads "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA Phase15Evidence/four-package-inventory.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 exact-SHA four-file provenance failed' }
+      - name: Upload verified candidate JSON (NOT owner acceptance)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Phase15-FourPackage-Provenance-${{ env.RELEASE_VERSION }}
+          path: Phase15Evidence/four-package-inventory.json
+          if-no-files-found: error
+          retention-days: 90
+
+  clean-windows-acceptance:
+    # The main branch automatically packages TESTED CANDIDATES. It is not a claim
+    # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
+    # NEVER mark nightly/main artifacts as final released deliverables.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    name: Clean-machine acceptance matrix (15.06) — manual evidence gate
+    needs: handover-evidence
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with: { pattern: "AlTamam-Installer-Windows-64bit-rc-*", merge-multiple: true, path: rc }
+      - name: Stage installer next to cwd
+        shell: pwsh
+        run: Copy-Item "rc/AlTamamDaily_${env:RELEASE_VERSION}_Setup_win-x64.exe" .
+      - name: Installer silent install to fresh profile
+        shell: pwsh
+        run: |
+          # 1) first run, 2) login, 3) attendance, 4) import/export,
+          # 5) shutdown/reopen, 6) upgrade-in-place, 7) uninstall keeps DB/backups,
+          # 8) reinstall sees preserved data, 9) backup+restore round-trip.
+          Start-Process -FilePath ".\AlTamamDaily_${env:RELEASE_VERSION}_Setup_win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
+          if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
+      - name: Automated acceptance driver (synthetic data only)
+        # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
+        # Running `dotnet test --filter Category=Acceptance` would execute 0 tests and
+        # exit 0 — a false green this contract forbids. Until Windows-UI acceptance
+        # tests are authored (Phase 15 scope), this step hard-FAILS with an explicit
+        # BLOCKED message instead of pretending to pass. Restore the dotnet-test form
+        # only after at least one [Trait("Category","Acceptance")] test exists.
+        shell: pwsh
+        run: |
+          $hits = Get-ChildItem tests -Recurse -Filter *.cs | Select-String -SimpleMatch 'Category","Acceptance'
+          if (-not $hits) {
+            throw 'BLOCKED: no Windows-UI acceptance tests exist yet (Category=Acceptance absent). This gate cannot be claimed green.'
+          }
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release `
+            --filter "Category=Acceptance" --logger "trx;LogFileName=acceptance.trx" `
+            --results-directory AcceptanceResults
+          if ($LASTEXITCODE -ne 0) { throw "acceptance suite failed (exit $LASTEXITCODE)" }
+        continue-on-error: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-evidence
+          path: AcceptanceResults/
+          if-no-files-found: error

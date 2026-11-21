@@ -1,0 +1,375 @@
+using System.IO.Compression;
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
+using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Enums;
+using AlTamam.Infrastructure.Persistence;
+using AlTamam.Tests.Fixtures;
+using Xunit;
+
+namespace AlTamam.Tests.Bridge;
+
+/// <summary>
+/// Genuine SQLCipher-to-OOXML round trip: never confuse two people's records
+/// after reuse of الرقم (ع), and always audit only scope/filename metadata.
+/// </summary>
+public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
+{
+    private readonly string _dbPath=SyntheticFixtures.CreateTempDatabasePath();
+    private readonly string _folder=Path.Combine(Path.GetTempPath(),
+        "altamam-personnel-export-"+Guid.NewGuid().ToString("N"));
+    private AlTamamDbContext _db=null!;
+    private static readonly BridgePrincipal Actor=new("TST-EXCEL-ACTOR","test-executor",
+        UserRole.GeneralAdministration,"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    public async Task InitializeAsync()
+    {
+        Directory.CreateDirectory(_folder);
+        _db=new AlTamamDbContext(_dbPath,SyntheticFixtures.TestKeyHex);
+        await _db.InitializeAsync();
+        using var conn=_db.CreateOpenConnection();
+        using var cmd=conn.CreateCommand();
+        cmd.CommandText="""
+            INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+            VALUES('PreferredBackupDirectory',$folder,'2026-10-26T08:00:00Z')
+            ON CONFLICT(SettingKey) DO UPDATE SET SettingValue=excluded.SettingValue;
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('TST-XLSX-OLD','الموظف السابق','=FORMULA','3333','3333',
+                '2026-09-01','2026-09-01T00:00:00Z',3,0,2),
+                  ('TST-XLSX-NEW','الموظف الجديد','الموظف الجديد','3333','3333',
+                '2026-10-06','2026-10-06T00:00:00Z',1,1,1);
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+            VALUES('TST-XLSX-OLD','=HYPERLINK("http://evil.example")','3333',
+                '2026-09-01',NULL,'TEST','2026-09-01T00:00:00Z','سجل سابق'),
+                  ('TST-XLSX-NEW','الموظف الجديد','3333',
+                '2026-10-06',NULL,'TEST','2026-10-06T00:00:00Z','سجل جديد مستقل');
+            INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+            VALUES('TST-XLSX-A-OLD','TST-XLSX-OLD','SITE-UNSPECIFIED',
+                '2026-09-01','2026-10-05',NULL,'2026-09-01T00:00:00Z'),
+                  ('TST-XLSX-A-NEW','TST-XLSX-NEW','SITE-UNSPECIFIED',
+                '2026-10-06',NULL,NULL,'2026-10-06T00:00:00Z');
+            INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                Source,CreatedByUserId,CommittedAtUtc,IdempotencyKey)
+            VALUES('TST-XLSX-OLD','2026-10-04','STS-ABSENT','غياب','غ','#ef4444',
+                'TST-XLSX-A-OLD','SITE-UNSPECIFIED','غير محدد','manual','TEST',
+                '2026-10-04T08:00:00Z','TST-XLSX-OLD-DAY'),
+                  ('TST-XLSX-NEW','2026-10-07','STS-PRESENT','موجود','م','#38bdf8',
+                'TST-XLSX-A-NEW','SITE-UNSPECIFIED','غير محدد','manual','TEST',
+                '2026-10-07T08:00:00Z','TST-XLSX-NEW-DAY');
+            INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                DestinationSiteId,DestinationSiteNameSnapshot,
+                DestinationExternalName,SeparationReason,EffectiveLocalDate,
+                CommittedAtUtc,ActorUserId,IdempotencyKey)
+            VALUES('TST-XLSX-INT','TST-XLSX-OLD','الموظف السابق','3333',1,
+                'SITE-UNSPECIFIED','غير محدد','SITE-UNSPECIFIED','غير محدد',
+                NULL,NULL,'2026-10-01','2026-10-01T08:00:00Z','TEST','TST-MOV-INT'),
+                  ('TST-XLSX-EXT','TST-XLSX-OLD','الموظف السابق','3333',2,
+                'SITE-UNSPECIFIED','غير محدد',NULL,NULL,
+                'جهة خارجية',NULL,'2026-10-03','2026-10-03T08:00:00Z','TEST','TST-MOV-EXT'),
+                  ('TST-XLSX-SEP','TST-XLSX-OLD','الموظف السابق','3333',3,
+                'SITE-UNSPECIFIED','غير محدد',NULL,NULL,
+                NULL,'فصل معتمد','2026-10-05','2026-10-05T08:00:00Z','TEST','TST-MOV-SEP');
+            """;
+        cmd.Parameters.AddWithValue("$folder",_folder);
+        await cmd.ExecuteNonQueryAsync();
+        cmd.CommandText="""
+            INSERT INTO AttendanceRevisions(PersonId,TargetLocalDate,BeforeStatusId,
+                BeforeStatusNameSnapshot,AfterStatusId,AfterStatusNameSnapshot,Reason,
+                ActorUserId,ExecutedAtUtc,AuthorizationMethod)
+            VALUES('TST-XLSX-OLD','2026-10-04','STS-PRESENT','موجود',
+                'STS-ABSENT','غياب','تصحيح موثق','TEST',
+                '2026-10-04T08:10:00Z','authenticated-session-preview');
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            await BridgeAuditWriter.WriteAsync(c,t,TimeProvider.System,
+                "PERSON_IDENTITY_CHANGE","تغيير هوية","TEST","test-executor",null,
+                "Person","TST-XLSX-OLD","الموظف السابق",
+                """{"name":"الاسم السابق"}""","""{"name":"الاسم الجديد"}""",
+                "تغيير موثق","سبب التغيير","2026-10-04",
+                Guid.NewGuid().ToString("N"),CancellationToken.None);
+            return 0;
+        });
+    }
+    private static string File(JsonObject o)=>o["filePath"]!.GetValue<string>();
+    private static IEnumerable<XElement> Rows(ZipArchive zip,int index)
+    {
+        using var stream=zip.GetEntry($"xl/worksheets/sheet{index}.xml")!.Open();
+        var doc=XDocument.Load(stream);
+        XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        return doc.Descendants(ns+"row").ToArray();
+    }
+    private static string[] Text(XElement row)
+    {
+        XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        return row.Elements(ns+"c").Select(c=>
+            c.Element(ns+"is")?.Element(ns+"t")?.Value??
+            c.Element(ns+"v")?.Value??"").ToArray();
+    }
+
+    [Fact]
+    public async Task SinglePersonExcel_UsesServerResolvedPersonNameInActualWorkbookFilename()
+    {
+        var svc=new PersonnelExcelExportService(_db);
+        var input=new JsonObject
+        {
+            ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+            ["personId"]="TST-XLSX-NEW",
+            ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
+        };
+        var preview=await svc.PreviewReportAsync(input,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var expected=Assert.IsType<JsonObject>(preview.Data)["fileName"]!.GetValue<string>();
+        Assert.Contains("الموظف الجديد",expected);
+        Assert.DoesNotContain("TST-XLSX-NEW",expected);
+        var exported=await svc.ExportAsync(input,Actor,CancellationToken.None);
+        Assert.True(exported.Success,exported.UserMessage);
+        var output=Assert.IsType<JsonObject>(exported.Data);
+        Assert.Equal(expected,output["fileName"]!.GetValue<string>());
+        Assert.True(System.IO.File.Exists(File(output)));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task AddedPersonColumn_AppearsInActualIndividualAndGroupExcel()
+    {
+        using(var conn=_db.CreateOpenConnection())
+        using(var cmd=conn.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO CustomFieldDefinitions(
+                    FieldDefinitionId,TechnicalKey,ArabicCaption,FieldType,
+                    DisplayOrder,IsSystemProtected,VisibleFlag,ActiveFlag,CreatedAtUtc)
+                VALUES('FLD-PERSON-EXCEL','custom_person_excel','التخصص',1,
+                    5,0,1,1,'2026-10-01T00:00:00Z');
+                INSERT INTO CustomFieldValues(
+                    PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                VALUES('TST-XLSX-NEW','FLD-PERSON-EXCEL','هندسة',
+                    '2026-10-07T08:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var svc=new PersonnelExcelExportService(_db);
+        foreach(bool group in new[]{false,true})
+        {
+            var request=new JsonObject{
+                ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+                ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
+            };
+            if(group)
+                request["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW");
+            else
+                request["personId"]="TST-XLSX-NEW";
+            var exported=await svc.ExportAsync(request,Actor,CancellationToken.None);
+            Assert.True(exported.Success,exported.UserMessage);
+            using var archive=ZipFile.OpenRead(File(Assert.IsType<JsonObject>(exported.Data)));
+            ExcelLayoutAssertions.Verify(archive,1);
+            var rows=Rows(archive,1).ToArray();
+            Assert.Contains("التخصص",Text(rows[0]));
+            Assert.Contains(rows.Skip(1),row=>Text(row).Contains("هندسة"));
+        }
+    }
+
+    [Fact]
+    public async Task GroupWorkbook_UsesIndependentDisplayOrdinalsWithoutExposingPersonId_ExportAudited()
+    {
+        var svc=new PersonnelExcelExportService(_db);
+        string id=Guid.NewGuid().ToString("N");
+        var request=new JsonObject{
+            ["mode"]="report",["exportId"]=id,
+            ["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW"),
+            ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
+        };
+        var report = await new PersonnelReportService(_db).ReportAsync(
+            (JsonObject)request.DeepClone(), CancellationToken.None);
+        Assert.True(report.Success, report.UserMessage);
+        var canonical = Assert.IsType<JsonObject>(report.Data);
+        Assert.Equal(2L, canonical["attendanceTotal"]!.GetValue<long>());
+        var dispatcher = BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        foreach (string action in new[] { "BuildPersonLifetimeReport",
+            "QueryPersonAttendanceTimeline", "QueryPersonAttendanceTotals",
+            "QueryPersonOperationsTimeline" })
+        {
+            var envelope = new JsonObject {
+                ["requestId"]=Guid.NewGuid().ToString("N"), ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+                ["action"]=action, ["sessionNonce"]=Actor.SessionNonce, ["payload"]=request.DeepClone()
+            };
+            var native = await dispatcher.DispatchAsync(envelope.ToJsonString(),
+                LocalWebUiOrigin.BaseUrl, true,
+                nonce => Task.FromResult<BridgePrincipal?>(nonce == Actor.SessionNonce ? Actor : null));
+            Assert.True(native.Response.Success, native.Response.UserMessage);
+            Assert.True(JsonNode.DeepEquals(canonical, Assert.IsType<JsonObject>(native.Response.Data)));
+        }
+        var preview=await svc.PreviewReportAsync(request,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var p=Assert.IsType<JsonObject>(preview.Data);
+        Assert.StartsWith("تقرير جماعي_",p["fileName"]!.GetValue<string>());
+        Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"),p["fileName"]!.GetValue<string>());
+        Assert.Equal(_folder,p["directory"]!.GetValue<string>());
+        var exported=await svc.ExportAsync((JsonObject)request.DeepClone(),Actor,CancellationToken.None);
+        Assert.True(exported.Success,exported.UserMessage);
+        var result=Assert.IsType<JsonObject>(exported.Data);
+        Assert.Equal(p["fileName"]!.GetValue<string>(),result["fileName"]!.GetValue<string>());
+        var file=File(result);
+        Assert.True(System.IO.File.Exists(file));
+        using(var zip=ZipFile.OpenRead(file))
+        {
+            Assert.Equal(9,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
+                e.FullName.EndsWith(".xml")));
+            var people=Rows(zip,1).Select(Text).ToArray();
+            Assert.Equal(4,people.Length);
+            Assert.Equal("1",people[1][0]);
+            Assert.Equal("2",people[2][0]);
+            Assert.Equal("3333",people[1][1]);
+            Assert.Equal("3333",people[2][1]);
+            Assert.All(Enumerable.Range(1,9),index=>{
+                foreach(var cell in Rows(zip,index).SelectMany(Text))
+                {
+                    Assert.DoesNotContain("TST-XLSX-OLD",cell);
+                    Assert.DoesNotContain("TST-XLSX-NEW",cell);
+                    Assert.DoesNotContain("PersonId",cell);
+                    Assert.DoesNotContain("MovementId",cell);
+                    Assert.DoesNotContain("SiteId",cell);
+                }
+            });
+            Assert.Equal("إجمالي المجموعة",people[3][0]);
+            Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>().ToString(
+                System.Globalization.CultureInfo.InvariantCulture), people[3][5]);
+            Assert.Contains("غياب (1)",people[3][9]);
+            Assert.Contains("موجود (1)",people[3][9]);
+            var history=Rows(zip,2).Select(Text).ToArray();
+            Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>(), (long)history.Length - 1);
+            XNamespace spreadsheet="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var dateCell=Rows(zip,2).Skip(1).First()
+                .Elements(spreadsheet+"c").ElementAt(3);
+            Assert.Equal("n",(string?)dateCell.Attribute("t"));
+            Assert.Equal("1",(string?)dateCell.Attribute("s"));
+            var dateSerial=double.Parse(dateCell.Element(spreadsheet+"v")!.Value,
+                System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal("2026-10-04",DateTime.FromOADate(dateSerial).ToString("yyyy-MM-dd"));
+            Assert.NotNull(zip.GetEntry("xl/styles.xml"));
+            Assert.Equal("1",history[1][0]);
+            Assert.Equal("2",history[2][0]);
+            Assert.Equal("غياب",history[1][4]);
+            Assert.Equal("موجود",history[2][4]);
+            var combined=Rows(zip,9).Select(Text).ToArray();
+            Assert.Equal(3,combined.Length);
+            Assert.Equal("تاريخ التحضير",combined[0][0]);
+            Assert.Equal("عدد الوقائع",combined[0][2]);
+            Assert.Equal(2,combined.Skip(1).Sum(row=>int.Parse(row[2])));
+            Assert.Equal(2,combined.Skip(1).Sum(row=>int.Parse(row[3])));
+            Assert.Contains(combined,row=>row.Contains("غياب"));
+            Assert.Contains(combined,row=>row.Contains("موجود"));
+            var movements=Rows(zip,3).Select(Text).ToArray();
+            Assert.Equal(4,movements.Length);
+            Assert.All(movements.Skip(1),x=>Assert.Equal("1",x[0]));
+            var audits=Rows(zip,4).Select(Text).ToArray();
+            Assert.Equal(2,audits.Length);
+            Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][7]);
+            Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][8]);
+            var revisionRows=Rows(zip,6).Select(Text).ToArray();
+            Assert.Equal(2,revisionRows.Length);
+            Assert.Equal("1",revisionRows[1][0]);
+            Assert.Equal("تصحيح موثق",revisionRows[1][4]);
+            Assert.Equal("موجود",revisionRows[1][2]);
+            Assert.Equal("غياب",revisionRows[1][3]);
+            var names=Rows(zip,5).Select(Text).ToArray();
+            Assert.Contains(names,x=>x.Contains("=HYPERLINK(\"http://evil.example\")"));
+            foreach(var entry in zip.Entries.Where(e=>e.FullName.StartsWith("xl/worksheets/")))
+            {
+                using var stream=entry.Open();
+                var xml=XDocument.Load(stream);
+                XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                Assert.Empty(xml.Descendants(ns+"f")); // no spreadsheet-formula injection
+            }
+        }
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT NewValueJson FROM AuditEvents WHERE OperationCode='PERSONNEL_EXCEL_EXPORT';";
+            var evidence=(string?)await q.ExecuteScalarAsync();
+            Assert.NotNull(evidence);
+            var meta=Assert.IsType<JsonObject>(JsonNode.Parse(evidence));
+            Assert.StartsWith("تقرير جماعي_",meta["fileName"]!.GetValue<string>());
+            Assert.Equal(2,meta["personCount"]!.GetValue<int>());
+            Assert.DoesNotContain("الموظف السابق",meta.ToJsonString());
+            Assert.DoesNotContain("الاسم الجديد",meta.ToJsonString());
+        }
+        Assert.False((await svc.ExportAsync(request,Actor,CancellationToken.None)).Success);
+    }
+
+    [Theory]
+    [InlineData("internal","نقل داخلي")]
+    [InlineData("external","نقل خارجي")]
+    public async Task MovementArchives_ExportOnlyMatchingType_WithNamedFiles(
+        string type,string title)
+    {
+        var svc=new PersonnelExcelExportService(_db);
+        var payload=new JsonObject{["mode"]="movementArchive",["type"]=type,
+            ["exportId"]=Guid.NewGuid().ToString("N")};
+        var exported=await svc.ExportAsync(payload,Actor,CancellationToken.None);
+        Assert.True(exported.Success,exported.UserMessage);
+        var file=File(Assert.IsType<JsonObject>(exported.Data));
+        Assert.StartsWith(title+"_",Path.GetFileName(file));
+        Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"),Path.GetFileName(file));
+        using var zip=ZipFile.OpenRead(file);
+        var rows=Rows(zip,1).Select(Text).ToArray();
+        Assert.Equal(2,rows.Length);
+        Assert.Equal("1",rows[1][0]);
+        Assert.Equal("3333",rows[1][1]);
+    }
+
+    [Fact]
+    public async Task DismissalArchive_UsesOwnExcelFilename_AndRejectsInvalidPreview()
+    {
+        var svc=new PersonnelExcelExportService(_db);
+        var r=await svc.ExportAsync(new JsonObject{
+            ["mode"]="separationArchive",["exportId"]=Guid.NewGuid().ToString("N")
+        },Actor,CancellationToken.None);
+        Assert.True(r.Success,r.UserMessage);
+        var file=File(Assert.IsType<JsonObject>(r.Data));
+        Assert.StartsWith("أرشيف الفصل_",Path.GetFileName(file));
+        using var zip=ZipFile.OpenRead(file);
+        Assert.Equal("1",Text(Rows(zip,1).Last())[0]);
+        Assert.False((await svc.PreviewReportAsync(new JsonObject{
+            ["personId"]="TST-XLSX-NEW",["dateFrom"]="2026-12-01",["dateTo"]="2026-01-01"
+        },CancellationToken.None)).Success);
+        Assert.False((await svc.ExportAsync(new JsonObject{
+            ["mode"]="movementArchive",["type"]="both"
+        },Actor,CancellationToken.None)).Success);
+    }
+
+
+    [Fact]
+    public async Task Phase09_ExportCancellationNeverLeavesPublishedOrPartialWorkbook()
+    {
+        var payload=new JsonObject{
+            ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+            ["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW")
+        };
+        using var canceled=new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>
+            new PersonnelExcelExportService(_db).ExportAsync(payload,Actor,canceled.Token));
+        Assert.Empty(Directory.GetFiles(_folder,"*.part"));
+        Assert.Empty(Directory.GetFiles(_folder,"*.xlsx"));
+    }
+
+    public Task DisposeAsync()=>Task.CompletedTask;
+    public void Dispose()
+    {
+        _db?.Dispose();
+        try{Directory.Delete(_folder,true);}catch(IOException){}
+        catch(UnauthorizedAccessException){}
+        SyntheticFixtures.DeleteTempDatabase(_dbPath);
+    }
+}

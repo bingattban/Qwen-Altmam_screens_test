@@ -1,0 +1,3113 @@
+"use strict";
+/* Administrative and settings screens. All writes require a real C# bridge action.
+   Unsupported legacy routes are listed honestly, not simulated or auto-saved. */
+(function () {
+  const target = () => document.getElementById("appViewport");
+  const api = () => window.AltamamBridge;
+  // The real WebView always loads operation-dialogs.js. Native fallbacks are
+  // reserved for legacy isolated Node UI stubs that do not load the HTML shell.
+  const dialogs = {
+    confirm: (message,options) => window.AltamamDialog?.confirm(message,options) ?? Promise.resolve(confirm(message)),
+    prompt: (message,value="") => window.AltamamDialog?.prompt(message,value) ?? Promise.resolve(prompt(message,value)),
+    alert: message => window.AltamamDialog?.alert(message) ?? Promise.resolve(alert(message))
+  };
+  let currentRequest = 0;
+  let state = { session: null, active: "home", page: 1, term: "", siteId: "" };
+  const sections = [
+    {key:"force",title:"إدارة القوة",children:[
+      ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
+      ["separation","الفصل"],["personReport","التقرير"],["reminders","التنبيهات"],
+      ["closedCorrection","تعديل تمام سابق"]]},
+    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
+    {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
+      ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
+    {key:"users",title:"المستخدمون",children:[]},
+    {key:"audit",title:"سجل العمليات",children:[]}
+  ];
+  function node(tag,klass,value) {
+    const x=document.createElement(tag);
+    if(klass)x.className=klass;
+    if(value!==undefined)x.textContent=String(value);
+    return x;
+  }
+  function btn(label,callback,klass) {
+    const b=node("button",klass||"btn btn-outline",label);b.type="button";
+    if(/^العودة إلى|^رجوع/.test(String(label)))b.className+=" app-back-action";
+    b.addEventListener("click",callback);return b;
+  }
+  function card(title) {
+    const c=node("section","card admin-card");
+    c.appendChild(node("h2","section-title",title));return c;
+  }
+  // Keep modal nodes under their active screen for existing virtual DOM tests.
+  function operationalModal(panel,size,hideOnClose=false,initiallyHidden=false,onDismiss=null){
+    panel.classList.add("app-operational-modal",size||"modal-md");
+    panel.setAttribute("role","dialog");
+    panel.setAttribute("aria-modal","true");
+    if(initiallyHidden)panel.hidden=true;
+    let returnFocus=null;
+    const dismiss=()=>{
+      onDismiss?.();
+      if(hideOnClose)panel.hidden=true;else panel.remove?.();
+      const previous=returnFocus;returnFocus=null;
+      previous?.focus?.();
+    };
+    const close=btn("✕ إغلاق",dismiss,"btn btn-outline app-modal-close");
+    // Preserve action nodes and native payloads while framing the modal into
+    // a fixed heading, independently scrollable contents and fixed actions.
+    const heading=Array.from(panel.children).find(child=>
+      child.className?.split(/\s+/).includes("section-title"))||
+      node("h2","section-title",panel.getAttribute?.("aria-label")||"تفاصيل العملية");
+    const header=node("div","app-modal-sticky-header");
+    const body=node("div","app-modal-scroll-body");
+    const actions=node("div","app-modal-sticky-footer");
+    header.append(heading,close);
+    let framed=false;
+    const frame=()=>{
+      if(framed)return;
+      for(const child of Array.from(panel.children)){
+        if(child===heading||child===close)continue;
+        const tag=(child.tagName||child.tag||"").toLowerCase();
+        (tag==="button"?actions:body).appendChild(child);
+      }
+      panel.replaceChildren(header,body,actions);
+      framed=true;
+    };
+    // Account/password/edit forms are populated synchronously after creation.
+    // Frame after those fields arrive; hidden action dialogs frame on open.
+    if(!initiallyHidden)Promise.resolve().then(frame);
+    panel.addEventListener("keydown",event=>{
+      if(event.key==="Escape"){
+        event.preventDefault?.();dismiss();return;
+      }
+      if(event.key!=="Tab")return;
+      // Constrain keyboard navigation to the active form. The optional
+      // query keeps existing dependency-free virtual-DOM tests compatible.
+      const controls=Array.from(panel.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(controls.length<2)return;
+      const first=controls[0],last=controls[controls.length-1];
+      if(event.shiftKey&&document.activeElement===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&document.activeElement===last){
+        event.preventDefault?.();first.focus?.();
+      }
+    });
+    return {open:()=>{
+      frame();
+      returnFocus=document.activeElement||null;
+      panel.hidden=false;close.focus?.();
+    },close:dismiss};
+  }
+  function field(label,value,type) {
+    const wrap=node("label","admin-input");
+    const name=node("span","",label);
+    const input=node("input","form-control");
+    input.type=type||"text";input.value=value||"";
+    wrap.append(name,input);return {wrap,input};
+  }
+  // Password controls stay local to their field; no additional secret storage.
+  function attachSecretReveal(control){
+    const toggle=btn("👁",()=>{
+      const visible=control.input.type==="password";
+      control.input.type=visible?"text":"password";
+      toggle.textContent=visible?"🙈":"👁";
+      toggle.setAttribute("aria-label",visible?"إخفاء كلمة المرور":"إظهار كلمة المرور");
+      toggle.setAttribute("aria-pressed",String(visible));
+      control.input.focus?.();
+    },"admin-secret-reveal");
+    toggle.setAttribute("aria-label","إظهار كلمة المرور");
+    toggle.setAttribute("aria-pressed","false");
+    control.wrap.classList.add("admin-secret-field");
+    control.wrap.appendChild(toggle);
+  }
+  function livePasswordPolicy(password,confirmation=null){
+    const list=node("div","admin-password-policy");
+    list.setAttribute("role","list");
+    list.setAttribute("aria-label","متطلبات كلمة المرور");
+    const checks=[
+      ["6 خانات فأكثر",v=>v.length>=6],
+      ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
+      ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
+      ["دون مسافات أو محارف تحكم",v=>v.length>0&&!/[\s\x00-\x1f\x7f-\x9f]/.test(v)]
+    ];
+    if(confirmation)checks.push(["تطابق كلمتي المرور",
+      v=>v.length>0&&v===confirmation.value]);
+    const rows=checks.map(([label])=>{
+      const row=node("div","admin-password-rule");
+      row.setAttribute("role","listitem");
+      const icon=node("span","admin-password-rule-icon","○");
+      icon.setAttribute("aria-hidden","true");
+      row.append(icon,node("span","",label));list.appendChild(row);
+      return {row,icon,label};
+    });
+    const update=()=>{
+      const value=password.value;
+      checks.forEach(([,passes],i)=>{
+        const good=passes(value);
+        rows[i].row.classList.toggle("valid",good);
+        rows[i].row.setAttribute("aria-label",rows[i].label+
+          (good?" — مستوفى":" — غير مستوفى"));
+        rows[i].icon.textContent=good?"✓":"○";
+      });
+    };
+    password.addEventListener("input",update);
+    confirmation?.addEventListener("input",update);
+    update();
+    return list;
+  }
+  function warning(text) {
+    const el=node("p","admin-warning",text);el.setAttribute("role","status");return el;
+  }
+  function errors(box,err) {box.replaceChildren(warning(err.message||"تعذر إتمام الطلب."));}
+  function safeColor(value) {return /^#[0-9a-fA-F]{6}$/.test(value||"")?value:"#64748B";}
+  function table(columns) {
+    const wrap=node("div","functional-table-wrap"),
+      tab=node("table","data-table functional-table"),
+      head=node("thead"), row=node("tr"),body=node("tbody");
+    columns.forEach(t=>row.appendChild(node("th","",t)));
+    head.appendChild(row);tab.append(head,body);wrap.appendChild(tab);
+    return {wrap,body};
+  }
+  function addRow(body,values,handlerLabel,handler) {
+    const r=node("tr");
+    values.forEach(v=>r.appendChild(node("td","",v==null?"":v)));
+    if(handlerLabel) {
+      const td=node("td");td.appendChild(btn(handlerLabel,handler));r.appendChild(td);
+    }
+    body.appendChild(r);
+  }
+  function empty(body,count,text) {
+    if(body.children.length)return;
+    const tr=node("tr"),td=node("td","",text);td.colSpan=count;
+    tr.appendChild(td);body.appendChild(tr);
+  }
+  function navigate(screen,sourceRoute=null) {
+    state.active=screen;state.page=1;state.term="";currentRequest++;
+    renderDetail(screen,sourceRoute);
+  }
+  const nestedOptions = Object.freeze({
+    transfers: [
+      ["transferInternal","نقل داخلي"],
+      ["transferExternal","نقل خارجي"],
+      ["archiveInternal","أرشيف النقل الداخلي"],
+      ["archiveExternal","أرشيف النقل الخارجي"],
+      ["archiveAll","سجل التنقلات والعودة"]
+    ]
+  });
+  const nestedParents = Object.freeze({
+    transferInternal:"transfers",transferExternal:"transfers",
+    archiveInternal:"transfers",archiveExternal:"transfers",archiveAll:"transfers",
+    separatePerson:"separation",separatedArchive:"separation"
+  });
+  function parentOf(screen) {
+    return sections.find(section => section.children.some(child => child[0] === screen));
+  }
+  function start(title) {
+    const page=target();page.replaceChildren();
+    const parent=parentOf(state.active);
+    const parentKey=nestedParents[state.active];
+    const parentLabel=parentKey==="transfers"?"التنقلات":
+      parentKey==="separation"?"الفصل":null;
+    const head=card(title);
+    head.classList.add("admin-subpage-heading");
+    const back=btn(parentLabel?"العودة إلى "+parentLabel:
+      parent?"العودة إلى "+parent.title:"العودة إلى الإدارة",
+      () => parentKey ? navigate(parentKey) :
+        parent ? renderGroup(parent.key) : renderAdmin(state.session),
+      "btn btn-outline");
+    head.appendChild(back);
+    page.appendChild(head);
+    return page;
+  }
+  function renderAdmin(session) {
+    state.session=session;
+    state.active="home";
+    currentRequest++;
+    const page=target();page.replaceChildren();
+    const heading=card("الإدارة");
+    heading.classList.add("admin-section-heading");
+    heading.appendChild(node("p","section-description",
+      "اختر القسم المطلوب لعرض شاشاته. لن تظهر الخيارات الفرعية إلا بعد الدخول إليه."));
+    page.appendChild(heading);
+    const grid=node("div","admin-home-grid");
+    grid.setAttribute("aria-label","أقسام الإدارة");
+    const icons={force:"♙",config:"◈",sheets:"▤",users:"♧",audit:"◷"};
+    const subtitles={
+      force:"الحضور والأسماء والتنقلات والتقارير",
+      config:"الحالات المعتمدة والمواقع",
+      sheets:"استيراد الكشوف والتصدير والأعمدة",
+      users:"الحسابات والصلاحيات وكلمات المرور",
+      audit:"العمليات التاريخية والتدقيق"
+    };
+    for(const section of sections) {
+      if(section.key==="users" && session.role==="Supervisor")continue;
+      const tile=btn(section.title,()=>{
+        if(section.key==="users")return navigate("accounts");
+        if(section.key==="audit")return navigate("log");
+        renderGroup(section.key);
+      },"admin-primary-tile");
+      tile.textContent="";
+      tile.dataset.adminSection=section.key;
+      tile.setAttribute("aria-label","فتح "+section.title);
+      tile.append(
+        node("span","admin-primary-icon",icons[section.key]),
+        node("span","admin-primary-title",section.title),
+        node("span","admin-tile-subtitle",subtitles[section.key]),
+        node("span","admin-primary-chevron","فتح القسم ←")
+      );
+      grid.appendChild(tile);
+    }
+    if(["GeneralAdministration","OrdinaryAdministration"].includes(session?.role)){
+      const prevTile=btn("تعديل تمام سابق",()=>navigate("closedCorrection"),"admin-primary-tile");
+      prevTile.textContent="";
+      prevTile.dataset.adminShortcut="closedCorrection";
+      prevTile.setAttribute("aria-label","فتح تعديل تمام سابق");
+      prevTile.append(
+        node("span","admin-primary-icon","↺"),
+        node("span","admin-primary-title","تعديل تمام سابق"),
+        node("span","admin-tile-subtitle","البحث وتعديل التمام السابق والأرشيف حسب المدة"),
+        node("span","admin-primary-chevron","فتح الشاشة ←")
+      );
+      grid.appendChild(prevTile);
+    }
+    page.appendChild(grid);
+  }
+  function renderGroup(sectionKey) {
+    const section=sections.find(item=>item.key===sectionKey);
+    if(!section || (section.key==="users" && state.session.role==="Supervisor")) {
+      renderAdmin(state.session);return;
+    }
+    state.active="group:"+section.key;
+    currentRequest++;
+    const page=target();page.replaceChildren();
+    const heading=card(section.title);
+    heading.classList.add("admin-subpage-heading");
+    heading.append(
+      node("p","section-description","اختر الشاشة التي تريد فتحها من هذا القسم."),
+      btn("العودة إلى الإدارة",()=>renderAdmin(state.session),"btn btn-outline")
+    );
+    page.appendChild(heading);
+    const grid=node("div","admin-subsection-grid");
+    grid.setAttribute("aria-label","شاشات "+section.title);
+    for(const [key,title] of section.children) {
+      if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
+      const item=btn(title,()=>navigate(key),"admin-subsection-tile");
+      item.dataset.adminScreen=key;
+      item.setAttribute("aria-label","فتح شاشة "+title);
+      grid.appendChild(item);
+    }
+    page.appendChild(grid);
+  }
+  function renderNested(section,title) {
+    const page=start("الإدارة / "+title);
+    const grid=node("div","admin-subsection-grid");
+    grid.setAttribute("aria-label","خيارات "+title);
+    for(const [key,label] of nestedOptions[section]) {
+      if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
+      const tile=btn(label,()=>navigate(key),"admin-subsection-tile");
+      tile.dataset.adminNested=key;
+      grid.appendChild(tile);
+    }
+    page.appendChild(grid);
+  }
+  function renderDetail(screen,sourceRoute=null) {
+    if(screen==="reminders" && window.AltamamReminders){
+      const page=start("الإدارة / إدارة القوة / التنبيهات");
+      window.AltamamReminders.render(page);
+      return;
+    }
+    if(screen==="attendance" && window.AltamamAttendance)
+      return window.AltamamAttendance.render(target());
+    if(["transferInternal","transferExternal","archiveInternal","archiveExternal","archiveAll"].includes(screen) && window.AltamamMovements){
+      const page=start("الإدارة / التنقلات");
+      return window.AltamamMovements.render(page,screen);
+    }
+    if(["separation","separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
+      const page=start(screen==="separatedArchive"
+        ?"الإدارة / إدارة القوة / الأرشيف"
+        :"الإدارة / إدارة القوة / الفصل");
+      return window.AltamamSeparation.render(page,screen);
+    }
+    if(screen==="personReport" && window.AltamamReports)
+      return window.AltamamReports.render(target(),()=>renderGroup("force"));
+    if(screen==="import")return importExcel();
+    if(screen==="export" && window.AltamamFunctional)
+      return window.AltamamFunctional.render("monthly");
+    if(screen==="closedCorrection")return closedCorrection();
+    if(screen==="accounts")return accounts();
+    if(screen==="sites")return sites();
+    if(screen==="statuses")return statuses();
+    if(screen==="layout")return rosterLayout();
+    if(screen==="persons")return persons(sourceRoute);
+    if(screen==="log")return audit(sourceRoute==="ModifiedDeletedAuditEntries");
+    if(screen==="transfers")return renderNested(screen,"التنقلات");
+
+    const labels={
+      attendance:"التمام",transferInternal:"النقل الداخلي",
+      transferExternal:"النقل الخارجي",archiveInternal:"أرشيف النقل الداخلي",
+      archiveExternal:"أرشيف النقل الخارجي",archiveAll:"سجل التنقلات والعودة",personReport:"التقرير",
+      separatePerson:"فصل فرد",separatedArchive:"أرشيف الفصل",
+      import:"استيراد Excel",export:"تصدير Excel",
+      layout:"تعديل هيكل الكشف"
+    };
+    const page=start("الإدارة / "+(labels[screen]||"الشاشة المطلوبة"));
+    const shell=card("حالة الربط الوظيفي");
+    shell.appendChild(warning(
+      "وظائف هذه الشاشة لم تُعتمد بعد للاستخدام. لن تُنفّذ عمليات تعديل " +
+      "أو نقل أو فصل أو استيراد دون التأكيد والتحقق من الصلاحيات وحفظ سجل العمليات."
+    ));
+    page.appendChild(shell);
+  }
+
+  // Safe two-step XLSX import: do not mutate existing people, assignments or attendance.
+  function importExcel(){
+    const page=start("الإدارة / الكشوفات / استيراد Excel");
+    const shell=card("استيراد أسماء جديدة من ملف Excel");
+    shell.appendChild(node("p","section-description",
+      "أعمدة الكشف: الاسم، الرقم (ع)، الموقع (اختياري)، والرقم العادي للتسلسل فقط. " +
+      "الرقم (ع) لا يقل عن أربع خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
+      "ستُعرض المواقع الجديدة في معاينة مستقلة قبل الموافقة الصريحة على إنشائها. لن تتغير هوية أو تحضير فرد موجود."));
+    const choose=node("input","form-control");choose.type="file";
+    choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const sheetSelector=field("أرقام أوراق Excel (مثال 1,3 أو الكل)","1");
+    const mapName=field("عنوان عمود الاسم (اختياري إذا تعرف عليه البرنامج)");
+    const mapNumber=field("عنوان عمود الرقم (ع) (اختياري)");
+    const mapSite=field("عنوان عمود الموقع (اختياري)");
+    const updateExistingLabel=node("label","admin-input");
+    const updateExisting=node("input");updateExisting.type="checkbox";
+    updateExisting.checked=false;
+    updateExisting.setAttribute("aria-label","تحديث بيانات الأعمدة للأفراد الموجودين");
+    updateExistingLabel.append(updateExisting,node("span","",
+      "تحديث قيم الأعمدة للأفراد الموجودين بعد مطابقة الاسم والرقم (ع) ومعاينة مستقلة"));
+    const picker=node("label","admin-input");
+    picker.append(node("span","","اختر الملف من الجهاز"),choose);
+    const status=node("div","admin-note");
+    const analysis=node("div","admin-note app-popup-on-content modal-lg");
+    analysis.setAttribute("role","dialog");
+    analysis.setAttribute("aria-modal","true");
+    analysis.setAttribute("aria-label","نتيجة تحليل الاستيراد");
+    analysis.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      event.preventDefault?.();
+      analysis.replaceChildren();
+      examine.focus?.();
+    });
+    const confirmBox=node("div","admin-note");
+    const history=card("سجل دفعات الاستيراد المعتمدة");
+    const historyContent=node("div","admin-note");
+    const historyDetails=node("div","admin-note app-popup-on-content modal-lg");
+    historyDetails.setAttribute("role","dialog");
+    historyDetails.setAttribute("aria-modal","true");
+    historyDetails.setAttribute("aria-label","تفاصيل الدفعة المستوردة");
+    let detailsSerial=0,historyOpener=null;
+    const closeOutcome=()=>{
+      detailsSerial++;
+      historyDetails.replaceChildren();
+      const previous=historyOpener;historyOpener=null;
+      previous?.focus?.();
+    };
+    historyDetails.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      event.preventDefault?.();
+      closeOutcome();
+    });
+    const refreshHistory=btn("تحديث سجل الاستيراد",loadHistory,"btn btn-outline");
+    history.append(refreshHistory,historyContent,historyDetails);
+    let workbookToken="",previewToken="",serial=0;
+
+    async function loadHistory(){
+      const request=++detailsSerial;
+      historyContent.replaceChildren(warning("جارٍ قراءة سجل الاستيراد..."));
+      historyDetails.replaceChildren();historyOpener=null;
+      try{
+        const response=await api().invoke("QueryImportOutcome",{});
+        if(!valid()||request!==detailsSerial)return;
+        const batches=Array.isArray(response.data?.batches)?response.data.batches:[];
+        if(!batches.length){
+          historyContent.replaceChildren(node("p","section-description",
+            "لا توجد دفعات استيراد محفوظة لهذا الحساب بعد."));
+          return;
+        }
+        const report=table(["تاريخ الاعتماد UTC","الملف","الإجمالي","أضيف","استُبعد","التفاصيل"]);
+        for(const batch of batches){
+          const row=node("tr");
+          for(const value of [batch.committedAtUtc,batch.fileName,batch.totalRows,
+            batch.acceptedRows,batch.rejectedRows])
+            row.appendChild(node("td","",value==null?"—":value));
+          const actions=node("td");
+          actions.appendChild(btn("عرض الدفعة",()=>showOutcome(batch.importBatchId)));
+          row.appendChild(actions);report.body.appendChild(row);
+        }
+        historyContent.replaceChildren(report.wrap);
+      }catch(e){if(valid()&&request===detailsSerial)errors(historyContent,e);}
+    }
+
+    async function showOutcome(batchId){
+      const request=++detailsSerial;
+      historyOpener=document.activeElement||null;
+      // Keep dismissal available throughout the native read, including errors.
+      const dismiss=btn("✕ إغلاق",closeOutcome,"btn btn-outline app-modal-close");
+      historyDetails.replaceChildren(dismiss,warning("جارٍ قراءة تفاصيل الدفعة..."));
+      dismiss.focus?.();
+      try{
+        const response=await api().invoke("QueryImportOutcome",{importBatchId:batchId});
+        if(!valid()||request!==detailsSerial)return;
+        const record=response.data?.batch;
+        if(!record||record.importBatchId!==batchId)
+          throw Error("تعذر مطابقة بيانات الدفعة المحفوظة.");
+        const panel=card("تفاصيل الدفعة — "+record.fileName);
+        const summary=node("div","settings-properties");
+        for(const [label,value] of [["الإجمالي",record.totalRows],
+          ["أفراد أُضيفوا",record.acceptedRows],["صفوف استُبعدت",record.rejectedRows],
+          ["وقت الاعتماد UTC",record.committedAtUtc]])
+          summary.appendChild(settingsValue(label,value));
+        panel.appendChild(summary);
+        const issues=Array.isArray(response.data?.issues)?response.data.issues:[];
+        if(issues.length){
+          panel.appendChild(node("h3","section-title","أسباب استبعاد الصفوف"));
+          const issueTable=table(["الصف","الاسم","الرقم (ع)","السبب"]);
+          for(const issue of issues)
+            addRow(issueTable.body,[issue.row,issue.name,issue.serviceNumberA,issue.reason]);
+          panel.appendChild(issueTable.wrap);
+          const exportButton=btn("حفظ تقرير الأخطاء Excel",async()=>{
+            exportButton.disabled=true;
+            try{
+              const result=await api().invoke("ExportImportIssues",{importBatchId:batchId});
+              if(!valid()||request!==detailsSerial)return;
+              if(result.data?.format!=="xlsx"||!result.data?.filePath)
+                throw Error("لم يؤكد الخادم إنشاء ملف Excel.");
+              historyDetails.appendChild(node("p","settings-success",
+                "تم حفظ تقرير الأخطاء: "+result.data.filePath));
+            }catch(e){
+              if(valid()&&request===detailsSerial)
+                panel.appendChild(warning(e.message||"تعذر حفظ التقرير."));
+            }finally{exportButton.disabled=false;}
+          },"btn btn-primary");
+          panel.appendChild(exportButton);
+        }else{
+          panel.appendChild(node("p","section-description",
+            "لا توجد صفوف مستبعدة لهذه الدفعة."));
+        }
+        historyDetails.replaceChildren(dismiss,panel);
+      }catch(e){
+        if(valid()&&request===detailsSerial)
+          historyDetails.replaceChildren(dismiss,warning(e.message||"تعذر قراءة تفاصيل الدفعة."));
+      }
+    }
+    const valid=()=>state.active==="import"&&page.isConnected!==false;
+    function reset(){
+      serial++;workbookToken="";previewToken="";
+      analysis.replaceChildren();confirmBox.replaceChildren();status.replaceChildren();
+    }
+    choose.addEventListener("change",reset);
+    async function dataUrl(file){
+      return await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onerror=()=>reject(new Error("تعذر فتح الملف المختار."));
+        reader.onload=()=>resolve(String(reader.result||"").split(",",2)[1]||"");
+        reader.readAsDataURL(file);
+      });
+    }
+    const examine=btn("تحليل الملف",async()=>{
+      reset();
+      const file=choose.files?.[0];
+      if(!file||!file.name.toLowerCase().endsWith(".xlsx")||
+          file.size>163840||file.size<=0)
+        return errors(status,new Error("اختر ملف xlsx لا يتجاوز حجمه 160 كيلوبايت."));
+      const current=serial;examine.disabled=true;
+      try{
+        status.replaceChildren(warning("جارٍ فحص ملف Excel واكتشاف التعارضات..."));
+        const sheetsText=sheetSelector.input.value.trim();
+        const allSheets=sheetsText==="الكل";
+        const sheetIndexes=allSheets?null:sheetsText.split(/[,،]/).map(x=>Number(x.trim()));
+        if(!allSheets && (!sheetIndexes.length || sheetIndexes.length>50 ||
+           sheetIndexes.some(x=>!Number.isInteger(x)||x<1||x>50) ||
+           new Set(sheetIndexes).size!==sheetIndexes.length))
+          throw Error("أدخل أرقام أوراق صحيحة دون تكرار، مثل 1,3، أو اكتب الكل.");
+        const selected=await api().invoke("SelectImportWorkbook",{
+          fileName:file.name,base64:await dataUrl(file),
+          ...(allSheets?{allSheets:true}:{sheetIndexes}),
+          nameHeading:mapName.input.value.trim(),
+          numberHeading:mapNumber.input.value.trim(),
+          siteHeading:mapSite.input.value.trim(),
+           updateExistingCustomFields:updateExisting.checked
+        });
+        if(current!==serial||!valid())return;
+        workbookToken=selected.data?.workbookToken||"";
+        if(!workbookToken)throw Error("لم تُنشأ تذكرة استيراد صالحة.");
+        const analyzed=await api().invoke("AnalyzeImport",{workbookToken});
+        if(current!==serial||!valid())return;
+        const report=analyzed.data||{};
+        const summary=node("div","settings-properties");
+        for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
+          ["أفراد جدد",report.newCount],
+           ["تحديث أعمدة أفراد موجودين",report.customUpdateCount||0],
+           ["صفوف متعارضة أو غير صالحة",report.issueCount]])
+          summary.appendChild(settingsValue(key,value));
+        const acceptedRows=Array.isArray(report.acceptedPreview)?report.acceptedPreview:[];
+        if(acceptedRows.length){
+          const acceptedTable=table(["الورقة","الصف","الاسم","الرقم (ع)","الموقع"]);
+          for(const item of acceptedRows.slice(0,50))
+            addRow(acceptedTable.body,[item.worksheet||"—",item.row||"—",
+              item.name,item.serviceNumberA,item.siteName||"غير محدد"]);
+          summary.append(node("h3","section-title",
+            "الأفراد المقبولون — عرض "+Math.min(50,acceptedRows.length)+" من "+report.newCount),
+            acceptedTable.wrap);
+        }
+        const customChanges=Array.isArray(report.customUpdatesPreview)?report.customUpdatesPreview:[];
+         const defs=customChanges.length?
+           (await api().invoke("GetCustomFieldDefinitions",{})).data?.items||[]:[];
+         const customCaptions=new Map(defs.map(x=>[x.columnId,x.caption]));
+         if(customChanges.length){
+           const changesTable=table(["الصف","الاسم","الرقم (ع)","العمود","القديم","الجديد"]);
+           for(const x of customChanges.slice(0,200))
+             addRow(changesTable.body,[x.row,x.name,x.serviceNumberA,
+               customCaptions.get(x.columnId)||x.columnId,x.oldValue||"—",x.newValue||"—"]);
+           summary.append(node("h3","section-title",
+             "القيم الجديدة للأفراد الموجودين — لا تحفظ إلا بعد الموافقة"),changesTable.wrap);
+         }
+         const proposedSites=Array.isArray(report.newSites)?report.newSites:[];
+        if(proposedSites.length){
+          const siteTable=table(["الموقع المقترح","عدد الأفراد"]);
+          for(const item of proposedSites)
+            addRow(siteTable.body,[item.name,item.personCount]);
+          summary.append(node("h3","section-title",
+            "مواقع جديدة ستُنشأ تلقائيا عند اعتماد الكشف"),siteTable.wrap);
+        }
+        const nameHints=Array.isArray(report.similarNames)?report.similarNames:[];
+        if(nameHints.length){
+          const hintTable=table(["الورقة","الصف","الاسم الجديد","الرقم (ع) الجديد","أسماء محفوظة مشابهة"]);
+          for(const item of nameHints)
+            addRow(hintTable.body,[item.worksheet,item.row,item.name,item.serviceNumberA,
+              (item.matches||[]).map(p=>p.name+" (ع: "+p.serviceNumberA+
+                (p.active?"، موجود":"، مؤرشف")+")").join("؛ ")]);
+          summary.append(node("h3","section-title",
+            "تنبيه: تشابه أسماء مع هويات محفوظة — لا يُعتبر تطابق هوية ("+
+            (report.similarNameCount??nameHints.length)+" صف)"),
+            hintTable.wrap);
+          if(Number(report.similarNameCount)>nameHints.length)
+            summary.append(warning("يُعرض أول "+nameHints.length+
+              " تنبيه فقط من أصل "+report.similarNameCount+
+              "، ويجب مراجعة جميع حالات تشابه الهوية قبل اعتماد الملف."));
+        }
+        const issues=table(["الورقة","الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
+        for(const item of (report.issues||[]).slice(0,500))
+          addRow(issues.body,[item.worksheet||"—",item.row,item.name,item.serviceNumberA,item.reason]);
+        if((report.issues||[]).length)
+          summary.append(node("h3","section-title","الصفوف المستبعدة"),issues.wrap);
+        if((report.issues||[]).some(item=>
+          String(item.reason||"").includes("هوية مؤرشفة")))
+          summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
+            navigate("persons","AddPerson"),"btn btn-outline"));
+        const preview=btn(Number(report.customUpdateCount)>0?"معاينة خطة الإضافة والتحديث":
+           Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
+          preview.disabled=true;confirmBox.replaceChildren();previewToken="";
+          try{
+            const result=await api().invoke("PreviewImportPlan",{workbookToken});
+            if(current!==serial||!valid())return;
+            const plan=result.data||{};
+            if(!plan.previewToken||!plan.requiresExplicitConfirmation)
+              throw Error("معاينة الاستيراد لم تُعتمد على الخادم.");
+            previewToken=plan.previewToken;
+            const detailsReview=window.AltamamDialog?.detailsReview;
+            if(typeof detailsReview!=="function")
+              throw Error("نافذة معاينة الاستيراد غير متاحة؛ لم يُحفظ أي تغيير.");
+            const newSites=Array.isArray(plan.newSites)?plan.newSites:[];
+            const customCount=Number(plan.customUpdateCount||0);
+             if(customCount>0){
+               const changes=Array.isArray(plan.customUpdatesPreview)?plan.customUpdatesPreview:[];
+               const approved=await detailsReview({
+                 rows:[["أفراد موجودون ستحدث أعمدتهم",customCount],
+                   ["الأثر","لا تتغير الهوية أو الموقع أو التحضير"]],
+                 columns:["الاسم","الرقم (ع)","العمود","القديم","الجديد"],
+                 items:changes.slice(0,300).map(x=>[x.name,x.serviceNumberA,
+                   customCaptions.get(x.columnId)||x.columnId,x.oldValue||"—",x.newValue||"—"])
+               },{
+                 title:"معاينة تحديث الأعمدة للأفراد الموجودين",
+                 message:"راجع القيم القديمة والجديدة؛ لن يغير الاستيراد الأسماء أو الأرقام أو المواقع.",
+                 confirmLabel:"أوافق على تحديث الأعمدة"
+               });
+               if(!approved){previewToken="";return;}
+             }
+             const details={rows:[
+              ["أفراد جدد",plan.newCount],["تحديث أعمدة أفراد موجودين",customCount],
+               ["صفوف مستبعدة",plan.issueCount],
+               ["مواقع جديدة ستُنشأ تلقائيا",newSites.length],
+               ["أسماء المواقع الجديدة",newSites.map(x=>x.name).join("، ")||"لا توجد"],
+              ["أسماء مشابهة تستدعي مراجعة بشرية",plan.similarNameCount??(plan.similarNames||[]).length],
+              ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
+            ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
+              items:(plan.acceptedPreview||[]).map(p=>
+                [p.worksheet||"—",p.row||"—",p.name,p.serviceNumberA,p.siteName||"غير محدد"])};
+            const accepted=await detailsReview(details,{
+              title:Number(plan.newCount)>0||customCount>0?
+                 "معاينة خطة إضافة الأفراد وتحديث الأعمدة":"معاينة أرشفة أخطاء الاستيراد",
+              message:Number(plan.newCount)>0||customCount>0?
+                "راجع الأسماء والأرقام (ع) والمواقع الجديدة التي ستُنشأ تلقائيا عند الاعتماد.":
+                "لن يُضاف أي فرد؛ يُحفظ فقط سجل الصفوف المرفوضة مع أسبابها لتتمكن من تصدير Excel.",
+              confirmLabel:Number(plan.newCount)>0||customCount>0?
+                 "تأكيد حفظ الدفعة وتحديث الأعمدة":"تأكيد حفظ سجل الأخطاء"
+            });
+            if(!accepted){previewToken="";return;}
+            const token=previewToken;
+            const operationId=makeOperationId();
+            // Only a native committed batch receipt establishes success. A
+            // lost reply may repeat the exact same confirmed plan and operationId.
+            let submitting=false;
+            const isCurrentPlan=()=>valid()&&current===serial&&previewToken===token;
+            const commit=async()=>{
+              if(submitting||!isCurrentPlan())return;
+              submitting=true;
+              confirmBox.replaceChildren(warning("جارٍ حفظ الاستيراد وتسجيل الدفعة في قاعدة البيانات..."));
+              try{
+                const done=await api().invoke("CommitImport",{previewToken:token,operationId,
+                   approveCustomUpdates:customCount>0},{timeoutMs:180000});
+                if(!valid()||current!==serial)return;
+                const receipt=done?.data;
+                if(!Number.isInteger(receipt?.createdCount)||receipt.createdCount<0||
+                   typeof receipt.importBatchId!=="string"||!receipt.importBatchId.trim()||
+                   !Number.isInteger(receipt.createdSitesCount)||
+                   receipt.createdSitesCount!==newSites.length){
+                  const mismatch=new Error("لا يمكن تأكيد نتيجة الاستيراد من إيصال الدفعة؛ تحقق من سجل الاستيراد قبل إجراء جديد.");
+                  mismatch.errorCode="BridgeResultMismatch";
+                  throw mismatch;
+                }
+                previewToken="";
+                analysis.replaceChildren();
+                confirmBox.replaceChildren(node("p","settings-success",
+                  (receipt.createdCount===0&&!receipt.customUpdatedCount?
+                    "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
+                    "تم إنشاء "+receipt.createdCount+" فرداً جديداً وتحديث أعمدة "+
+                       (receipt.customUpdatedCount||0)+" فرد موجود، وإنشاء "+
+                       receipt.createdSitesCount+" موقع جديد مع توثيق العملية.")+
+                  " معرف الدفعة: "+receipt.importBatchId));
+                workbookToken="";
+                // The history refresh is read-only and has its own error panel;
+                // it cannot turn a committed batch into a falsely failed write.
+                await loadHistory();
+              }catch(e){
+                if(!valid()||current!==serial)return;
+                errors(confirmBox,e);
+                if(e?.errorCode==="BridgeTimeout"||e?.errorCode==="BridgeOffline"){
+                  confirmBox.appendChild(warning(
+                    "نتيجة الحفظ غير مؤكدة بعد فقدان الاستجابة؛ أعد إرسال نفس العملية فقط."));
+                  confirmBox.appendChild(btn("إعادة معاينة واعتماد الخطة نفسها",async()=>{
+                    if(submitting||!isCurrentPlan())return;
+                    if(await detailsReview(details,{
+                      title:"إعادة مراجعة خطة الاستيراد",
+                      confirmLabel:"إعادة تأكيد الاستيراد"
+                    }))await commit();
+                  }));
+                }else{
+                  confirmBox.appendChild(warning(
+                    e?.errorCode==="BridgeResultMismatch"
+                      ?"نتيجة الدفعة غير مؤكدة؛ افحص سجل الاستيراد قبل أي محاولة جديدة."
+                      :"رفضت الخدمة خطة الاستيراد؛ أعد المعاينة بعد مراجعة البيانات."));
+                }
+              }finally{submitting=false;}
+            };
+            await commit();
+          }catch(e){errors(confirmBox,e);}
+          finally{preview.disabled=false;}
+        },"btn btn-primary");
+        const closeAnalysis=btn("✕ إغلاق",()=>{
+          analysis.replaceChildren();
+          examine.focus?.();
+        },"btn btn-outline app-modal-close");
+        analysis.replaceChildren(closeAnalysis,summary);
+        if(Number(report.newCount)>0 || Number(report.customUpdateCount)>0 ||
+           Number(report.issueCount)>0)
+          analysis.appendChild(preview);
+        closeAnalysis.focus?.();
+        status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
+      }catch(e){errors(status,e);}
+      finally{examine.disabled=false;}
+    },"btn btn-primary");
+    shell.append(picker,sheetSelector.wrap,mapName.wrap,mapNumber.wrap,mapSite.wrap,
+      updateExistingLabel,
+      examine,status,analysis,confirmBox);
+    page.append(shell,history);
+    void loadHistory();
+  }
+
+  // Emergency historical changes are always gated in C#, never merely by hiding UI.
+  async function closedCorrection(){
+    if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role)){
+      start("الإدارة / إدارة القوة / تعديل تمام سابق");
+      target().appendChild(warning("هذه العملية مخصصة للإدارة العامة والإدارة العادية فقط."));
+      return;
+    }
+    const page=start("الإدارة / إدارة القوة / تعديل تمام سابق");
+    const requestEpoch=currentRequest;
+    const isCurrent=()=>requestEpoch===currentRequest&&state.active==="closedCorrection";
+    const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
+    const notice=node("div","admin-note");
+    box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));
+    const date=field("التاريخ المغلق","","date");
+    const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
+    const personList=node("select","form-control");
+    const searchResults=node("label","admin-input");
+    searchResults.append(node("span","","اختر الفرد من نتائج البحث"),personList);
+    const statusList=node("select","form-control");
+    const statuses=node("label","admin-input");
+    statuses.append(node("span","","الحالة المصححة"),statusList);
+    const reason=field("السبب التفصيلي (10 إلى 400 حرف)");
+    const controls=node("div","functional-toolbar");
+    const correctionFields=node("div","closed-correction-fields");
+    const policyBanner=node("p","closed-policy-banner",
+      "إذن التصحيح الاستثنائي: لم تُقرأ حالته بعد؛ الخادم يتحقق من الإذن عند المعاينة.");
+    policyBanner.setAttribute("role","status");
+    const previewPanel=node("div","admin-note");
+    let previewToken=null;
+    function clearPreview(){previewToken=null;previewPanel.replaceChildren();}
+    [date.input,personList,statusList,reason.input].forEach(input=>
+      input.addEventListener("change",clearPreview));
+    const search=btn("بحث عن فرد",async()=>{
+      clearPreview();search.disabled=true;
+      try{
+        const response=await api().invoke("SearchPersons",{term:personSearch.input.value, take:50});
+        if(!isCurrent())return;
+        const data=response.data||{};
+        personList.replaceChildren();
+        for(const item of data.items||[]){
+          const option=node("option","",item.displayName+" — "+item.serviceNumberA);
+          option.value=item.personId;personList.appendChild(option);
+        }
+        if(!(data.items||[]).length)throw Error("لا يوجد أفراد مطابقون للبحث.");
+        notice.replaceChildren(node("p","","تم اختيار الفرد؛ راجع اليوم والحالة والسبب قبل المعاينة."));
+      }catch(e){errors(notice,e);}
+      finally{search.disabled=false;}
+    });
+    // Keep the same operation ID for the same policy intent after a lost reply.
+    // A changed target or reason is a fresh intent; success clears the retry key.
+    let policyIntent=null;
+    const setPolicy=enabled=>async()=>{
+      clearPreview();
+      const verb=enabled?"تفعيل":"إيقاف";
+      if(!await dialogs.confirm("هل تؤكد "+verb+" إذن التصحيح الاستثنائي؟ سيتم تسجيل تغيير الإعداد في سجل العمليات، والسبب إلزامي عند تصحيح التحضير نفسه فقط."))return;
+      if(!isCurrent())return;
+      const signature=JSON.stringify([enabled,reason.input.value]);
+      if(policyIntent?.signature!==signature)
+        policyIntent={signature,operationId:makeOperationId()};
+      try{
+        const result=await api().invoke("SetClosedDayCorrectionPolicy",{
+          enabled,reason:reason.input.value,operationId:policyIntent.operationId});
+        if(result.data?.enabled!==enabled)throw Error("لم يؤكد الخادم تعديل السياسة.");
+        policyIntent=null;
+        policyBanner.textContent=enabled?
+          "إذن التصحيح الاستثنائي: مفعّل وفق آخر عملية أكدها الخادم.":
+          "إذن التصحيح الاستثنائي: متوقف وفق آخر عملية أكدها الخادم.";
+        policyBanner.className="closed-policy-banner"+(enabled?" is-enabled":"");
+        notice.replaceChildren(node("p","", "تم "+verb+" التصحيح الاستثنائي وتسجيل العملية."));
+      }catch(e){errors(notice,e);}
+    };
+    const preview=btn("معاينة التصحيح",async()=>{
+      preview.disabled=true;clearPreview();
+      try{
+        const response=await api().invoke("PreviewClosedDayCorrection",{
+          personId:personList.value,businessDate:date.input.value,
+          statusId:statusList.value,reason:reason.input.value});
+        if(!isCurrent())return;
+        const result=response.data||{};
+        if(!result.previewToken||result.requiresExplicitConfirmation!==true)
+          throw Error("لم تُرجع الخدمة معاينة موثّقة.");
+        previewToken=result.previewToken;
+        const detailsReview=window.AltamamDialog?.detailsReview;
+        if(typeof detailsReview!=="function")
+          throw Error("نافذة معاينة التصحيح غير متاحة؛ لم يُحفظ أي تغيير.");
+        const details={rows:[
+          ["الفرد",result.personName],["الرقم (ع)",result.serviceNumberA],
+          ["الموقع",result.siteName],["التاريخ",result.businessDate],
+          ["الحالة السابقة",result.beforeStatusName],["الحالة الجديدة",result.afterStatusName],
+          ["سبب التصحيح",result.reason]
+        ]};
+        const operationId=makeOperationId();
+        const accept=await detailsReview(details,{
+          title:"معاينة تصحيح اليوم المغلق",
+          message:"تصحيح استثنائي موثق في سجل العمليات؛ لا يُعاد فتح اليوم.",
+          confirmLabel:"اعتماد التصحيح الاستثنائي"
+        });
+        if(!accept||!isCurrent()){clearPreview();return;}
+        const commit=async()=>{
+          if(!isCurrent())return;
+          try{
+            const committed=await api().invoke("CommitClosedDayCorrection",{
+              previewToken,operationId
+            });
+            if(!committed.data?.revisionNumber)throw Error("لم يؤكد الخادم اعتماد التصحيح.");
+            previewToken=null;
+            previewPanel.replaceChildren(node("p","settings-success",
+              "اعتمد التصحيح بنجاح، ورقم المراجعة "+committed.data.revisionNumber+
+              ". لم يُغيَّر تاريخ التحضير الأصلي."));
+          }catch(error){
+            errors(notice,error);
+            previewPanel.replaceChildren(btn("إعادة مراجعة واعتماد التصحيح نفسه",async()=>{
+              if(await detailsReview(details,{title:"معاينة التصحيح الاستثنائي",
+                confirmLabel:"إعادة اعتماد التصحيح"}))await commit();
+            }));
+          }
+        };
+        await commit();
+      }catch(e){errors(previewPanel,e);}
+      finally{preview.disabled=false;}
+    },"btn btn-primary");
+    const openCatchUp=btn("استدراك يوم سابق (خلال 7 أيام)",()=>{
+      const form=card("استدراك التحضير الناقص — للإدارة فقط");
+      const day=field("تاريخ الاستدراك","","date");
+      const why=field("سبب الاستدراك (10 إلى 400 حرف)");
+      const resultBox=node("div","admin-note");
+      form.append(node("p","section-description",
+        "يُستدرك تاريخ واحد من الأيام السبعة السابقة بعد معاينة وتأكيد مستقلين. لا يُعدّل أي تحضير محفوظ ولا يُعاد فتح يوم مغلق."));
+      const review=btn("معاينة الاستدراك",async()=>{
+        review.disabled=true;resultBox.replaceChildren();
+        try{
+          const response=await api().invoke("PreviewAdministrativeAttendanceCatchUp",{
+            businessDate:day.input.value,reason:why.input.value
+          });
+          if(!isCurrent())return;
+          const data=response?.data||{};
+          if(!data.previewToken||data.requiresExplicitConfirmation!==true)
+            throw Error("لم تُصدر الخدمة معاينة صالحة.");
+          const detailsReview=window.AltamamDialog?.detailsReview;
+          if(typeof detailsReview!=="function")
+            throw Error("نافذة تأكيد الاستدراك غير متاحة؛ لم تُكتب بيانات.");
+          const confirmed=await detailsReview({rows:[
+            ["التاريخ",data.businessDate],["المستهدفون غير المحضّرين",data.pendingCount],
+            ["المؤهلون",data.eligibleCount],["السبب",data.reason]
+          ]},{title:"معاينة استدراك يوم سابق",
+            message:"بعد التأكيد ستضاف الحالات الناقصة فقط مع تسجيل الفاعل والسبب في سجل العمليات.",
+            confirmLabel:"اعتماد استدراك اليوم"});
+          if(!confirmed||!isCurrent())return;
+          const operationId=makeOperationId();
+          const commit=await api().invoke("CommitAdministrativeAttendanceCatchUp",{
+            previewToken:data.previewToken,operationId
+          });
+          if(commit?.data?.businessDate!==data.businessDate)
+            throw Error("الخادم لم يؤكد اعتماد الاستدراك.");
+          resultBox.appendChild(node("p","settings-success",
+            "تم اعتماد "+commit.data.appliedCount+" حالة ناقصة بتاريخ "+data.businessDate+
+            "؛ لم تتغير الحالات المحفوظة سابقاً."));
+        }catch(e){errors(resultBox,e);}
+        finally{review.disabled=false;}
+      },"btn btn-primary");
+      form.append(day.wrap,why.wrap,review,resultBox);
+      operationalModal(form,"modal-md");
+      page.appendChild(form);
+    });
+    // --- شاشة تعديل تمام سابق حسب المدة (من تاريخ - إلى تاريخ) للإدارة العامة والإدارة العادية فقط ---
+    const rangeCard=card("تعديل تمام سابق");
+    rangeCard.classList.add("historical-attendance-range-card");
+    rangeCard.appendChild(node("p","section-description",
+      "ابحث عن الفرد بالاسم أو الرقم (ع) وحدد المدة المطلوبة (من تاريخ - إلى تاريخ) لعرض جدول الأيام وتغيير الحالة واعتمادها في جميع جداول التمام والأرشيف وسجل العمليات."));
+    const rangeToolbar=node("div","closed-correction-fields");
+    const rangeQuery=field("بحث بالاسم أو الرقم (ع)","","search");
+    rangeQuery.input.placeholder="ابحث بالاسم أو الرقم (ع)";
+    const rangeFrom=field("من تاريخ","","date");
+    const rangeTo=field("إلى تاريخ","","date");
+    rangeToolbar.append(rangeQuery.wrap,rangeFrom.wrap,rangeTo.wrap);
+    const rangeActions=node("div","functional-toolbar");
+    const rangeNotice=node("div","admin-note");
+    const rangeTableHost=node("div","historical-range-table-host");
+    const rangeFooter=node("div","functional-toolbar");
+    const changeStatusBtn=btn("تغيير الحاله",()=>openChangeStatusModal(),"btn btn-primary");
+    changeStatusBtn.disabled=true;
+    rangeFooter.appendChild(changeStatusBtn);
+    let activeStatusesCatalog=[];
+    let currentRangeData=null;
+
+    function buildDateRangeList(startStr,endStr){
+      const startMatch=/^(\d{4})-(\d{2})-(\d{2})$/.exec(startStr||"");
+      const endMatch=/^(\d{4})-(\d{2})-(\d{2})$/.exec(endStr||"");
+      if(!startMatch||!endMatch)return null;
+      const startUtc=Date.UTC(Number(startMatch[1]),Number(startMatch[2])-1,Number(startMatch[3]));
+      const endUtc=Date.UTC(Number(endMatch[1]),Number(endMatch[2])-1,Number(endMatch[3]));
+      if(!Number.isFinite(startUtc)||!Number.isFinite(endUtc)||startUtc>endUtc)return null;
+      const days=[];
+      for(let cur=startUtc;cur<=endUtc;cur+=86400000){
+        const d=new Date(cur);
+        days.push([
+          d.getUTCFullYear(),
+          String(d.getUTCMonth()+1).padStart(2,"0"),
+          String(d.getUTCDate()).padStart(2,"0")
+        ].join("-"));
+        if(days.length>62)return null;
+      }
+      return days;
+    }
+
+    async function loadRangeTable(){
+      currentRangeData=null;
+      changeStatusBtn.disabled=true;
+      rangeTableHost.replaceChildren();
+      rangeNotice.replaceChildren();
+      const term=rangeQuery.input.value.trim();
+      const fromVal=rangeFrom.input.value.trim();
+      const toVal=rangeTo.input.value.trim();
+      if(!term){
+        errors(rangeNotice,new Error("أدخل الاسم أو الرقم (ع) للبحث."));
+        return;
+      }
+      const dates=buildDateRangeList(fromVal,toVal);
+      if(!dates||!dates.length){
+        errors(rangeNotice,new Error("حدد تاريخ البداية (من تاريخ) وتاريخ النهاية (إلى تاريخ) بشكل صحيح (بحد أقصى 62 يوماً)."));
+        return;
+      }
+      rangeSearchBtn.disabled=true;
+      try{
+        const found=await api().invoke("SearchPersons",{term,take:50});
+        if(!isCurrent())return;
+        const candidates=Array.isArray(found.data?.items)?found.data.items:[];
+        if(!candidates.length)throw new Error("لا يوجد فرد مطابق للبحث.");
+        const selectedPerson=candidates[0];
+        const reportReply=await api().invoke("BuildPersonLifetimeReport",{
+          personId:selectedPerson.personId,
+          dateFrom:fromVal,
+          dateTo:toVal,
+          attendancePage:1
+        });
+        if(!isCurrent())return;
+        const reportData=reportReply?.data||{};
+        const attendanceRows=Array.isArray(reportData.attendance)?reportData.attendance:[];
+        const byDate=new Map();
+        for(const item of attendanceRows){
+          if(item&&typeof item.date==="string")byDate.set(item.date,item);
+        }
+        const dayEntries=dates.map(d=>{
+          const rec=byDate.get(d);
+          return {
+            date:d,
+            statusName:rec?.statusName||"غير محضر",
+            symbol:rec?.symbol||"—"
+          };
+        });
+        currentRangeData={
+          personId:selectedPerson.personId,
+          personName:reportData.person?.name||selectedPerson.displayName||"",
+          serviceNumberA:reportData.person?.serviceNumberA||selectedPerson.serviceNumberA||"",
+          dateFrom:fromVal,
+          dateTo:toVal,
+          days:dayEntries
+        };
+        const columns=["الرقم","الرقم (ع)","اسم الفرد",...dates];
+        const grid=table(columns);
+        const tr=node("tr");
+        tr.append(
+          node("td","","1"),
+          node("td","",currentRangeData.serviceNumberA),
+          node("td","",currentRangeData.personName)
+        );
+        for(const entry of dayEntries){
+          const cell=node("td","historical-day-box",entry.statusName);
+          cell.dataset.dayDate=entry.date;
+          tr.appendChild(cell);
+        }
+        grid.body.appendChild(tr);
+        rangeTableHost.replaceChildren(grid.wrap);
+        changeStatusBtn.disabled=false;
+      }catch(e){
+        if(isCurrent())errors(rangeNotice,e);
+      }finally{
+        rangeSearchBtn.disabled=false;
+      }
+    }
+
+    function openChangeStatusModal(){
+      if(!currentRangeData||!isCurrent())return;
+      const modalPanel=card("تغيير الحاله");
+      modalPanel.setAttribute("aria-label","تغيير الحاله");
+      const modalNotice=node("div","admin-note");
+
+      const prevSection=node("div","historical-previous-statuses-box");
+      prevSection.appendChild(node("span","admin-input-label","الحاله السابقه في المده المعينه"));
+      const prevBoxesRow=node("div","historical-status-boxes-row");
+      for(const item of currentRangeData.days){
+        const badge=node("div","historical-status-chip",item.date+" : "+item.statusName);
+        badge.dataset.previousStatusDate=item.date;
+        prevBoxesRow.appendChild(badge);
+      }
+      prevSection.appendChild(prevBoxesRow);
+
+      const newStatusSelect=node("select","form-control");
+      newStatusSelect.setAttribute("aria-label","الحاله الجديده");
+      for(const st of activeStatusesCatalog){
+        const opt=node("option","",st.name||st.displayName||st.statusId);
+        opt.value=st.statusId;
+        newStatusSelect.appendChild(opt);
+      }
+      const newStatusWrap=node("label","admin-input");
+      newStatusWrap.append(node("span","","الحاله الجديده"),newStatusSelect);
+
+      const confirmationStatement=node("p","settings-copy historical-confirm-statement",
+        "سيتم تغيير حاله الفرد بحسب المده المحدده من الحاله السابقه الى الحاله الجديده المختاره");
+
+      const confirmBtn=btn("التاكيد",async()=>{
+        if(!newStatusSelect.value){
+          errors(modalNotice,new Error("اختر الحالة الجديدة من الحالات الموجودة في البرنامج."));
+          return;
+        }
+        confirmBtn.disabled=true;
+        modalNotice.replaceChildren(warning("جارٍ معاينة واعتماد الحالة الجديدة في جداول التمام والأرشيف..."));
+        try{
+          const previewRes=await api().invoke("PreviewClosedDayCorrection",{
+            personId:currentRangeData.personId,
+            dateFrom:currentRangeData.dateFrom,
+            dateTo:currentRangeData.dateTo,
+            businessDate:currentRangeData.dateFrom,
+            statusId:newStatusSelect.value,
+            reason:"تعديل تمام سابق حسب المدة المحددة من الإدارة"
+          });
+          if(!isCurrent())return;
+          const previewData=previewRes?.data||{};
+          if(!previewData.previewToken||previewData.requiresExplicitConfirmation!==true)
+            throw new Error("لم تُرجع الخدمة معاينة موثّقة لتعديل التمام السابق.");
+          const opId=makeOperationId();
+          const committed=await api().invoke("CommitClosedDayCorrection",{
+            previewToken:previewData.previewToken,
+            operationId:opId
+          });
+          if(!isCurrent())return;
+          if(!committed?.data?.revisionNumber)
+            throw new Error("لم يؤكد الخادم اعتماد تعديل التمام السابق.");
+          modalCtrl.close();
+          await loadRangeTable();
+          rangeNotice.replaceChildren(node("p","settings-success",
+            "تم اعتماد الحالة الجديدة في جميع جداول التمام والأرشيف وتقييد العملية في سجل العمليات بنجاح."));
+        }catch(err){
+          if(isCurrent())errors(modalNotice,err);
+          confirmBtn.disabled=false;
+        }
+      },"btn btn-primary");
+
+      modalPanel.append(prevSection,newStatusWrap,confirmationStatement,modalNotice,confirmBtn);
+      const modalCtrl=operationalModal(modalPanel,"modal-lg");
+      page.appendChild(modalPanel);
+      modalCtrl.open();
+    }
+
+    const rangeSearchBtn=btn("بحث وعرض المدة",()=>loadRangeTable(),"btn btn-primary");
+    rangeActions.appendChild(rangeSearchBtn);
+    rangeCard.append(rangeToolbar,rangeActions,rangeNotice,rangeTableHost,rangeFooter);
+    page.appendChild(rangeCard);
+
+    controls.append(search,btn("تفعيل الإذن الاستثنائي",setPolicy(true)),
+      btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview,openCatchUp);
+    correctionFields.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap);
+    box.append(policyBanner,correctionFields,controls,notice,previewPanel);
+    page.appendChild(box);
+    try{
+      const response=await api().invoke("GetActiveAttendanceStatuses",{});
+      if(!isCurrent())return;
+      const data=Array.isArray(response.data)?response.data:[];
+      activeStatusesCatalog=data;
+      for(const item of data){
+        const option=node("option","",item.name||item.displayName||item.statusId);
+        option.value=item.statusId;statusList.appendChild(option);
+      }
+    }catch(e){errors(notice,e);}
+  }
+
+  // Users open directly from the administration home. No extra "إدارة الحسابات"
+  // intermediate screen. All mutations are performed by server-authorized C#.
+  async function accounts() {
+    const page=start("الإدارة / المستخدمون"),container=card("الحسابات المسجلة");
+    page.appendChild(container);
+    const notice=node("div","admin-note");
+    const tools=node("div","functional-toolbar");
+    const filter=field("بحث باسم المستخدم أو الاسم أو الرقم (ع)",state.term);
+    const addAccount=btn("إضافة حساب",()=>showAdd(),"btn btn-outline");
+    addAccount.disabled=true;
+    tools.append(filter.wrap,btn("بحث",()=>{
+      state.term=filter.input.value.trim();state.page=1;load();
+    },"btn btn-primary"),addAccount);
+    container.append(tools,notice);
+    const rows=node("div","admin-users-list");container.appendChild(rows);
+    const token=++currentRequest;
+    let allowedRoles=[];
+    try {
+      const result=await api().invoke("GetAllowedRoles",{});
+      if(token!==currentRequest)return;
+      allowedRoles=Array.isArray(result.data)?result.data:[];
+    }catch(e){if(token===currentRequest)errors(notice,e);return;}
+
+    function showAdd() {
+      if(state.active!=="accounts"||addAccount.disabled)return;
+      const form=card("إضافة حساب مرتبط بفرد من القوة");
+      const formEpoch=currentRequest;
+      let dismissed=false,searchSerial=0;
+      const isCurrent=()=>!dismissed&&form.isConnected&&formEpoch===currentRequest&&state.active==="accounts";
+      const dismiss=()=>{dismissed=true;form.remove();};
+      operationalModal(form,"modal-md",false,false,()=>{dismissed=true;});
+      form.classList.add("admin-user-form");
+      const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
+      const personPick=node("select","form-control");
+      personPick.setAttribute("aria-label","اختر فرداً من الكشف");
+      const initial=node("option","","ابحث أولاً ثم اختر الفرد");
+      initial.value="";personPick.appendChild(initial);
+      const selected=node("p","section-description","الرقم (ع): —");
+      const username=field("اسم المستخدم");
+      const password=field("كلمة المرور الجديدة","","password");
+      password.input.autocomplete="new-password";
+      password.input.minLength=6;
+      attachSecretReveal(password);
+      const passwordConfirm=field("تأكيد كلمة المرور","","password");
+      passwordConfirm.input.autocomplete="new-password";
+      passwordConfirm.input.minLength=6;
+      attachSecretReveal(passwordConfirm);
+      const passwordHints=livePasswordPolicy(password.input,passwordConfirm.input);
+      const role=node("select","form-control");
+      role.setAttribute("aria-label","نوع الحساب");
+      for(const allowed of allowedRoles){
+        const opt=node("option","",allowed.name);opt.value=allowed.role;role.appendChild(opt);
+      }
+      const activePeople=new Map();
+      const searchButton=btn("البحث في كشف القوة",async()=>{
+        if(!isCurrent()||searchButton.disabled)return;
+        const serial=++searchSerial;
+        activePeople.clear();personPick.replaceChildren();personPick.value="";
+        selected.textContent="الرقم (ع): —";
+        const term=personSearch.input.value.trim();
+        if(!term){errors(message,new Error("أدخل الاسم أو الرقم (ع) للبحث."));return;}
+        searchButton.disabled=true;message.replaceChildren();
+        try {
+          const result=await api().invoke("SearchActivePersonsForAccount",{term,take:30});
+          if(!isCurrent()||serial!==searchSerial||personSearch.input.value.trim()!==term)return;
+          const people=(result.data?.items||[]).filter(p=>p.organizationalStatus===1);
+          personPick.replaceChildren();
+          const head=node("option","","اختر الفرد");head.value="";personPick.appendChild(head);
+          for(const person of people){
+            activePeople.set(person.personId,person);
+            const opt=node("option","",person.displayName+" — ع: "+person.serviceNumberA);
+            opt.value=person.personId;opt.dataset.serviceNumberA=person.serviceNumberA;
+            personPick.appendChild(opt);
+          }
+          if(people.length===0)errors(message,new Error("لم يوجد فرد نشط مطابق."));
+        }catch(e){if(isCurrent())errors(message,e);}finally{searchButton.disabled=false;}
+      });
+      personPick.addEventListener("change",()=>{
+        const option=Array.from(personPick.children).find(o=>o.value===personPick.value);
+        selected.textContent="الرقم (ع): "+(option?.dataset.serviceNumberA||"—");
+      });
+      const message=node("div","admin-note");
+      let accountPayload=null,accountOperation=null;
+      const accountFields=()=>[personPick.value,username.input.value.trim(),role.value,
+        password.input.value,passwordConfirm.input.value];
+      const save=btn("تأكيد إضافة الحساب",async()=>{
+        if(!isCurrent()||save.disabled||searchButton.disabled)return;
+        if(!activePeople.has(personPick.value)||!username.input.value.trim()||!password.input.value||
+           !passwordConfirm.input.value)
+          return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور وتأكيدها."));
+        if(password.input.value!==passwordConfirm.input.value)
+          return errors(message,new Error("كلمة المرور وتأكيدها غير متطابقين."));
+        const signature=JSON.stringify(accountFields());
+        save.disabled=true;message.replaceChildren();
+        try {
+          if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+          if(!isCurrent()||searchButton.disabled||signature!==JSON.stringify(accountFields())||
+             !activePeople.has(personPick.value))return;
+          if(accountPayload!==signature){accountPayload=signature;accountOperation=makeOperationId();}
+          await api().invoke("CreateUserAccount",{
+            personId:personPick.value,username:username.input.value.trim(),
+            role:role.value,password:password.input.value,
+            passwordConfirmation:passwordConfirm.input.value,operationId:accountOperation
+          });
+          accountPayload=null;accountOperation=null;
+          password.input.value="";passwordConfirm.input.value="";
+          form.remove();
+          notice.replaceChildren(node("p","settings-success","تم إنشاء الحساب بعد حفظه بنجاح."));
+          await load();
+        }catch(e){password.input.value="";errors(message,e);}
+        finally{save.disabled=false;}
+      },"btn btn-primary");
+      const pickerLabel=node("label","admin-input");
+      pickerLabel.append(node("span","","الفرد المرتبط بالحساب"),personPick);
+      const roleLabel=node("label","admin-input");
+      roleLabel.append(node("span","","نوع الحساب"),role);
+      const personSearchRow=node("div","admin-account-person-search");
+      personSearchRow.append(personSearch.wrap,searchButton);
+      const secrets=node("div","admin-account-credentials");
+      secrets.append(password.wrap,passwordHints,passwordConfirm.wrap);
+      const layout=node("div","admin-account-form-grid");
+      layout.append(personSearchRow,pickerLabel,selected,username.wrap,
+        secrets,roleLabel);
+      form.append(layout,save,btn("إلغاء",dismiss),message);
+      page.appendChild(form);
+      // Fixed modal does not displace the list.
+    }
+
+    async function load() {
+      const serial=++currentRequest;
+      rows.replaceChildren(warning("جارٍ تحميل حسابات المستخدمين..."));
+      try {
+        const reply=await api().invoke("ListUserAccounts",{
+          page:state.page,pageSize:100,term:state.term
+        });
+        if(serial!==currentRequest)return;
+        const data=reply.data||{},listing=table(["م","الرقم (ع)","المستخدم","الاسم الكامل",
+          "نوع الحساب","أضافه","الحالة","الإجراءات"]);
+        (data.items||[]).forEach(account=>{
+          const row=node("tr");
+          const fields=[account.index,account.serviceNumberA,account.username,account.fullName,
+            account.roleLabelAr,account.createdBy,account.active?"نشط":"معطّل"];
+          fields.forEach(v=>row.appendChild(node("td","",v)));
+          const cell=node("td","admin-row-buttons");
+          if(account.canModify && account.active){
+            cell.appendChild(btn("تغيير كلمة المرور",()=>showPassword(account),"btn btn-outline"));
+            // One stable ID per requested disable, safe when a response is lost.
+            const disableOperationId=makeOperationId();
+            cell.appendChild(btn("تعطيل الحساب",async()=>{
+              if(!await dialogs.confirm("تأكيد تعطيل حساب «"+account.username+
+                "»؟ لن يتمكن من الدخول، وستلغى جلساته الحالية."))return;
+              try {
+                await api().invoke("DeactivateUserAccount",{
+                  userId:account.userId,expectedRevision:account.rowVersion,
+                  operationId:disableOperationId
+                });
+                await load();
+              }catch(e){errors(notice,e);}
+            },"btn btn-danger"));
+          }else if(account.canModify && !account.active){
+            let reactivationIntent=null;
+            cell.appendChild(btn("إعادة تفعيل الحساب",async()=>{
+              const reason=await dialogs.prompt(
+                "سبب إعادة التفعيل: يُشترط أن يعود الفرد فعليًا إلى كشف القوة النشطة.");
+              if(reason===null)return;
+              if(reason.trim().length<5)return errors(notice,
+                new Error("يجب كتابة سبب واضح من خمسة أحرف على الأقل."));
+              if(!await dialogs.confirm("هل تؤكد إعادة تفعيل حساب «"+
+                account.username+"»؟ سيتم تسجيل العملية وستبقى الجلسات القديمة ملغاة."))return;
+              const intent=JSON.stringify([account.userId,account.rowVersion,reason.trim()]);
+              if(reactivationIntent?.signature!==intent)
+                reactivationIntent={signature:intent,operationId:makeOperationId()};
+              try{
+                await api().invoke("ReactivateUserAccount",{
+                  userId:account.userId,expectedRevision:account.rowVersion,
+                  reason:reason.trim(),operationId:reactivationIntent.operationId
+                });
+                reactivationIntent=null;
+                await load();
+              }catch(e){errors(notice,e);}
+            },"btn btn-primary"));
+          }else cell.textContent="—";
+          row.appendChild(cell);listing.body.appendChild(row);
+        });
+        empty(listing.body,8,"لا توجد حسابات مطابقة للبحث.");
+        const pager=node("div","functional-pager");
+        const prev=btn("السابق",()=>{state.page--;load();});
+        const next=btn("التالي",()=>{state.page++;load();});
+        prev.disabled=state.page<=1;next.disabled=!data.hasNext;
+        pager.append(node("span","","الإجمالي: "+(data.total||0)),prev,next);
+        rows.replaceChildren(listing.wrap,pager);
+      }catch(e){if(serial===currentRequest)errors(rows,e);}
+    }
+
+    function showPassword(account) {
+      const wrapper=card("تغيير كلمة مرور «"+account.username+"»");
+      operationalModal(wrapper,"modal-sm");
+      const pwd=field("كلمة المرور الجديدة","","password");
+      pwd.input.autocomplete="new-password";
+      pwd.input.minLength=6;
+      attachSecretReveal(pwd);
+      const requirements=livePasswordPolicy(pwd.input);
+      const result=node("div","admin-note");
+      // Do not cache the plaintext password in an additional JS signature.
+      // The field owns its value; changing it starts a fresh operation ID.
+      let passwordOperationId=null;
+      pwd.input.addEventListener("input",()=>{passwordOperationId=null;});
+      const save=btn("تأكيد التغيير",async()=>{
+        if(!await dialogs.confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
+        save.disabled=true;
+        if(!passwordOperationId)passwordOperationId=makeOperationId();
+        try {
+          await api().invoke("ChangeUserPassword",{
+            userId:account.userId,expectedRevision:account.rowVersion,
+            password:pwd.input.value,operationId:passwordOperationId
+          });
+          pwd.input.value="";passwordOperationId=null;wrapper.remove();await load();
+        }catch(e){
+          // Do not persist passwords. Keep the input only within this dialog so
+          // an interrupted successful update may be retried with the same ID.
+          errors(result,e);
+        }finally{save.disabled=false;}
+      },"btn btn-primary");
+      wrapper.append(pwd.wrap,requirements,save,
+        btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),result);
+      page.appendChild(wrapper);
+      // Fixed modal keeps the list and current query.
+    }
+    const initialList=load();
+    addAccount.disabled=allowedRoles.length===0;
+    await initialList;
+  }
+
+  // The one canonical roster-column editor. No presentation label is a data key.
+  // Service returns immutable ColumnId, optimistic snapshot and stored-value count.
+  async function rosterLayout() {
+    const page=start("الإدارة / الكشوفات / تعديل هيكل الكشف");
+    const panel=card("إدارة أعمدة الكشف"),feedback=node("div","admin-note");
+    panel.appendChild(node("p","section-description",
+      "الاسم والرقم (ع) والموقع ورقم التسلسل أعمدة أساسية محمية. "+
+      "الأعمدة الإضافية ترتبط بالمعرف ColumnId الثابت، وليس بعنوان العمود. "+
+      "إخفاء العمود أو تعطيله لا يحذف بيانات الأفراد القديمة."));
+    page.appendChild(panel);
+    const token=++currentRequest;
+    const types=[["1","نص"],["2","رقم"],["3","تاريخ"],["4","نعم / لا"]];
+    function kindPicker(value) {
+      const picker=node("select","form-control");
+      picker.setAttribute("aria-label","نوع العمود");
+      for(const [type,title] of types){
+        const opt=node("option","",title);opt.value=type;
+        picker.appendChild(opt);
+      }
+      picker.value=String(value??1);return picker;
+    }
+    function typeLabel(code) {
+      return types.find(x=>Number(x[0])===code)?.[1]||"غير معروف";
+    }
+    const add=card("إضافة عمود اختياري");
+    const addColumnModal=operationalModal(add,"modal-md",true,true);
+    const caption=field("عنوان العمود الجديد");
+    caption.input.maxLength=80;
+    const kind=kindPicker(1),label=node("label","admin-input");
+    label.append(node("span","","نوع البيانات"),kind);
+    const addButton=btn("إضافة العمود",async()=>{
+      if(caption.input.value.trim().length<2)return errors(feedback,
+        new Error("اكتب عنوانًا واضحًا لا يقل عن حرفين."));
+      if(!await dialogs.confirm("إضافة عمود «"+caption.input.value.trim()+
+         "» إلى هيكل الكشف؟"))return;
+      addButton.disabled=true;feedback.replaceChildren();
+      try{
+        await api().invoke("CreateCustomFieldDefinition",{
+          caption:caption.input.value.trim(),fieldType:Number(kind.value),
+          operationId:makeOperationId()
+        });
+        await rosterLayout();
+      }catch(e){errors(feedback,e);}
+      finally{addButton.disabled=false;}
+    },"btn btn-primary");
+    add.append(caption.wrap,label,addButton);
+    panel.append(btn("+ إضافة عمود اختياري",()=>addColumnModal.open(),"btn btn-primary"),add,feedback);
+    try{
+      const response=await api().invoke("GetCustomFieldDefinitions",{});
+      if(token!==currentRequest)return;
+      const items=Array.isArray(response.data?.items)?response.data.items:[];
+      const active=items.filter(item=>item.active!==false);
+      const custom=active.filter(item=>!item.isSystemProtected);
+      const tableView=table(["عنوان العمود","نوع البيانات","الترتيب","الظهور","الإجراءات"]);
+      const editor=node("div","admin-note");
+      const explanation=node("p","section-description",
+        "الأعمدة المحمية لا تُحذف. تغيير نوع عمود يحتوي قيمًا مسجلة يُرفض "+
+        "حتى لا يُغيّر تفسير البيانات التاريخية دون ترحيل موثق.");
+      const apply=async(item,changes)=>{
+        const payload={
+          columnId:item.columnId,expectedSnapshot:item.snapshot,
+          caption:item.caption,fieldType:item.fieldType,
+          displayOrder:item.displayOrder,visible:item.visible,
+          ...changes,operationId:makeOperationId()
+        };
+        await api().invoke("UpdateCustomFieldMetadata",payload);
+        await rosterLayout();
+      };
+      const showEditor=item=>{
+        editor.replaceChildren();
+        const box=card("تعديل العمود: "+item.caption);
+        operationalModal(box,"modal-md");
+        const name=field("عنوان العمود",item.caption);
+        name.input.maxLength=80;
+        const type=kindPicker(item.fieldType);
+        const typeWrap=node("label","admin-input");
+        typeWrap.append(node("span","","نوع البيانات"),type);
+        const order=field("ترتيب العمود",String(item.displayOrder),"number");
+        order.input.min=5;order.input.max=custom.length+4;
+        const shown=node("label","admin-input"),check=node("input");
+        check.type="checkbox";check.checked=item.visible;
+        shown.append(node("span","","إظهار العمود في الكشف"),check);
+        const save=btn("حفظ تغييرات العمود",async()=>{
+          save.disabled=true;feedback.replaceChildren();
+          try{
+            await apply(item,{caption:name.input.value.trim(),
+              fieldType:Number(type.value),displayOrder:Number(order.input.value),
+              visible:check.checked});
+          }catch(e){errors(feedback,e);}
+          finally{save.disabled=false;}
+        },"btn btn-primary");
+        box.append(name.wrap,typeWrap,order.wrap,shown,save,
+          btn("إلغاء التعديل",()=>editor.replaceChildren()));
+        editor.replaceChildren(box);
+      };
+      for(const item of active){
+        const row=node("tr");
+        const text=node("td");
+        text.append(node("strong","",item.caption),
+          node("p","section-description","ColumnId: "+item.columnId));
+        row.append(text,
+          node("td","",typeLabel(item.fieldType)),
+          node("td","",item.displayOrder),
+          node("td","",item.visible?"ظاهر":"مخفي"));
+        const action=node("td","admin-row-buttons");
+        if(item.isSystemProtected)action.append(node("span","section-description","عمود محمي"));
+        else{
+          action.append(btn("تعديل",()=>showEditor(item)));
+          action.append(btn(item.visible?"إخفاء":"إظهار",async()=>{
+            try{await apply(item,{visible:!item.visible});}
+            catch(e){errors(feedback,e);}
+          }));
+          if(item.displayOrder>5)action.append(btn("أعلى",async()=>{
+            try{await apply(item,{displayOrder:item.displayOrder-1});}
+            catch(e){errors(feedback,e);}
+          }));
+          if(item.displayOrder<custom.length+4)action.append(btn("أسفل",async()=>{
+            try{await apply(item,{displayOrder:item.displayOrder+1});}
+            catch(e){errors(feedback,e);}
+          }));
+          action.append(btn("تعطيل العمود",async()=>{
+            const message="تعطيل عمود «"+item.caption+"»؟ عدد القيم المحفوظة: "+
+              (item.storedValueCount||0)+". لن تُحذف قيم الأفراد أو السجلات القديمة.";
+            if(!await dialogs.confirm(message))return;
+            try{
+              await api().invoke("DeactivateCustomField",{
+                columnId:item.columnId,expectedSnapshot:item.snapshot,
+                confirmed:true,operationId:makeOperationId()
+              });
+              await rosterLayout();
+            }catch(e){errors(feedback,e);}
+          }));
+        }
+        row.appendChild(action);
+        tableView.body.appendChild(row);
+      }
+      empty(tableView.body,5,"لا توجد أعمدة في الكشف.");
+      panel.append(explanation,tableView.wrap,editor);
+    }catch(e){errors(feedback,e);}
+  }
+
+  async function sites() {
+    const page=start("الإدارة / الحالات والمواقع / المواقع"), output=card("المواقع المسجلة");
+    page.appendChild(output);
+    const token=++currentRequest;
+    try {
+      const response=await api().invoke("QuerySites",{});
+      if(token!==currentRequest)return;
+      const list=Array.isArray(response.data)?response.data:[];
+      const form=card("إنشاء موقع جديد");
+      form.classList.add("admin-site-create-form");
+      const siteModal=operationalModal(form,"modal-md",true,true);
+      const name=field("اسم الموقع");
+      name.input.required=true;
+      const note=node("div","admin-note");
+      let sitePayload=null,siteOperation=null;
+      const send=btn("إضافة الموقع",async()=>{
+        if(!await dialogs.confirm("تأكيد إنشاء الموقع «"+name.input.value.trim()+"»؟"))return;
+        send.disabled=true;note.replaceChildren();
+        try {
+          const current=JSON.stringify([name.input.value.trim()]);
+          if(sitePayload!==current){sitePayload=current;siteOperation=makeOperationId();}
+          await api().invoke("CreateSite",{name:name.input.value,operationId:siteOperation});
+          sitePayload=null;siteOperation=null;
+          name.input.value="";await sites();}
+        catch(e){errors(note,e);}finally{send.disabled=false;}
+      },"btn btn-primary");
+      form.append(name.wrap,send,note);
+      const t=table(["اسم الموقع","الحالة","الإجراء"]);
+      list.forEach(item=>{
+        const sys=item.siteId==="SITE-UNSPECIFIED";
+        const row=node("tr"),actions=node("td");
+        row.append(node("td","",item.name),node("td","",
+          item.active?"نشط":"موقوف"),actions);
+        if(sys)actions.append(node("span","section-description","موقع محمي"));
+        else if(!item.active)actions.append(node("span","section-description","موقع محفوظ تاريخيًا"));
+        else{
+          actions.append(btn("إعادة تسمية",async()=>{
+            const formDialog=window.AltamamDialog?.form;
+            const review=window.AltamamDialog?.detailsReview;
+            if(typeof formDialog!=="function"||typeof review!=="function"){
+              await dialogs.alert("نافذة تعديل الموقع غير متاحة؛ لم يحدث تغيير.");return;
+            }
+            const values=await formDialog([
+              {name:"name",label:"اسم الموقع الجديد",type:"text",value:item.name,required:true}
+            ],{title:"إعادة تسمية الموقع",size:"md",confirmLabel:"معاينة التسمية"});
+            if(!values)return;
+            const next=String(values.name||"").trim();
+            if(!next||next===item.name)return;
+            const approved=await review({rows:[
+              ["الاسم السابق",item.name],["الاسم الجديد",next],
+              ["السجل التاريخي","ستبقى هوية الموقع وسجلاته محفوظة."]
+            ]},{title:"معاينة إعادة التسمية",confirmLabel:"تأكيد تغيير الاسم"});
+            if(!approved)return;
+            try{
+              await api().invoke("RenameSite",{siteId:item.siteId,
+                name:next,expectedRevision:item.rowVersion,operationId:makeOperationId()});
+              await sites();
+            }catch(e){void dialogs.alert(e.message||"تعذرت إعادة التسمية.");}
+          }));
+          const remove=btn("إزالة الموقع",async()=>{
+            remove.disabled=true;
+            try{
+              const preview=(await api().invoke("QueryPersons",{
+                siteId:item.siteId,organizationalStatus:1,page:1,pageSize:1
+              })).data||{};
+              const count=Number(preview.total);
+              if(!Number.isSafeInteger(count)||count<0)
+                throw Error("تعذرت قراءة عدد الأفراد؛ أُلغيت الإزالة.");
+              const message="هل تؤكد إزالة موقع «"+item.name+"»؟ "+
+                "الأفراد النشطون الذين سيُنقلون إلى «غير محدد»: "+count+
+                ". ستبقى جميع التحضيرات والانتسابات والأسماء القديمة محفوظة، "+
+                "ولن تتم العملية إذا سُجل تحضير أو نقل اليوم أو تغير الكشف.";
+              if(!await dialogs.confirm(message,{title:"تأكيد إزالة الموقع"}))return;
+              const result=await api().invoke("RemoveSiteAndReassignCurrentPersons",{
+                siteId:item.siteId,expectedRevision:item.rowVersion,
+                expectedActiveCount:count,confirmed:true,operationId:makeOperationId()
+              });
+              await dialogs.alert("أزيل الموقع من المواقع النشطة، ونُقل "+
+                result.data.reassignedCount+" فردًا إلى غير محدد. السجلات السابقة محفوظة.");
+              await sites();
+            }catch(e){void dialogs.alert(e.message||"تعذرت إزالة الموقع؛ لم يُعتمد الحذف.");}
+            finally{remove.disabled=false;}
+          });
+          actions.append(remove);
+        }
+        t.body.appendChild(row);
+      });
+      empty(t.body,3,"لا توجد مواقع مسجلة.");
+      output.append(btn("+ إنشاء موقع جديد",()=>siteModal.open(),"btn btn-primary"),t.wrap,form);
+    }catch(e){errors(output,e);}
+  }
+
+  async function statuses() {
+    const page=start("الإدارة / الحالات والمواقع / الحالات"),output=card("الحالات المسجلة");
+    page.appendChild(output);
+    const token=++currentRequest;
+    try {
+      const response=await api().invoke("GetActiveAttendanceStatuses",{});
+      if(token!==currentRequest)return;
+      const items=Array.isArray(response.data)?response.data:[];
+      const frm=card("إضافة حالة جديدة");
+      frm.classList.add("admin-status-create-form");
+      const statusModal=operationalModal(frm,"modal-md",true,true);
+      const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
+      name.input.required=true;
+      symbol.input.required=true;
+      const note=node("div","admin-note");
+      let statusPayload=null,statusOperation=null;
+      const save=btn("إضافة حالة",async()=>{
+        if(!await dialogs.confirm("تأكيد إضافة حالة التحضير «"+name.input.value.trim()+"»؟"))return;
+        note.replaceChildren();save.disabled=true;
+        try {
+          const identity=JSON.stringify([name.input.value.trim(),symbol.input.value.trim(),color.input.value]);
+          if(statusPayload!==identity){statusPayload=identity;statusOperation=makeOperationId();}
+          await api().invoke("CreateAttendanceStatus",{
+            name:name.input.value,symbol:symbol.input.value,color:color.input.value,
+            operationId:statusOperation});
+          statusPayload=null;statusOperation=null;
+          await statuses();}
+        catch(e){errors(note,e);}finally{save.disabled=false;}
+      },"btn btn-primary");
+      const livePreview=node("div","status-pill status-live-preview","معاينة الحالة");
+      livePreview.setAttribute("role","status");
+      livePreview.setAttribute("aria-live","polite");
+      const refreshStatusPreview=()=>{
+        livePreview.textContent=(name.input.value.trim()||"اسم الحالة")+
+          " — "+(symbol.input.value.trim()||"الرمز");
+        const selected=safeColor(color.input.value);
+        livePreview.style.borderColor=selected;
+        livePreview.style.setProperty?.("--status-dot",selected);
+        const rgb=[1,3,5].map(i=>parseInt(selected.slice(i,i+2),16));
+        livePreview.style.backgroundColor="rgba("+rgb.join(",")+",0.12)";
+      };
+      name.input.addEventListener("input",refreshStatusPreview);
+      symbol.input.addEventListener("input",refreshStatusPreview);
+      color.input.addEventListener("input",refreshStatusPreview);
+      refreshStatusPreview();
+      const statusFields=node("div","admin-status-fields");
+      statusFields.append(name.wrap,symbol.wrap,color.wrap);
+      frm.append(statusFields,livePreview,save,note);
+      const t=table(["الحالة","الرمز","عدد اليوم","اللون","الإجراءات"]);
+      for(const item of items){
+        const tr=node("tr"), colorBox=node("span","admin-color",item.color);
+        colorBox.style.borderRight="5px solid "+safeColor(item.color);
+        [item.displayName,item.shortSymbol,String(item.todayCount??0)]
+          .forEach(x=>tr.appendChild(node("td","",x)));
+        const tdColor=node("td");tdColor.appendChild(colorBox);tr.appendChild(tdColor);
+        const td=node("td","admin-row-buttons");
+        td.appendChild(btn("تعديل",async()=>{
+          const formDialog=window.AltamamDialog?.form;
+          const review=window.AltamamDialog?.detailsReview;
+          if(typeof formDialog!=="function"||typeof review!=="function"){
+            await dialogs.alert("نافذة تعديل الحالة غير متاحة؛ لم يحدث تغيير.");return;
+          }
+          const values=await formDialog([
+            {name:"name",label:"اسم الحالة",type:"text",value:item.displayName,required:true},
+            {name:"symbol",label:"الرمز",type:"text",value:item.shortSymbol,required:true},
+            {name:"color",label:"اللون",type:"color",value:safeColor(item.color),required:true}
+          ],{title:"تعديل حالة التحضير",size:"md",confirmLabel:"معاينة الحالة"});
+          if(!values)return;
+          const newName=String(values.name||"").trim();
+          const newSymbol=String(values.symbol||"").trim();
+          const newColor=String(values.color||"");
+          if(!newName||!newSymbol||!/^#[0-9a-fA-F]{6}$/.test(newColor)){
+            await dialogs.alert("أكمل اسم الحالة ورمزها واختر لوناً صالحاً.");return;
+          }
+          const approved=await review({rows:[
+            ["اسم الحالة السابق",item.displayName],["اسم الحالة الجديد",newName],
+            ["الرمز السابق",item.shortSymbol],["الرمز الجديد",newSymbol],
+            ["اللون السابق",item.color],["اللون الجديد",newColor],
+            ["السجلات السابقة","لن يُحذف تاريخ الحالات المحفوظة."]
+          ]},{title:"معاينة تعديل الحالة",confirmLabel:"تأكيد تعديل الحالة"});
+          if(!approved)return;
+          try{await api().invoke("UpdateAttendanceStatus",{
+            statusId:item.statusId,name:newName,symbol:newSymbol,color:newColor,
+            expectedRevision:item.version,operationId:makeOperationId()});await statuses();}
+          catch(e){void dialogs.alert(e.message);}
+        }));
+        td.appendChild(btn("تعطيل",async()=>{
+          if(!await dialogs.confirm("تعطيل الحالة «"+item.displayName+"» دون حذف سجلات تحضيرها التاريخية؟"))return;
+          try{await api().invoke("DeactivateOrDeleteStatus",{
+            statusId:item.statusId,expectedRevision:item.version,operationId:makeOperationId()});await statuses();}
+          catch(e){void dialogs.alert(e.message);}
+        },"btn btn-danger"));
+        tr.appendChild(td);t.body.appendChild(tr);
+      }
+      empty(t.body,4,"لا توجد حالات نشطة.");
+      output.append(btn("+ إضافة حالة جديدة",()=>statusModal.open(),"btn btn-primary"),t.wrap,frm);
+    }catch(e){errors(output,e);}
+  }
+
+  async function persons(sourceRoute=null) {
+    const page=start("الإدارة / إدارة القوة / تعديل الأسماء"), box=card("الأفراد المسجلون");
+    // A simple number beside the screen title; keep the old table/pager layout.
+    const activeTotalNumber=node("span","admin-force-inline-count","…");
+    activeTotalNumber.setAttribute("aria-label","إجمالي القوة النشطة");
+    page.querySelector(".section-title")?.appendChild(activeTotalNumber);
+    const creation=node("details","admin-create-person card");
+    creation.setAttribute("aria-label","إضافة فرد جديد ومراجعة المطابقة مع الأرشيف");
+    creation.addEventListener("keydown",event=>{
+      if(event.key==="Escape"&&creation.open){
+        event.preventDefault?.();creation.open=false;
+      }
+    });
+    const toggle=node("summary","btn btn-primary","إضافة فرد");
+    const creationFields=node("div","admin-site-form");
+    const nameField=field("الاسم الكامل"),
+      numberField=field("الرقم (ع) — أربع خانات فأكثر");
+    const selectSite=node("select","form-control");
+    selectSite.setAttribute("aria-label","الموقع المسجل");
+    const fallback=node("option","","غير محدد");
+    fallback.value="SITE-UNSPECIFIED";
+    selectSite.appendChild(fallback);
+    selectSite.value="SITE-UNSPECIFIED";
+    const siteField={input:selectSite,wrap:node("label","admin-input")};
+    siteField.wrap.append(node("span","","اختر الموقع من المواقع المسجلة"),selectSite);
+    numberField.input.inputMode="numeric";
+    numberField.input.minLength=4;
+    numberField.input.maxLength=70;
+    // Recognize Arabic-Indic and Persian numerals automatically while typing/pasting.
+    numberField.input.addEventListener("input",()=>{
+      numberField.input.value=numberField.input.value.replace(/[٠-٩۰-۹]/g,c=>
+        String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
+    });
+    const addMessage=node("div","admin-note");
+    addMessage.setAttribute("aria-live","polite");
+    const inputHint=node("p","admin-form-hint");
+    inputHint.setAttribute("aria-live","polite");
+    const inspectPersonInputs=()=>{
+      const personName=nameField.input.value.trim(),number=numberField.input.value.trim();
+      const invalidName=personName.length>0&&personName.length<3;
+      const invalidNumber=number.length>0&&!/^[0-9]{4,70}$/.test(number);
+      nameField.input.setAttribute("aria-invalid",String(invalidName));
+      numberField.input.setAttribute("aria-invalid",String(invalidNumber));
+      inputHint.textContent=invalidName?"الاسم يجب أن يحتوي على ثلاثة أحرف على الأقل.":
+        invalidNumber?"الرقم (ع) يتكون من 4 إلى 70 رقماً.":"";
+    };
+    nameField.input.addEventListener("input",inspectPersonInputs);
+    numberField.input.addEventListener("input",inspectPersonInputs);
+    let lastPersonPayload=null,lastPersonOperation=null;
+    const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
+      const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
+        siteId=siteField.input.value||"SITE-UNSPECIFIED",
+        siteName=Array.from(selectSite.children).find(option=>option.value===siteId)?.textContent||"غير محدد";
+      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || !siteId)
+        return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
+      const canonicalNumber=number.replace(/[٠-٩۰-۹]/g,c=>
+        String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
+      const identityKey=()=>JSON.stringify([nameField.input.value.trim(),
+        numberField.input.value.trim().replace(/[٠-٩۰-۹]/g,c=>
+          String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0))),
+        siteField.input.value||"SITE-UNSPECIFIED"]);
+      const proposed=JSON.stringify([name,canonicalNumber,siteId]);
+      const unchanged=()=>identityKey()===proposed;
+      const resetForm=async(message)=>{
+        nameField.input.value="";numberField.input.value="";
+        selectSite.value="SITE-UNSPECIFIED";
+        lastPersonPayload=null;lastPersonOperation=null;
+        addMessage.replaceChildren(node("p","settings-success",message));
+        await load();
+      };
+      saveNew.disabled=true;
+      addMessage.replaceChildren(warning("جارٍ فحص تطابق الاسم والرقم (ع) مع الأرشيف..."));
+      try{
+        const scanned=(await api().invoke("PreviewArchivedIdentity",{
+          visibleName:name,serviceNumberA:canonicalNumber,siteId
+        })).data||{};
+        if(!unchanged())throw Error("تغيرت بيانات الفرد أثناء فحص الأرشيف؛ أعد التحقق.");
+        const candidates=Array.isArray(scanned.candidates)?scanned.candidates:[];
+        if(!candidates.length){
+          if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+canonicalNumber+
+            "» في الموقع «"+siteName+"»؟")){addMessage.replaceChildren();return;}
+          const createKey=proposed;
+          if(lastPersonPayload!==createKey){
+            lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
+          }
+          const response=await api().invoke("CreatePerson",{visibleName:name,
+            serviceNumberA:canonicalNumber,siteId,operationId:lastPersonOperation});
+          if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
+          await resetForm("تمت إضافة الفرد بنجاح. رقم (ع): "+canonicalNumber+" — الموقع: "+siteName);
+          return;
+        }
+        if(!scanned.previewToken)throw Error("تعذر توثيق معاينة هوية الأرشيف.");
+        const review=card("تحقق من هوية محفوظة في الأرشيف");
+        review.appendChild(warning("يوجد تطابق محتمل؛ راجع كل مرشح وحدد هل الفرد نفسه عاد للخدمة أم شخص مختلف. لن تُنشأ هوية جديدة تلقائياً."));
+        const t=table(["الاسم المؤرشف","الرقم (ع)","الموقع السابق","نوع الخروج","تاريخ الخروج","سبب التطابق","قرار الهوية"]);
+        const submitted=async(fn)=>{
+          if(!unchanged())return errors(addMessage,new Error("تغيرت بيانات الفرد؛ أعد التحقق قبل الحفظ."));
+          saveNew.disabled=true;
+          try{await fn();}catch(e){errors(addMessage,e);}
+          finally{saveNew.disabled=false;}
+        };
+        for(const candidate of candidates){
+          const tr=node("tr");
+          for(const value of [candidate.name,candidate.serviceNumberA,
+            candidate.previousSiteName||"غير موثق",candidate.exitType,candidate.exitDate,
+            candidate.numberMatch?"تطابق الرقم (ع)":"تطابق الاسم فقط"])
+            tr.appendChild(node("td","",value));
+          const action=node("td","admin-row-buttons");
+          action.appendChild(btn("عاد نفس الفرد",()=>submitted(async()=>{
+            const agreement="أؤكد أن «"+name+"» (ع: "+canonicalNumber+
+              ") هو الشخص نفسه المسجل سابقاً باسم «"+candidate.name+
+              "» (ع: "+candidate.serviceNumberA+")؛ الموقع السابق: "+
+              (candidate.previousSiteName||"غير موثق")+"؛ خروج: "+candidate.exitType+
+              " بتاريخ "+candidate.exitDate+". ستُحفظ هويته وتاريخه القديمان. متابعة العودة إلى «"+siteName+"»؟";
+            if(!await dialogs.confirm(agreement))return;
+            const result=await api().invoke("CommitArchivedReturn",{
+              previewToken:scanned.previewToken,personId:candidate.personId,
+              decision:"same",operationId:makeOperationId()
+            });
+            if(!result.data?.returned)throw Error("لم يتم توثيق عودة الفرد المؤرشف.");
+            await resetForm("أُعيد تفعيل الفرد بالمعرف الأصلي، وحُفظ تاريخ خروجه وعودته. رقم (ع): "+canonicalNumber);
+          })));
+          tr.appendChild(action);t.body.appendChild(tr);
+        }
+        review.appendChild(t.wrap);
+        const contested=candidates.some(x=>x.numberMatch);
+        const dismissedNumberCandidates=candidates.filter(x=>x.numberMatch &&
+          x.organizationalStatus===3 && x.exitType==="فصل");
+        const numberCandidates=candidates.filter(x=>x.numberMatch);
+        if(contested && numberCandidates.length===1 && dismissedNumberCandidates.length===1){
+          const former=dismissedNumberCandidates[0];
+          review.appendChild(btn("إضافة فرد جديد مستقل بهذا الرقم (ع)",()=>submitted(async()=>{
+            const detail="الرقم (ع) «"+canonicalNumber+"» يخص المفصول «"+former.name+
+              "» (الموقع السابق "+(former.previousSiteName||"غير موثق")+
+              "، تاريخ الفصل "+former.exitDate+").";
+            const confirmed=await dialogs.confirm(detail+" هل تؤكد أن «"+name+
+              "» شخص آخر مختلف تماماً؟ سيُنشأ له سجل جديد من الصفر ومعرّف داخلي مستقل؛ "+
+              "لن يُنقل إليه أي تحضير أو حركة أو تاريخ من المفصول، "+
+              "وستبقى الأدلة القديمة محفوظة في الأرشيف دون نسبتها إليه.");
+            if(!confirmed)return;
+            const response=await api().invoke("CreatePerson",{
+              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              identityResolutionToken:scanned.previewToken,
+              identityDecision:"replaceDismissed",dismissedPersonId:former.personId,
+              operationId:makeOperationId()
+            });
+            if(!response.data?.personId || response.data.personId===former.personId)
+              throw Error("لم يتم تأكيد إنشاء هوية مستقلة جديدة.");
+            await resetForm("أُنشئ للفرد الجديد سجل مستقل من الصفر دون سجل المفصول السابق.");
+          }),"btn btn-primary"));
+        }
+        if(!contested){
+          review.appendChild(btn("فرد آخر مختلف عن جميع المرشحين",()=>submitted(async()=>{
+            const detail=candidates.map(x=>x.name+" (ع: "+x.serviceNumberA+
+              "، الموقع السابق: "+(x.previousSiteName||"غير موثق")+
+              "، "+x.exitType+" "+x.exitDate+")").join("؛ ");
+            if(!await dialogs.confirm("تأكيد نهائي: «"+name+"» شخص مختلف عن جميع الهويات المؤرشفة التالية: "+
+              detail+". إنشاء هوية جديدة مستقلة بهذا الرقم المختلف؟"))return;
+            const response=await api().invoke("CreatePerson",{
+              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              identityResolutionToken:scanned.previewToken,identityDecision:"different",
+              operationId:makeOperationId()
+            });
+            if(!response.data?.personId)throw Error("لم يتم تأكيد الهوية المستقلة الجديدة.");
+            await resetForm("أُنشئت هوية مستقلة بعد توثيق أنها مختلفة عن مرشحي الأرشيف.");
+          }),"btn btn-outline"));
+        }else if(dismissedNumberCandidates.length!==1 || numberCandidates.length!==1){
+          review.appendChild(warning("الرقم (ع) يتطابق مع سجل غير مؤهل للاستبدال أو عدة سجلات؛ يلزم تسوية التعارض. لا يمكن تجاوز سجل المنقول خارجياً."));
+        }
+        addMessage.replaceChildren(review);
+      }catch(e){errors(addMessage,e);}
+      finally{saveNew.disabled=false;}
+    },"btn btn-primary");
+    creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
+    const cancelCreation=btn("إلغاء",async()=>{
+      if((nameField.input.value.trim()||numberField.input.value.trim()) &&
+        !await dialogs.confirm("إلغاء بيانات الفرد قبل الحفظ؟"))return;
+      nameField.input.value="";numberField.input.value="";
+      selectSite.value="SITE-UNSPECIFIED";
+      creation.open=false;
+      addMessage.replaceChildren();
+    });
+    const creationActions=node("div","admin-person-actions");
+    creationActions.append(saveNew,cancelCreation);
+    creation.append(toggle,creationFields,inputHint,creationActions,addMessage);
+    page.append(creation,box);
+    // screen_070 is an embedded Add Person action owned by this ONE
+    // personnel editor. Deep-linking to it must open the REAL creation form,
+    // rather than silently returning to the surrounding list.
+    if(sourceRoute==="AddPerson"){
+      creation.open=true;
+      nameField.input.focus?.();
+    }
+    // Selection is a temporary UI draft; the C# preview must validate the
+    // entire chosen set again before any archival write occurs.
+    const selectedRemoval=new Map();
+    const canRemove=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
+    const filter=node("select","form-select");
+    filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
+    const go=btn("بحث",()=>{state.term=search.input.value.trim();state.page=1;load();},"btn btn-primary");
+    controls.append(search.wrap,filter,go);
+    if(canRemove){
+      const batch=btn("إزالة المحددين (0)",()=>archiveSelected(),"btn btn-outline");
+      batch.disabled=true;
+      const refreshBatch=()=>{
+        batch.textContent="إزالة المحددين ("+selectedRemoval.size+")";
+        batch.disabled=selectedRemoval.size===0;
+      };
+      selectedRemoval.refresh=refreshBatch;
+      controls.appendChild(batch);
+    }
+    box.appendChild(controls);
+    const content=node("div","admin-note");box.appendChild(content);
+    try {
+      const response=await api().invoke("QuerySites",{});
+      for(const site of response.data||[]){
+        if(!site.active)continue;
+        const option=node("option","",site.name);option.value=site.siteId;
+        filter.appendChild(option);
+        if(site.siteId!=="SITE-UNSPECIFIED"){
+          const choice=node("option","",site.name);choice.value=site.siteId;
+          selectSite.appendChild(choice);
+        }
+      }
+      filter.value=state.siteId;
+      filter.addEventListener("change",()=>{state.siteId=filter.value;state.page=1;load();});
+    }catch(e){errors(content,e);}
+    async function load(){
+      const token=++currentRequest;
+      content.replaceChildren(warning("جارٍ تحميل الأفراد..."));
+      try {
+        const filterQuery={term:state.term,siteId:state.siteId,organizationalStatus:1,
+          page:state.page,pageSize:100};
+        const allQuery={term:"",siteId:"",organizationalStatus:1,page:1,pageSize:1};
+        const [response,all]=await Promise.all([
+          api().invoke("QueryPersons",filterQuery),
+          (!state.term&&!state.siteId)
+            ? Promise.resolve(null)
+            : api().invoke("QueryPersons",allQuery)
+        ]);
+        if(token!==currentRequest)return;
+        const data=response.data||{};
+        const activeTotal=all?.data?.total??data.total??0;
+        activeTotalNumber.textContent="("+activeTotal+")";
+        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
+        const customHeadings=window.AltamamRosterColumns?.headings(customColumns)||[];
+        const t=table(canRemove
+          ?["تحديد","الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]
+          :["الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]);
+        for(const person of data.items||[]){
+          const row=node("tr");
+          if(canRemove){
+            const cell=node("td"),check=node("input");
+            check.type="checkbox";check.checked=selectedRemoval.has(person.personId);
+            check.setAttribute("aria-label","تحديد "+person.displayName+" للإزالة");
+            check.addEventListener("change",()=>{
+              if(check.checked){
+                if(selectedRemoval.size>=100&&!selectedRemoval.has(person.personId)){
+                  check.checked=false;
+                  void dialogs.alert("الحد الأقصى للإزالة الجماعية 100 فرد.");
+                  return;
+                }
+                selectedRemoval.set(person.personId,person);
+              }else selectedRemoval.delete(person.personId);
+              selectedRemoval.refresh();
+            });
+            cell.appendChild(check);row.appendChild(cell);
+          }
+          for(const value of [person.serviceNumberA,person.displayName,person.siteName])
+            row.appendChild(node("td","",value));
+          for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
+            row.appendChild(node("td","roster-custom-cell",value||"—"));
+          const actions=node("td","admin-row-buttons");
+          actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
+          if(customColumns.length)
+            actions.appendChild(btn("تعديل بيانات الأعمدة",
+              ()=>editCustomValues(person,customColumns)));
+          // The native manifest independently restricts ArchivePersons to
+          // GeneralAdministration / OrdinaryAdministration. Never show this
+          // destructive roster-membership operation to Supervisors.
+          if(["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))
+            actions.appendChild(btn("إزالة من القوة",()=>archivePerson(person)));
+          row.appendChild(actions);t.body.appendChild(row);
+        }
+        empty(t.body,(canRemove?5:4)+customColumns.length,"لا توجد أسماء مطابقة.");
+        const pager=node("div","functional-pager");
+        const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
+        prev.disabled=state.page<=1;next.disabled=!data.hasNext;
+        pager.append(node("span","","إجمالي "+(data.total||0)),prev,next);
+        content.replaceChildren(t.wrap,pager);
+      }catch(e){if(token===currentRequest)errors(content,e);}
+    }
+    async function archiveSelected() {
+      if(!canRemove||selectedRemoval.size===0)return;
+      const persons=Array.from(selectedRemoval.values());
+      const ids=persons.map(p=>p.personId);
+      const now=new Date();
+      const effectiveLocalDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+        String(now.getDate()).padStart(2,"0")].join("-");
+      try {
+        const preview=(await api().invoke("PreviewArchivePersons",{
+          personIds:ids,effectiveLocalDate
+        })).data||{};
+        const candidates=preview.candidates||[];
+        if(!preview.previewToken||!Number.isSafeInteger(preview.baseRevision)||
+           candidates.length!==ids.length||candidates.some(p=>p.blocker)||
+           candidates.some((p,i)=>p.personId!==ids[i]))
+          throw Error("تغيرت قائمة المحددين أو توجد حالة تمنع الإزالة؛ لم يُحفظ شيء.");
+        const review=window.AltamamDialog?.detailsReview;
+        if(typeof review!=="function")
+          throw Error("نافذة المعاينة الجماعية غير متاحة؛ لم يحدث أي تعديل.");
+        const rows=[["عدد الأفراد",String(candidates.length)],
+          ["التاريخ",effectiveLocalDate],
+          ["الأثر","إزالة من القوة الفعالة فقط، مع الاحتفاظ بجميع السجلات التاريخية"]];
+        for(const candidate of candidates)
+          rows.push([candidate.serviceNumberA,candidate.displayName+
+            " — "+candidate.currentSiteName+" — أيام التمام: "+candidate.attendanceDays]);
+        const approved=await review({rows},{
+          title:"معاينة الإزالة الجماعية",
+          message:"لن تُنفذ العملية إلا إذا كانت جميع الهويات والإصدارات مطابقة للمعاينة.",
+          confirmLabel:"تأكيد إزالة "+ids.length+" فرد من القوة",
+          size:"lg"
+        });
+        if(!approved)return;
+        const proposed=await dialogs.prompt("اكتب سبب الإزالة الجماعية من القوة",
+          "إخراج من القوة الفعالة بقرار إداري موثق");
+        if(proposed===null)return;
+        const reason=proposed.trim();
+        if(reason.length<5)throw Error("سبب الإزالة مطلوب بخمسة أحرف على الأقل.");
+        const result=(await api().invoke("ArchivePersons",{
+          personIds:ids,effectiveLocalDate,previewToken:preview.previewToken,
+          baseRevision:preview.baseRevision,expectedRevision:preview.baseRevision,
+          reason,operationId:makeOperationId()
+        })).data||{};
+        const saved=result.archivedPersonIds;
+        if(!Array.isArray(saved)||saved.length!==ids.length||
+           ids.some(id=>!saved.includes(id)))
+          throw Error("لم يؤكد الخادم إتمام إزالة جميع الأفراد؛ تحقق من سجل العمليات.");
+        selectedRemoval.clear();selectedRemoval.refresh();
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذرت الإزالة الجماعية.");}
+    }
+    async function archivePerson(person) {
+      if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))
+        return;
+      const now=new Date();
+      const effectiveLocalDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+        String(now.getDate()).padStart(2,"0")].join("-");
+      try {
+        const result=await api().invoke("PreviewArchivePersons",{
+          personIds:[person.personId],effectiveLocalDate
+        });
+        const preview=result.data||{};
+        if(!preview.previewToken||!Number.isSafeInteger(preview.baseRevision)||
+           !Array.isArray(preview.candidates)||preview.candidates.length!==1)
+          throw Error("لم تصل معاينة موثقة لإزالة الفرد من القوة.");
+        const candidate=preview.candidates[0];
+        if(candidate.personId!==person.personId || candidate.blocker)
+          throw Error(candidate.blocker||"تغيرت هوية الفرد؛ أعد البحث قبل الأرشفة.");
+        const review=window.AltamamDialog?.detailsReview;
+        if(typeof review!=="function")
+          throw Error("نافذة معاينة الإزالة غير متاحة؛ لم يحدث أي تعديل.");
+        const approved=await review({rows:[
+          ["الاسم",candidate.displayName],
+          ["الرقم (ع)",candidate.serviceNumberA],
+          ["الموقع الحالي",candidate.currentSiteName],
+          ["أيام التمام التاريخية",candidate.attendanceDays],
+          ["تاريخ سريان الإزالة",effectiveLocalDate],
+          ["الأثر","إخراج من القوة الفعالة فقط، مع حفظ التاريخ وتعطيل أي حساب مرتبط"]
+        ]},{title:"معاينة إزالة فرد من القوة",
+          message:"تحقق من الفرد المحدد؛ لن تُحذف تحضيراته أو هويته أو سجل عملياته.",
+          confirmLabel:"تأكيد الإزالة من القوة"});
+        if(!approved)return;
+        const prompted=await dialogs.prompt("اكتب سبب الإزالة من القوة",
+          "إخراج من القوة الفعالة بقرار إداري موثق");
+        if(prompted===null)return;
+        const reason=prompted.trim();
+        if(reason.length<5)throw Error("سبب الإزالة مطلوب بخمسة أحرف على الأقل.");
+        const committed=await api().invoke("ArchivePersons",{
+          personIds:[person.personId],effectiveLocalDate,
+          previewToken:preview.previewToken,
+          baseRevision:preview.baseRevision,
+          expectedRevision:preview.baseRevision,reason,operationId:makeOperationId()
+        });
+        if(!Array.isArray(committed.data?.archivedPersonIds)||
+           !committed.data.archivedPersonIds.includes(person.personId))
+          throw Error("لم يؤكد الخادم إزالة الفرد من القوة.");
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذر أرشفة الفرد.");}
+    }
+    async function editCustomValues(person,columns) {
+      const showForm=window.AltamamDialog?.form;
+      const review=window.AltamamDialog?.detailsReview;
+      if(typeof showForm!=="function"||typeof review!=="function"){
+        await dialogs.alert("نموذج تعديل الأعمدة أو نافذة التأكيد غير متاحة.");
+        return;
+      }
+      const fields=columns.map(col=>({
+        name:col.columnId,label:col.caption+
+          (col.fieldType===2?" (رقم)":col.fieldType===3?" (YYYY-MM-DD)":
+            col.fieldType===4?" (نعم أو لا)":""),
+        type:"text",value:String(person.customFields?.[col.columnId]??""),
+        required:false,maxLength:250
+      }));
+      const values=await showForm(fields,{title:"تعديل بيانات الأعمدة الإضافية",
+        confirmLabel:"معاينة القيم",size:"lg"});
+      if(values===null)return;
+      const modified=columns.filter(col=>
+        String(person.customFields?.[col.columnId]??"")!==String(values[col.columnId]??"").trim());
+      if(!modified.length){
+        await dialogs.alert("لم تتغير أي قيمة؛ لا توجد تعديلات لحفظها.");
+        return;
+      }
+      const details=modified.map(col=>[col.caption,
+        String(person.customFields?.[col.columnId]??"")||"—",
+        String(values[col.columnId]??"").trim()||"—"]);
+      const approved=await review({
+        rows:[["الفرد",person.displayName],["الرقم (ع)",person.serviceNumberA],
+          ["عدد الأعمدة المتغيرة",modified.length]],
+        columns:["العمود","القيمة السابقة","القيمة الجديدة"],items:details
+      },{
+        title:"تأكيد تعديل بيانات الأعمدة",
+        message:"سيحفظ البرنامج القيم السابقة والجديدة في سجل التدقيق دون مساس بالتحضير.",
+        confirmLabel:"تأكيد حفظ التغييرات"
+      });
+      if(!approved)return;
+      const changed={};
+      for(const col of modified)changed[col.columnId]=String(values[col.columnId]??"").trim();
+      try{
+        const result=await api().invoke("UpdateCustomFieldValues",{
+          personId:person.personId,expectedRevision:person.revision,
+          values:changed,operationId:makeOperationId()
+        });
+        if(!result.data?.changedCount)throw Error("لم يؤكد الخادم حفظ قيم الأعمدة.");
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذر تحديث قيم الأعمدة.");}
+    }
+
+    async function editPerson(person) {
+      const showForm=window.AltamamDialog?.form;
+      if(typeof showForm!=="function"){
+        await dialogs.alert("نافذة تعديل بيانات الفرد غير متاحة؛ لم تُحفظ أي تغييرات.");
+        return;
+      }
+      const changes=await showForm([
+        {name:"visibleName",label:"الاسم الكامل",type:"text",
+          value:person.displayName,required:true,minLength:3,maxLength:200},
+        {name:"serviceNumberA",label:"الرقم (ع)",type:"text",
+          value:person.serviceNumberA,required:true,minLength:4,maxLength:70}
+      ],{title:"تعديل بيانات الفرد",confirmLabel:"معاينة التعديل",size:"md"});
+      if(changes===null)return;
+      const visibleName=String(changes.visibleName||"").trim();
+      const serviceNumberA=String(changes.serviceNumberA||"").trim();
+      if(visibleName.length<3||!/^[0-9٠-٩۰-۹]{4,70}$/.test(serviceNumberA)){
+        await dialogs.alert("أدخل الاسم كاملاً والرقم (ع) من 4 إلى 70 رقماً.");
+        return;
+      }
+      const now=new Date();
+      const businessDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+        String(now.getDate()).padStart(2,"0")].join("-");
+      const payload={personId:person.personId,visibleName,serviceNumberA,
+        baseRevision:person.revision,effectiveLocalDate:businessDate};
+      try {
+        const preview=(await api().invoke("PreviewPersonIdentityUpdate",payload)).data;
+        const review=window.AltamamDialog?.detailsReview;
+        const approved=typeof review==="function"
+          ?await review({rows:[
+            ["الاسم السابق",preview.oldName],
+            ["الاسم الجديد",preview.newName],
+            ["الرقم (ع) السابق",preview.oldServiceNumberA],
+            ["الرقم (ع) الجديد",preview.newServiceNumberA],
+            ["تاريخ النفاذ",businessDate],
+            ["حفظ السجل التاريخي","لا يتغير معرّف الفرد أو تحضيراته السابقة."]
+          ]},{title:"معاينة تعديل هوية الفرد",
+            message:"راجع البيانات القديمة والجديدة قبل اعتماد التغيير.",
+            confirmLabel:"تأكيد تعديل الاسم والرقم"})
+          :await dialogs.confirm("اعتماد تعديل «"+preview.oldName+
+            "» (ع: "+preview.oldServiceNumberA+") إلى «"+preview.newName+
+            "» (ع: "+preview.newServiceNumberA+")؟");
+        if(!approved)return;
+        await api().invoke("UpdatePersonIdentity",{...payload,
+          expectedRevision:person.revision,reason:"تعديل من شاشة إدارة القوة",
+          operationId:makeOperationId()});
+        await load();
+      }catch(e){void dialogs.alert(e.message);}
+    }
+    await load();
+  }
+
+  async function audit(openHistoryRoute=false) {
+    const page=start("الإدارة / سجل العمليات"),box=card("سجل العمليات المحفوظ");
+    box.classList.add("audit-log-card");
+    page.appendChild(box);
+    const general=field("بحث شامل في سجل العمليات","","search");
+    general.input.placeholder="بحث بالاسم أو الرقم (ع) أو العملية أو الوصف";
+    const actor=field("من قام بالتنفيذ"),targetField=field("المنفذ عليه"),
+      op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
+      endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
+      results=node("div","admin-note");
+    const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    const canViewAuditHistory=canEditAudit;
+    let openDetail=null;
+    let openOverlay=null,detailOpener=null,detailRequest=0;
+    const closeAuditDetail=()=>{
+      detailRequest++;
+      openOverlay?.remove?.();
+      openOverlay=null;openDetail=null;
+      const previous=detailOpener;detailOpener=null;
+      previous?.focus?.();
+    };
+    const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
+    general.input.addEventListener("keydown",event=>{
+      if(event.key==="Enter"){event.preventDefault();state.page=1;void load();}
+    });
+    controls.append(general.wrap,actor.wrap,targetField.wrap,op.wrap,startDate.wrap,endDate.wrap,search);
+    const showHidden=node("input");
+    if(canEditAudit){
+      showHidden.type="checkbox";
+      const toggle=node("label","admin-input");
+      toggle.append(showHidden,node("span","","إظهار القيود المخفية (للمسؤولين فقط)"));
+      showHidden.addEventListener("change",()=>{state.page=1;load();});
+      controls.appendChild(toggle);
+    }
+    const historyPanel=node("div","admin-note");
+    historyPanel.setAttribute("aria-label","القيود المعدلة والمحذوفة");
+    const historyContent=node("div","admin-note");
+    let historySerial=0;
+    // Keep the close control mounted; only the content is replaced on paging.
+    // Every dismissal invalidates in-flight history requests before they resolve.
+    const historyModal=operationalModal(historyPanel,"modal-xl",true,true,()=>{
+      historySerial++;
+      historyContent.replaceChildren();
+    });
+    historyPanel.appendChild(historyContent);
+    if(canViewAuditHistory){
+      const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
+        historyModal.open();
+        void loadEdits(1);
+      },"btn btn-outline");
+      controls.append(historyButton);
+    }
+    box.append(controls,results,historyPanel);
+    // A named history route opens the existing permitted read-only review.
+    // The mutation controls in individual audit details remain GA-only.
+    if(openHistoryRoute && canViewAuditHistory){
+      historyModal.open();
+      void loadEdits(1);
+    }
+    async function loadEdits(pageNumber) {
+      const request=++historySerial;
+      historyContent.replaceChildren(warning("جارٍ قراءة القيود المعدلة والمحذوفة..."));
+      try{
+        const reply=await api().invoke("QueryAuditPresentationChanges",
+          {page:pageNumber,pageSize:50});
+        if(request!==historySerial||historyPanel.hidden||state.active!=="log")return;
+        const data=reply.data||{};
+        const revised=table(["رقم القيد","الإصدار","العملية","الوصف قبل التعديل",
+          "الوصف بعد التعديل","الحالة السابقة","الحالة الجديدة","السبب",
+          "المنفّذ وقت الحدث","التاريخ"]);
+        revised.wrap.classList.add("audit-history-table-wrap");
+        revised.wrap.firstChild.classList.add("audit-history-table");
+        for(const item of data.items||[])
+          addRow(revised.body,[item.auditEventId,item.overlayVersion,
+            item.operationCode,item.beforeState?.displayDescription||item.rawDescription,
+            item.afterState?.displayDescription||item.correctedDescription||item.rawDescription,
+            item.beforeState?.isTombstoned?"مخفي":"ظاهر",
+            item.afterState?.isTombstoned?"مخفي":"ظاهر",
+            item.reason,item.editedByDisplay,item.editedAtUtc],
+            "عرض القيد الأصلي وكل التعديلات",
+            ()=>showAuditDetails(item.auditEventId));
+        empty(revised.body,10,"لا توجد قيود معدلة أو مخفية.");
+        const nav=node("div","functional-pager");
+        const prev=btn("السابق",()=>void loadEdits(pageNumber-1)),
+          next=btn("التالي",()=>void loadEdits(pageNumber+1));
+        prev.disabled=pageNumber<=1;
+        next.disabled=(data.items||[]).length<50;
+        nav.append(node("span","","صفحة "+pageNumber),prev,next);
+        historyContent.replaceChildren(revised.wrap,nav);
+      }catch(e){
+        if(request===historySerial&&!historyPanel.hidden&&state.active==="log")
+          errors(historyContent,e);
+      }
+    }
+    // Table presentation only: SQLCipher and full historical detail remain unchanged.
+    function compactAuditUtc(value) {
+      if(!value)return "—";
+      const instant=new Date(value);
+      return Number.isNaN(instant.getTime())?String(value):
+        instant.toISOString().slice(0,16).replace("T"," ")+" UTC";
+    }
+    async function load() {
+      const token=++currentRequest;
+      try {
+        const response=await api().invoke("QueryAuditLog",{
+          term:general.input.value.trim(),actor:actor.input.value,target:targetField.input.value,
+          operation:op.input.value,fromDate:startDate.input.value,toDate:endDate.input.value,
+          includeTombstoned:canEditAudit&&showHidden.checked,
+          page:state.page,pageSize:100});
+        if(token!==currentRequest)return;
+        const data=response.data||{},t=table(["م","العملية","الهدف",
+          "المنفذ وقت الحدث","التاريخ","السبب","النتيجة","الوصف","التفاصيل"]);
+        t.wrap.classList.add("audit-log-table-wrap");
+        t.wrap.firstChild.classList.add("audit-log-table");
+        t.wrap.firstChild.setAttribute("aria-label","سجل العمليات المحفوظ");
+        (data.items||[]).forEach(item=>addRow(t.body,[
+          item.sequence,item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
+          item.targetDisplay,item.actorDisplay||item.actorUsername,
+          compactAuditUtc(item.executedAtUtc),item.reason||"—",
+          item.outcome||"تم الاعتماد",item.description||item.rawDescription
+        ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
+        empty(t.body,9,"لا توجد عمليات مطابقة.");
+        const pager=node("div","functional-pager");
+        const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
+        prev.disabled=state.page<=1;next.disabled=!data.hasNext;
+        pager.append(node("span","","إجمالي "+(data.total||0)),prev,next);
+        results.replaceChildren(t.wrap,pager);
+      }catch(e){if(token===currentRequest)errors(results,e);}
+    }
+    async function showAuditDetails(auditEventId) {
+      closeAuditDetail();
+      const request=++detailRequest;
+      detailOpener=document.activeElement||null;
+      const detail=card("تفاصيل القيد وسلامة السجل");
+      openDetail=detail;
+      detail.classList.add("auto-attendance-dialog");
+      const overlay=node("div","auto-attendance-overlay audit-detail-overlay");
+      openOverlay=overlay;
+      overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");
+      overlay.setAttribute("aria-label","تفاصيل القيد");
+      overlay.appendChild(detail);
+      results.after(overlay);
+      const isCurrent=()=>request===detailRequest&&openOverlay===overlay&&state.active==="log";
+      overlay.addEventListener("keydown",event=>{
+        if(event.key==="Escape"){
+          event.preventDefault?.();closeAuditDetail();return;
+        }
+        if(event.key!=="Tab")return;
+        const controls=Array.from(detail.querySelectorAll?.(
+          'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+          .filter(control=>!control.hidden);
+        if(controls.length<2)return;
+        const first=controls[0],last=controls[controls.length-1];
+        if(event.shiftKey&&document.activeElement===first){
+          event.preventDefault?.();last.focus?.();
+        }else if(!event.shiftKey&&document.activeElement===last){
+          event.preventDefault?.();first.focus?.();
+        }
+      });
+      const content=node("div","admin-note");
+      const close=btn("إغلاق التفاصيل",closeAuditDetail);
+      detail.append(content,close);
+      close.focus?.();
+      content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
+      try {
+        const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
+        if(!isCurrent())return;
+        const item=reply.data||{};
+        const facts=node("div","settings-properties audit-preview-facts");
+        for(const [label,value] of [
+          ["العملية",item.operationArabicName],
+          ["المستهدف",item.targetDisplay],
+          ["اسم المستخدم",item.actorUsername],
+          ["هوية المنفذ وقت الحدث",item.actorDisplay||item.actorUsername],
+          ["الاسم الكامل المحفوظ",item.actorRosterFullName],
+          ["القيمة السابقة",item.oldValue==null?"—":JSON.stringify(item.oldValue)],
+          ["القيمة الجديدة",item.newValue==null?"—":JSON.stringify(item.newValue)],
+          ["سبب العملية",item.reason||"—"],
+          ["وقت التنفيذ",item.executedAtUtc],
+          ["الوصف الأصلي",item.rawDescription],
+          ["الوصف الظاهر الحالي",item.overlays?.length
+            ? (item.overlays[item.overlays.length-1].correctedDescription||
+               (item.overlays[item.overlays.length-1].isTombstoned?"مخفي":item.rawDescription))
+            : item.rawDescription],
+          ["سلامة تسلسل السجل",item.chainValid?"موثوق":"تعذر إثبات سلامة التسلسل"]
+        ]){
+          const line=node("div","settings-property");
+          line.append(node("span","settings-property-label",label),
+            node("strong","settings-property-value",value||"—"));
+          facts.appendChild(line);
+        }
+        content.replaceChildren(facts);
+        const trust=node("p","status-pill audit-chain-badge",
+          item.chainValid?"موثوق ✓ — سلسلة السجل سليمة":
+          "تنبيه: تعذر إثبات سلامة سلسلة السجل");
+        trust.classList.add(item.chainValid?"audit-chain-ok":"audit-chain-warning");
+        content.appendChild(trust);
+        const differences=node("div","audit-diff-grid");
+        for(const [label,value] of [["القيمة السابقة",item.oldValue],
+          ["القيمة الجديدة",item.newValue]]){
+          const section=node("section","audit-diff-card");
+          section.appendChild(node("h3","section-title",label));
+          const body=node("pre","audit-json");
+          body.textContent=value==null?"—":JSON.stringify(value,null,2);
+          section.appendChild(body);differences.appendChild(section);
+        }
+        content.appendChild(differences);
+        const history=node("div","settings-properties");
+        const overlays=Array.isArray(item.overlays)?item.overlays:[];
+        const latest=overlays.at(-1);
+        const revision=Number(latest?.overlayVersion)||0;
+        if(overlays.length){
+          history.appendChild(node("h3","section-title","تاريخ التعديلات والإخفاء (لا يُحذف)"));
+          for(const entry of overlays){
+            history.appendChild(node("p","section-description",
+              "الإصدار "+entry.overlayVersion+" — "+
+              (entry.isTombstoned?"إخفاء":"تعديل ظاهر")+
+              " — "+entry.editedByDisplay+" — "+entry.editedAtUtc+
+              " — السبب: "+entry.reason+
+              " — قبل: "+(entry.beforeState?.isTombstoned?"مخفي":"ظاهر")+
+              " ("+(entry.beforeState?.displayDescription||item.rawDescription)+")"+
+              " — بعد: "+(entry.afterState?.isTombstoned?"مخفي":"ظاهر")+
+              " ("+(entry.afterState?.displayDescription||item.rawDescription)+")"));
+          }
+          content.appendChild(history);
+        }
+        if(canEditAudit){
+          const editBox=node("div","admin-note");
+          const reason=field("سبب التعديل أو الإخفاء (إلزامي)");
+          const corrected=field("الوصف الظاهر الجديد",
+            latest?.correctedDescription||item.rawDescription);
+          const form=node("div","functional-toolbar");
+          let retry=null;
+          async function commitOverlay(action){
+            if(!isCurrent())return;
+            const reasonText=reason.input.value.trim();
+            const description=corrected.input.value.trim();
+            if(!reasonText || (action==="UpdateAuditPresentation"&&!description))
+              return errors(editBox,new Error("اكتب سبب الإجراء والوصف البديل عند التعديل."));
+            const signature=JSON.stringify([action,auditEventId,revision,reasonText,description]);
+            if(retry?.signature!==signature)
+              retry={signature,operationId:makeOperationId()};
+            const label=action==="DeleteAuditPresentation"?"إخفاء القيد":"حفظ الوصف الظاهر";
+            if(!await dialogs.confirm("تأكيد "+label+"؟ يبقى القيد الأصلي محفوظاً دون تغيير.")||
+              !isCurrent())return;
+            edit.disabled=true;hide.disabled=true;
+            try{
+              const payload={auditEventId,expectedOverlayVersion:revision,
+                reason:reasonText,operationId:retry.operationId};
+              if(action==="UpdateAuditPresentation")payload.correctedDescription=description;
+              const reply=await api().invoke(action,payload);
+              if(!isCurrent())return;
+              if(!reply.data?.rawEvidenceUntouched)
+                throw Error("لم يؤكد الخادم الاحتفاظ بالقيد الأصلي.");
+              retry=null;
+              closeAuditDetail();
+              await load();
+            }catch(e){if(isCurrent())errors(editBox,e);}
+            finally{edit.disabled=false;hide.disabled=false;}
+          }
+          const edit=btn(latest?.isTombstoned?"إظهار القيد بوصف معدل":"تعديل الوصف الظاهر",
+            ()=>commitOverlay("UpdateAuditPresentation"),"btn btn-primary");
+          const hide=btn("إخفاء القيد من العرض",
+            ()=>commitOverlay("DeleteAuditPresentation"),"btn btn-outline");
+          hide.disabled=latest?.isTombstoned===true;
+          form.append(edit,hide);
+          content.append(reason.wrap,corrected.wrap,form,editBox);
+        }
+      }catch(e){if(isCurrent())errors(content,e);}
+    }
+    await load();
+  }
+
+  function settingsValue(label,value) {
+    const row=node("div","settings-property");
+    row.append(node("span","settings-property-label",label),
+      node("strong","settings-property-value",value==null || value==="" ? "غير محدد" : value));
+    return row;
+  }
+  function settingsCard(title,mark) {
+    const box=card(title);
+    box.classList.add("settings-panel");
+    const heading=box.querySelector(".section-title");
+    heading.classList.add("settings-panel-title");
+    heading.prepend(node("span","settings-panel-icon",mark));
+    return box;
+  }
+  function makeOperationId(){
+    if(window.crypto && typeof window.crypto.randomUUID==="function")
+      return window.crypto.randomUUID().replace(/-/g,"");
+    // Host-agnostic fallback is a correlation token, never a credential.
+    return Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+  }
+  // Route handovers focus an existing control only; they never invoke an action.
+  // Disabled controls remain disabled and all sensitive C# previews retain their
+  // own consent, validation, authorization and audit flows.
+  const settingsRouteButtons=Object.freeze({
+    CreateBackup:["إنشاء نسخة احتياطية الآن","اختيار مجلد من Windows"],
+    ScheduledBackups:["حفظ جدول النسخ التلقائي"],
+    RestoreBackup:["اختيار نسخة مشفرة وفحص سلامتها"],
+    AppearanceAndDiagnostics:["فحص سلامة البيانات"],
+    EightPmScheduler:["حفظ إعدادات التحضير التلقائي"],
+    ResetApplicationData:["معاينة التصفير الكامل"],
+    Logout:["تسجيل الخروج"]
+  });
+  async function renderSettings(session,logout,requestedRoute=null) {
+    state.session=session;
+    const token=++currentRequest;
+    const page=target();page.replaceChildren();
+    const hero=card("الإعدادات");
+    hero.classList.add("settings-heading");
+    hero.appendChild(node("p","section-description",
+      "إدارة الحساب والنسخ الاحتياطية وسلامة البيانات على هذا الجهاز دون إنترنت."));
+    const notices=node("div","settings-feedback");
+    const grid=node("div","settings-grid");
+    grid.replaceChildren(warning("جارٍ قراءة إعدادات البرنامج المحفوظة..."));
+    page.append(hero,notices,grid);
+    try {
+      const [overview,versionReply]=await Promise.all([
+        api().invoke("GetSettingsOverview",{}),
+        api().invoke("GetApplicationVersion",{})
+      ]);
+      if(token!==currentRequest)return;
+      const info=overview.data||{},version=versionReply.data||{};
+      grid.replaceChildren();
+      // Identity and runtime version are read from the authenticated bridge.
+      const account=settingsCard("الحساب والبرنامج","◉");
+      account.classList.add("settings-account-panel");
+      const accountData=node("div","settings-properties");
+      accountData.append(
+        settingsValue("اسم البرنامج",version.productNameAr||"التمام اليومي"),
+        settingsValue("المستخدم الحالي",info.username||session.username),
+        settingsValue("نوع الحساب",info.roleLabelAr||session.roleLabelAr||info.role),
+        settingsValue("إصدار خدمات التطبيق",version.version)
+      );
+      const logoutButton=btn("تسجيل الخروج",logout,"btn btn-outline settings-action");
+      account.append(accountData,logoutButton);
+      grid.appendChild(account);
+
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const automatic=settingsCard("أوقات التحضير التلقائي وقفل التمام اليومي","◷");
+        automatic.classList.add("settings-attendance-panel");
+        automatic.appendChild(node("p","settings-copy",
+          "يحدد وقت التحضير التلقائي موعد نسخ حالات أمس لغير المحضرين، ويحدد وقت القفل آخر وقت لإجراء التحضير والتعديل المعتاد خلال اليوم. لا يشمل الاعتماد التلقائي يوم النقل."));
+        const label=node("label","admin-input"),picker=node("select","form-control");
+        picker.setAttribute("aria-label","الحالة الافتراضية عند عدم وجود تحضير أمس");
+        const empty=node("option","","اختر الحالة الافتراضية");empty.value="";
+        picker.appendChild(empty);
+        label.append(node("span","","الحالة الافتراضية عند عدم وجود تحضير أمس"),picker);
+        const feedback=node("div","settings-feedback");
+        automatic.append(label,feedback);
+        grid.appendChild(automatic);
+        try{
+          const [policyResult,statusResult]=await Promise.all([
+            api().invoke("GetAutoAttendancePolicy",{}),
+            api().invoke("GetActiveAttendanceStatuses",{})
+          ]);
+          if(token!==currentRequest)return;
+          const policy=policyResult.data||{};
+          const choices=Array.isArray(statusResult.data)?statusResult.data:[];
+          // Bounded statuses cannot serve as timeless 08:00 fallbacks.
+          const eligibleChoices=choices.filter(x=>
+            x.statusId!=="STS-LEAVE" && x.statusId!=="STS-PERMISSION");
+          for(const entry of eligibleChoices){
+            const option=node("option","",entry.displayName);
+            option.value=entry.statusId;picker.appendChild(option);
+          }
+          picker.value=policy.defaultStatusId||"";
+          if(!eligibleChoices.some(x=>x.statusId===picker.value))picker.value="";
+          automatic.appendChild(node("p","section-description",
+            policy.configured?"الحالة المعتمدة حالياً: "+policy.defaultStatusName:
+              (policy.defaultStatusId==="STS-LEAVE"||policy.defaultStatusId==="STS-PERMISSION")
+                ?(policy.note||"الإجازة والإذن تحتاجان مدة محددة؛ اختر حالة افتراضية عادية.")
+                :"لم تُحدد حالة افتراضية بعد؛ لن تُنشأ حالة دون مرجع حتى تختارها الإدارة."));
+          const scheduledTime=node("input","form-control");
+          scheduledTime.type="time";scheduledTime.required=true;
+          scheduledTime.value=policy.dueTimeLocal||"08:00";
+          scheduledTime.setAttribute("aria-label","وقت التحضير التلقائي");
+          const lockTime=node("input","form-control");
+          lockTime.type="time";lockTime.required=true;
+          lockTime.value=policy.dailyLockTimeLocal||"20:00";
+          lockTime.setAttribute("aria-label","وقت قفل التحضير اليومي");
+          const scheduledLabel=node("label","admin-input");
+          scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
+          const lockLabel=node("label","admin-input");
+          lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
+          // Independent writes: a rejected setting never rolls back the other
+          // successful settings. Failed changes keep the same retry operation ID.
+          let approved={
+            defaultStatusId:policy.defaultStatusId||"",
+            dueTimeLocal:policy.dueTimeLocal||"08:00",
+            dailyLockTimeLocal:policy.dailyLockTimeLocal||"20:00"
+          };
+          const intentions=new Map();
+          const saveTimes=btn("حفظ إعدادات التحضير التلقائي",async()=>{
+            if(!await dialogs.confirm(
+              "سيُحفظ كل إعداد على حدة؛ لن يتوقف حفظ الخيارات الأخرى إذا تعذّر حفظ أحدها. متابعة؟"
+            ))return;
+            const entries=[
+              {key:"dueTimeLocal",label:"وقت التحضير التلقائي",action:"SetAttendanceSchedule",
+                value:scheduledTime.value},
+              {key:"dailyLockTimeLocal",label:"وقت القفل اليومي",action:"SetAttendanceSchedule",
+                value:lockTime.value},
+              {key:"defaultStatusId",label:"الحالة الافتراضية",action:"SetAutoAttendanceDefaultStatus",
+                value:picker.value}
+            ];
+            const outcomes=[];
+            saveTimes.disabled=true;
+            try{
+              for(const entry of entries){
+                if(entry.value===approved[entry.key]){
+                  outcomes.push({label:entry.label,kind:"unchanged"});
+                  continue;
+                }
+                const signature=entry.key+":"+entry.value;
+                if(intentions.get(entry.key)?.signature!==signature)
+                  intentions.set(entry.key,{signature,operationId:makeOperationId()});
+                const intent=intentions.get(entry.key);
+                const payload=entry.key==="defaultStatusId"
+                  ?{statusId:entry.value,operationId:intent.operationId}
+                  :{[entry.key]:entry.value,operationId:intent.operationId};
+                try{
+                  const result=await api().invoke(entry.action,payload);
+                  if(token!==currentRequest)return;
+                  if(!result?.data)throw Error("لم يؤكد الخادم الحفظ.");
+                  approved[entry.key]=entry.value;
+                  intentions.delete(entry.key);
+                  outcomes.push({label:entry.label,kind:"saved"});
+                }catch(e){
+                  outcomes.push({label:entry.label,kind:"failed",
+                    message:e?.message||"تعذر حفظ الإعداد."});
+                }
+              }
+              if(token!==currentRequest)return;
+              // Each independently committed result is reported accurately;
+              // a failure never erases another successful operation or its receipt.
+              feedback.replaceChildren();
+              for(const item of outcomes){
+                if(item.kind==="failed")
+                  feedback.appendChild(warning("تعذر حفظ "+item.label+": "+item.message));
+                else if(item.kind==="saved")
+                  feedback.appendChild(node("p","settings-success","تم حفظ "+item.label+" بنجاح."));
+                else
+                  feedback.appendChild(node("p","section-description",
+                    item.label+": دون تغيير، لا يلزم الحفظ."));
+              }
+            }finally{saveTimes.disabled=false;}
+          },"btn btn-primary settings-action");
+          const timesRow=node("div","settings-attendance-fields");
+          timesRow.append(scheduledLabel,lockLabel);
+          automatic.append(timesRow,saveTimes);
+        }catch(e){if(token===currentRequest)errors(feedback,e);}
+      }
+
+      // The daily schedule is executed by the native Windows host, never by JS timers.
+      const backup=settingsCard("النسخ الاحتياطي","▣");
+      backup.classList.add("settings-backup-panel");
+      backup.append(
+        node("p","settings-copy","اختر مجلداً مشتركاً للنسخ الاحتياطي المشفر وجميع ملفات Excel، مع التحقق من سلامة كل نسخة.")
+      );
+      const backupInfo=node("div","settings-properties");
+      backupInfo.append(
+        settingsValue("مجلد النسخ الاحتياطي والتصدير",info.backupDirectory),
+        settingsValue("وقت النسخ التلقائي",info.backupTime||"16:00"),
+        settingsValue("حالة المجلد",info.defaultDriveAvailable?"متاح":"غير متاح")
+      );
+      backup.appendChild(backupInfo);
+      const folder=field("مسار مجلد الحفظ المشترك",info.backupDirectory);
+      folder.input.setAttribute("aria-label","مجلد النسخ والتصدير");
+      const folderNote=node("div","settings-feedback");
+      folderNote.setAttribute("aria-live","polite");
+      const pickOutputFolder=async()=>{
+        choose.disabled=true;
+        try{
+          const reply=await api().invoke("SetOutputDirectory",{choose:true});
+          if(token!==currentRequest)return;
+          folder.input.value=reply.data?.directory||folder.input.value;
+          folderNote.replaceChildren(node("p","settings-success",
+            "تم اعتماد المجلد للنسخ والتصدير: "+folder.input.value));
+          info.backupDirectory=folder.input.value;info.defaultDriveAvailable=true;
+          save.disabled=false;
+          backupInfo.firstChild?.remove?.();
+          backupInfo.prepend(settingsValue("مجلد النسخ والتصدير",folder.input.value));
+        }catch(e){if(token===currentRequest)errors(folderNote,e);}
+        finally{choose.disabled=false;}
+      };
+      const choose=btn("اختيار مجلد من Windows",pickOutputFolder,"btn btn-outline settings-action");
+      const updateFolder=btn("تأكيد تغيير مسار الحفظ",async()=>{
+        if(!await dialogs.confirm("هل تؤكد استخدام هذا المجلد للنسخ الاحتياطي وكل ملفات Excel؟"))return;
+        updateFolder.disabled=true;
+        try{
+          const reply=await api().invoke("SetOutputDirectory",{directory:folder.input.value});
+          if(token!==currentRequest)return;
+          folder.input.value=reply.data?.directory||folder.input.value;
+          info.backupDirectory=folder.input.value;info.defaultDriveAvailable=true;
+          save.disabled=false;
+          folderNote.replaceChildren(node("p","settings-success","تم اعتماد مجلد الحفظ: "+folder.input.value));
+          backupInfo.firstChild?.remove?.();
+          backupInfo.prepend(settingsValue("مجلد النسخ والتصدير",folder.input.value));
+        }catch(e){if(token===currentRequest)errors(folderNote,e);}
+        finally{updateFolder.disabled=false;}
+      },"btn btn-primary settings-action");
+      backup.append(folder.wrap,choose,updateFolder,folderNote);
+      if(!info.defaultDriveAvailable){
+        void Promise.resolve().then(saveFolderNotice);
+      }
+      function saveFolderNotice(){
+        const message="هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح: "+
+          info.backupDirectory+"\nهل تريد تحديد مجلد جديد الآن؟";
+        folderNote.replaceChildren(warning("مسار النسخ والتصدير غير متاح؛ لن تُحفظ الملفات فيه."));
+        save.disabled=true;
+        void dialogs.confirm(message,{title:"مسار النسخ الاحتياطي غير متاح",
+          confirmLabel:"اختيار مسار جديد"}).then(confirmed=>{
+          if(confirmed && token===currentRequest)void pickOutputFolder();
+        });
+      }
+      const scheduleInfo=node("p","section-description",info.automaticBackupNote||
+        "الجدولة متوقفة.");
+      backup.appendChild(scheduleInfo);
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const scheduleControls=node("div","functional-toolbar");
+        const dailyTime=node("input","form-control");
+        dailyTime.type="time";dailyTime.value=info.backupTime||"16:00";
+        dailyTime.setAttribute("aria-label","وقت النسخ التلقائي اليومي");
+        const checkbox=node("input");checkbox.type="checkbox";
+        checkbox.checked=info.automaticBackupEnabled===true;
+        const label=node("label","admin-input");
+        label.append(node("span","","تفعيل النسخ التلقائي اليومي"),checkbox);
+        const timeLabel=node("label","admin-input");
+        timeLabel.append(node("span","","ساعة النسخ بتوقيت Windows المحلي"),dailyTime);
+        const retention=node("input","form-control");
+        retention.type="number";retention.min="0";retention.max="365";
+        retention.step="1";
+        retention.value=String(info.automaticBackupRetentionCount??0);
+        retention.setAttribute("aria-label","عدد النسخ التلقائية المحتفظ بها");
+        const retentionLabel=node("label","admin-input");
+        retentionLabel.append(node("span","","الاحتفاظ بآخر عدد من النسخ الآلية (0 = الكل، 2 إلى 365)"),retention);
+        const scheduleFeedback=node("div","settings-feedback");
+        const apply=btn("حفظ جدول النسخ التلقائي",async()=>{
+          const count=Number(retention.value);
+          if(!Number.isInteger(count) || !(count===0 || count>=2 && count<=365)){
+            scheduleFeedback.replaceChildren(warning("عدد النسخ يجب أن يكون 0 أو من 2 إلى 365."));
+            return;
+          }
+          if(!await dialogs.confirm("هل تؤكد "+(checkbox.checked?"تفعيل":"إيقاف")+
+            " النسخ التلقائي في الساعة "+dailyTime.value+"؟"))return;
+          apply.disabled=true;
+          try{
+            const answer=await api().invoke("UpdateBackupSchedule",{
+              backupTime:dailyTime.value,enabled:checkbox.checked,retentionCount:count,
+              operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            info.backupTime=answer.data.backupTime;
+            info.automaticBackupEnabled=answer.data.enabled;
+            info.automaticBackupRetentionCount=answer.data.retentionCount;
+            scheduleInfo.textContent=answer.data.enabled
+              ?"جدولة النسخ التلقائي مفعلة الساعة "+answer.data.backupTime+
+                " أثناء تشغيل البرنامج، بعد التحقق من المجلد وسلامة النسخة."
+              :"جدولة النسخ التلقائي متوقفة.";
+            scheduleFeedback.replaceChildren(node("p","settings-success","حُفظ جدول النسخ في قاعدة البيانات."));
+          }catch(e){if(token===currentRequest)errors(scheduleFeedback,e);}
+          finally{apply.disabled=false;}
+        },"btn btn-primary settings-action");
+        scheduleControls.append(label,timeLabel,retentionLabel,apply);
+        backup.append(scheduleControls,scheduleFeedback);
+      }
+      const backupResult=node("div","settings-feedback");
+      backupResult.setAttribute("aria-live","polite");
+      const save=btn("إنشاء نسخة احتياطية الآن",async()=>{
+        if(!await dialogs.confirm("إنشاء نسخة احتياطية مشفرة في المجلد المختار والتحقق من سلامتها؟"))return;
+        save.disabled=true;
+        backupResult.replaceChildren(warning("جارٍ إنشاء النسخة والتحقق من سلامتها..."));
+        try {
+          const response=await api().invoke("CreateVerifiedBackup",{}, {timeoutMs:180000});
+          if(token!==currentRequest)return;
+          const data=response.data||{};
+          if(!data.verificationPassed)throw new Error("لم يتم تأكيد سلامة النسخة الاحتياطية.");
+          backupResult.replaceChildren(node("p","settings-success",
+            "تم إنشاء نسخة مشفرة متحقق منها: "+data.path));
+        } catch(e) {
+          if(token===currentRequest)errors(backupResult,e);
+        } finally {
+          if(token===currentRequest)save.disabled=!info.defaultDriveAvailable;
+        }
+      },"btn btn-primary settings-action");
+      save.disabled=!info.defaultDriveAvailable;
+      backup.append(save,backupResult);
+      if(!info.defaultDriveAvailable)backup.appendChild(warning(
+        "المجلد الحالي غير متاح؛ اختر مجلداً محلياً قابلاً للكتابة."));
+      grid.appendChild(backup);
+
+      // Optional NATIVE Windows scheduler: unlike the independent SQLCipher
+      // backup schedule this exports monthly Excel, not database snapshots.
+      const monthlyCfg=info.autoMonthlyExcel||{};
+      const autoExcel=settingsCard("التصدير التلقائي للتمام اليومي","▤");
+      autoExcel.classList.add("settings-monthly-excel-panel");
+      autoExcel.appendChild(node("p","settings-copy",
+        "الخيار متوقف افتراضياً. عند تفعيله يُنشئ البرنامج مجلد «تمام شهر» للشهر الحالي، وداخله ملف Excel للقوة الكلية وملف لكل موقع. تتحدث الملفات يومياً بحسب التمام الشهري، ويُستكمل ما فات عند إعادة تشغيل البرنامج."));
+      const monthlyStatus=node("p","section-description",
+        monthlyCfg.enabled?"التصدير مفعّل؛ آخر يوم مكتمل: "+
+          (monthlyCfg.lastSuccessDate||"لم يتم إنشاء ملفات بعد"):
+          "التصدير التلقائي متوقف.");
+      autoExcel.appendChild(monthlyStatus);
+      if(monthlyCfg.lastFailure)
+        autoExcel.appendChild(warning("آخر محاولة تصدير لم تكتمل: "+monthlyCfg.lastFailure));
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const enableLabel=node("label","admin-input");
+        const enabled=node("input");enabled.type="checkbox";
+        enabled.checked=monthlyCfg.enabled===true;
+        enabled.setAttribute("aria-label","تفعيل التصدير التلقائي للتمام اليومي");
+        enableLabel.append(node("span","","تفعيل التصدير التلقائي للتمام اليومي"),enabled);
+        const options=node("div","settings-monthly-excel-options");
+        const directory=field("مجلد التصدير التلقائي للتمام اليومي",monthlyCfg.directory||"");
+        directory.input.readOnly=true;
+        directory.input.setAttribute("aria-label","المجلد المختار للتصدير الشهري التلقائي");
+        const clock=node("input","form-control");
+        clock.type="time";clock.value=monthlyCfg.exportTime||"21:00";
+        clock.setAttribute("aria-label","وقت التصدير التلقائي للتمام اليومي");
+        const clockLabel=node("label","admin-input");
+        clockLabel.append(node("span","","وقت التصدير اليومي بتوقيت Windows المحلي"),clock);
+        const output=node("div","settings-feedback");
+        output.setAttribute("aria-live","polite");
+        const refreshVisibility=()=>{options.hidden=!enabled.checked;};
+        enabled.addEventListener("change",refreshVisibility);
+        const chooseMonthly=btn("اختيار مجلد التصدير من Windows",async()=>{
+          chooseMonthly.disabled=true;
+          try{
+            const reply=await api().invoke("ConfigureAutoMonthlyExcel",{
+              enabled:enabled.checked,exportTime:clock.value,
+              directory:directory.input.value,choose:true,operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            const state=reply.data||{};
+            directory.input.value=state.directory||"";
+            monthlyStatus.textContent=state.enabled
+              ?"التصدير مفعّل؛ سيُنشئ Windows ملفات الشهر ثم يحدثها تلقائياً."
+              :"حُفظ مجلد التصدير مع بقاء الجدولة متوقفة.";
+            output.replaceChildren(node("p","settings-success",
+              "تم اختيار مجلد التصدير: "+directory.input.value));
+          }catch(e){if(token===currentRequest)errors(output,e);}
+          finally{chooseMonthly.disabled=false;}
+        },"btn btn-outline settings-action");
+        const saveMonthly=btn("حفظ إعدادات التصدير التلقائي",async()=>{
+          if(!await dialogs.confirm("هل تؤكد "+(enabled.checked?"تفعيل":"إيقاف")+
+            " التصدير التلقائي للتمام اليومي؟"))return;
+          saveMonthly.disabled=true;
+          try{
+            const reply=await api().invoke("ConfigureAutoMonthlyExcel",{
+              enabled:enabled.checked,exportTime:clock.value,
+              directory:directory.input.value,operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            const state=reply.data||{};
+            directory.input.value=state.directory||"";
+            monthlyStatus.textContent=state.enabled
+              ?"التصدير مفعل الساعة "+state.exportTime+
+                 "؛ ملفات كل شهر تُحدّث عند الاستحقاق ويُستكمل ما فات بعد تشغيل البرنامج."
+              :"التصدير التلقائي متوقف، ولن تُحذف أي ملفات Excel سابقة.";
+            output.replaceChildren(node("p","settings-success",
+              "تم حفظ الإعدادات المستقلة في قاعدة البيانات."));
+          }catch(e){if(token===currentRequest)errors(output,e);}
+          finally{saveMonthly.disabled=false;}
+        },"btn btn-primary settings-action");
+        options.append(directory.wrap,chooseMonthly,clockLabel,saveMonthly,output);
+        autoExcel.append(enableLabel,options);
+        refreshVisibility();
+      }
+      grid.appendChild(autoExcel);
+
+      const integrity=settingsCard("سلامة قاعدة البيانات","◇");
+      integrity.classList.add("settings-integrity-panel");
+      integrity.appendChild(node("p","settings-copy",
+        "تحقق من سلامة البيانات المشفرة داخل البرنامج دون تعديل أي سجل."));
+      const result=node("div","settings-feedback");
+      result.setAttribute("aria-live","polite");
+      const checkButton=btn("فحص سلامة البيانات",async()=>{
+        checkButton.disabled=true;
+        result.replaceChildren(warning("جارٍ التحقق من قاعدة البيانات..."));
+        try {
+          const response=await api().invoke("RunDatabaseIntegrityCheck",{});
+          if(token!==currentRequest)return;
+          const data=response.data||{};
+          if(data.integrity!=="ok")throw new Error("لم يؤكد الفحص سلامة قاعدة البيانات.");
+          result.replaceChildren(node("p","settings-success",
+            "اكتمل الفحص: قاعدة البيانات المشفرة سليمة."));
+        }catch(e){
+          if(token===currentRequest)errors(result,e);
+        }finally{
+          if(token===currentRequest)checkButton.disabled=false;
+        }
+      },"btn btn-outline settings-action");
+      integrity.append(checkButton,result);
+      grid.appendChild(integrity);
+
+      const planned=settingsCard("التحقق من النسخ والاستعادة","⚙");
+      planned.classList.add("settings-restore-panel");
+      planned.appendChild(node("p","settings-copy",
+        "افحص النسخة وقارن بياناتها هنا. لتنفيذ الاستعادة، استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة."));
+      const forthcoming=node("div","settings-properties");
+      for(const [name,detail] of [
+        ["استيراد نسخة احتياطية","من قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة"],
+      ]) forthcoming.appendChild(settingsValue(name,detail));
+      planned.appendChild(forthcoming);
+      const inspectFeedback=node("div","settings-feedback app-popup-when-properties");
+      inspectFeedback.setAttribute("role","dialog");
+      inspectFeedback.setAttribute("aria-label","فحص سلامة النسخة الاحتياطية");
+      inspectFeedback.setAttribute("aria-live","polite");
+      const previewFeedback=node("div","settings-feedback");
+      previewFeedback.setAttribute("aria-live","polite");
+      let selectedRestore=null,selectionSerial=0,previewRestore=null;
+      const inspect=btn("اختيار نسخة مشفرة وفحص سلامتها",async()=>{
+        ++selectionSerial;selectedRestore=null;
+        if(previewRestore)previewRestore.disabled=true;
+        previewFeedback.replaceChildren();
+        inspect.disabled=true;
+        inspectFeedback.replaceChildren(warning("جارٍ اختيار الملف والتحقق من التشفير والبيانات..."));
+        try{
+          const result=await api().invoke("InspectBackup",{}, {timeoutMs:180000});
+          if(token!==currentRequest)return;
+          const data=result.data||{};
+          if(data.verified!==true)throw Error("لم ينجح فحص النسخة.");
+          if(typeof data.path!=="string"||!/^[a-f0-9]{64}$/i.test(data.sha256||""))
+            throw Error("ملف النسخة أو بصمتها غير صالح.");
+          selectedRestore={path:data.path,sha256:data.sha256};
+          if(previewRestore)previewRestore.disabled=false;
+          const detail=node("div","settings-properties");
+          for(const [label,value] of [
+            ["اسم النسخة",data.fileName],
+            ["الحجم بالبايت",data.fileSizeBytes],
+            ["إصدار قاعدة البيانات",data.schemaVersion],
+            ["الأفراد",data.people],
+            ["التحضير المسجل",data.attendance],
+            ["سجلات العمليات",data.auditEvents],
+            ["الحسابات",data.users],
+            ["بصمة SHA-256",data.sha256]
+          ])detail.appendChild(settingsValue(label,value));
+          inspectFeedback.replaceChildren(btn("✕ إغلاق",()=>inspectFeedback.replaceChildren(),"btn btn-outline app-modal-close"),node("p","settings-success",data.message),detail);
+        }catch(e){if(token===currentRequest)errors(inspectFeedback,e);}
+        finally{inspect.disabled=false;}
+      },"btn btn-outline settings-action");
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        previewRestore=btn("معاينة الاستعادة دون تنفيذ",async()=>{
+          if(!selectedRestore)return;
+          const selection=selectedRestore,serial=selectionSerial;
+          previewRestore.disabled=true;
+          previewFeedback.replaceChildren(warning("جارٍ مقارنة النسخة المختارة بقاعدة البيانات الحالية..."));
+          try{
+            const result=await api().invoke("PreviewRestore",
+              {path:selection.path,expectedSha256:selection.sha256},{timeoutMs:180000});
+            if(token!==currentRequest||serial!==selectionSerial)return;
+            const data=result.data||{};
+            if(data.verified!==true||data.previewOnly!==true||
+               data.restoreEnabled!==false||data.sha256!==selection.sha256)
+              throw Error("لم تتطابق معاينة الاستعادة مع النسخة التي تم فحصها.");
+            const review=window.AltamamDialog?.detailsReview;
+            if(typeof review!=="function")
+              throw Error("نافذة معاينة الاستعادة غير متاحة؛ لم تتغير البيانات.");
+            const incoming=data.incoming||{},current=data.current||{};
+            const rows=[
+              ["ملف النسخة",data.fileName],
+              ["البصمة SHA-256",data.sha256],
+              ["الأفراد: في النسخة / الحالي",String(incoming.people??"—")+" / "+String(current.people??"—")],
+              ["التحضير: في النسخة / الحالي",String(incoming.attendance??"—")+" / "+String(current.attendance??"—")],
+              ["سجل العمليات: في النسخة / الحالي",String(incoming.auditEvents??"—")+" / "+String(current.auditEvents??"—")],
+              ["المستخدمون: في النسخة / الحالي",String(incoming.users??"—")+" / "+String(current.users??"—")]
+            ];
+            await review({rows},{title:"معاينة الاستعادة — قراءة فقط",
+              message:"هذه معاينة للمقارنة فقط. لتنفيذ الاستعادة، استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة.",
+              confirmLabel:"إغلاق المعاينة"});
+            if(token===currentRequest&&serial===selectionSerial)
+              previewFeedback.replaceChildren(node("p","settings-success",
+                "اكتملت المقارنة دون تعديل البيانات. تتوفر الاستعادة من قائمة «استعادة نسخة احتياطية بأمان»."));
+          }catch(e){
+            if(token===currentRequest&&serial===selectionSerial)errors(previewFeedback,e);
+          }finally{
+            if(token===currentRequest&&serial===selectionSerial)
+              previewRestore.disabled=!selectedRestore;
+          }
+        },"btn btn-outline settings-action");
+        previewRestore.disabled=true;
+      }
+      planned.append(inspect);
+      if(previewRestore)planned.append(previewRestore);
+      planned.append(inspectFeedback,previewFeedback);
+      if(session.role==="GeneralAdministration"){
+        const resetBox=node("section","settings-danger-zone");
+        const notice=node("p","settings-copy",
+          "التصفير النهائي يمسح الحسابات والأفراد والتحضير والتاريخ وسجل العمليات. لا يمكن التراجع عنه.");
+        const resetStatus=node("div","settings-feedback app-reset-verification-modal");
+        resetStatus.setAttribute("role","dialog");
+        resetStatus.setAttribute("aria-label","التحقق النهائي من التصفير");
+        let resetGeneration=0;
+        const previewButton=btn("معاينة التصفير الكامل",async()=>{
+          const generation=++resetGeneration;
+          const isCurrent=()=>token===currentRequest&&generation===resetGeneration&&resetBox.isConnected;
+          previewButton.disabled=true;
+          resetStatus.replaceChildren(warning("جارٍ إعداد معاينة البيانات التي سيتم حذفها..."));
+          try{
+            const response=await api().invoke("PreviewFullReset",{});
+            if(!isCurrent())return;
+            const data=response.data||{};
+            if(!data.previewToken || !data.requiredConfirmation)throw Error("معاينة التصفير غير موثقة.");
+            const detailsReview=window.AltamamDialog?.detailsReview;
+            if(typeof detailsReview!=="function")
+              throw Error("نافذة معاينة التصفير غير متاحة؛ أُلغي الإجراء.");
+            const approved=await detailsReview({rows:[
+              ["الأفراد المعرّضون للحذف",data.people],
+              ["حسابات المستخدمين",data.users],
+              ["سجلات التحضير",data.attendance],
+              ["فترات الانتساب للمواقع",data.assignments],
+              ["سجلات التنقلات",data.movements],
+              ["سجل العمليات والتعديلات",data.auditEvents],
+              ["النسخ المسجلة المرشحة للحذف",data.backupEntries],
+              ["أسماء نسخ البرنامج المرشحة للحذف",Array.isArray(data.backupFileNames)&&
+                data.backupFileNames.length?data.backupFileNames.join("، "):"لا توجد"],
+              ["ملاحظة",data.backupFileNamesTruncated?
+                "تظهر أول 30 نسخة فقط؛ يُراجع السجل الكامل عند التنفيذ.":"لن تُحذف الملفات غير المسجلة أو التي تغيرت بصمتها."],
+              ["تحذير",data.warning||"لا يمكن التراجع عن تصفير البرنامج."]
+            ]},{title:"معاينة التصفير النهائي",
+              message:"ستُمحى جميع البيانات. راجع الأعداد بعناية قبل الانتقال للتحقق النهائي.",
+              confirmLabel:"الانتقال للتحقق بكلمة المرور",danger:true});
+            if(!isCurrent())return;
+            if(!approved){resetStatus.replaceChildren();previewButton.disabled=false;return;}
+            const passwordWrap=field("كلمة المرور الحالية للإدارة العامة","","password");
+            passwordWrap.input.autocomplete="current-password";
+            const phraseWrap=field("اكتب عبارة التأكيد حرفياً","","text");
+            phraseWrap.input.autocomplete="off";
+            const approve=btn("تأكيد تصفير البرنامج نهائياً",async()=>{
+              if(!isCurrent()||approve.disabled)return;
+              if(!passwordWrap.input.value || phraseWrap.input.value!==data.requiredConfirmation){
+                resetStatus.appendChild(warning("كلمة المرور وعبارة التأكيد مطلوبة حرفياً."));
+                return;
+              }
+              if(!await dialogs.confirm("هذه العملية نهائية وتمسح جميع الحسابات والتحضير وسجل العمليات. هل تؤكد؟"))
+                return;
+              if(!isCurrent())return;
+              approve.disabled=true;
+              try{
+                const result=await api().invoke("CommitFullReset",{
+                  previewToken:data.previewToken,expectedRevision:data.expectedRevision,
+                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value,
+                  confirmDeleteLiveData:true,confirmDeleteOwnedBackups:true
+                },{timeoutMs:180000});
+                passwordWrap.input.value="";
+                if(!result.data?.reset)throw Error("لم يؤكد الخادم إتمام التصفير.");
+                await dialogs.alert("تم تصفير قاعدة البيانات. أعد التهيئة الأولى."+
+                  (result.data.backupFilesNotDeleted
+                    ?" تنبيه: توجد ملفات نسخ لم يمكن حذفها؛ راجع مجلدات النسخ السابقة.":""));
+                await logout();
+              }catch(e){passwordWrap.input.value="";errors(resetStatus,e);approve.disabled=false;}
+            },"btn btn-primary settings-action");
+            const countdown=node("p","section-description");
+            let remaining=Math.max(5,Number(data.countdownSeconds)||5);
+            approve.disabled=true;
+            const clock=setInterval(()=>{
+              if(remaining>0)remaining--;
+              countdown.textContent=remaining>0?
+                "يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.":"انتهت مهلة المراجعة؛ يتطلب التنفيذ التأكيد النهائي.";
+              if(remaining===0){approve.disabled=false;clearInterval(clock);}
+            },1000);
+            countdown.textContent="يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.";
+            const cancel=btn("إلغاء",()=>{
+              resetGeneration++;
+              clearInterval(clock);passwordWrap.input.value="";
+              resetStatus.replaceChildren();previewButton.disabled=false;
+            });
+            resetStatus.replaceChildren(node("p","settings-copy",
+              "تمت مراجعة المعاينة. أدخل كلمة المرور وعبارة التأكيد لتنفيذ الإجراء النهائي."),
+              countdown,passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
+          }catch(e){errors(resetStatus,e);previewButton.disabled=false;}
+        },"btn btn-outline settings-action");
+        resetBox.append(notice,previewButton,resetStatus);
+        planned.appendChild(resetBox);
+      }
+      grid.appendChild(planned);
+      // Honor named settings routes only after the authenticated settings
+      // response has produced real controls. No click, submit or write occurs.
+      if(token===currentRequest && requestedRoute){
+        let focusTarget=null;
+        if(requestedRoute==="AboutApplication"){
+          focusTarget=account;
+          focusTarget.setAttribute("tabindex","-1");
+        }else{
+          const available=Array.from(grid.querySelectorAll("button"));
+          const labels=settingsRouteButtons[requestedRoute]||[];
+          focusTarget=labels.map(label=>
+            available.find(control=>control.textContent.trim()===label && !control.disabled))
+            .find(Boolean)||null;
+        }
+        if(focusTarget){
+          focusTarget.focus?.({preventScroll:true});
+          focusTarget.scrollIntoView?.({block:"nearest"});
+        }
+      }
+    }catch(e) {
+      if(token!==currentRequest)return;
+      grid.replaceChildren();
+      errors(notices,e);
+      notices.appendChild(btn("إعادة تحميل الإعدادات",
+        ()=>renderSettings(session,logout),"btn btn-outline"));
+    }
+  }
+  // Route aliases are entry points into existing C#-guarded workflows, NOT new
+  // screens. A modal without a selected PersonId/record opens its owning list,
+  // where the real preview and confirmation can be initiated by the user.
+  const ownedRoutes=Object.freeze({
+    Administration:"home",PersonnelManagement:"group:force",
+    Attendance:"attendance",ConfirmAttendance:"attendance",
+    EditPersonnelNames:"persons",EditPersonDetails:"persons",
+    RemovePersonnel:"persons",AddPerson:"persons",
+    Transfers:"transfers",InternalTransfer:"transferInternal",
+    ConfirmTransfer:"transferInternal",ExternalTransfer:"transferExternal",
+    ConfirmExternalTransfer:"transferExternal",TransferArchive:"transfers",
+    ReportsAndDismissal:"group:force",Dismissal:"separation",
+    DismissPerson:"separatePerson",ConfirmDismissal:"separatePerson",
+    DismissedPersonnelArchive:"separatedArchive",
+    PersonnelReport:"personReport",ExportPersonReport:"personReport",
+    StatusesAndSites:"group:config",Statuses:"statuses",
+    AddStatus:"statuses",EditStatus:"statuses",DeleteStatus:"statuses",
+    Sites:"sites",AddSite:"sites",EditSite:"sites",DeleteSite:"sites",
+    Rosters:"group:sheets",Import:"import",SelectFile:"import",
+    PreviewAndValidate:"import",ImportResults:"import",
+    Export:"export",PreviewAndConfirmExport:"export",
+    ExportProgressAndResult:"export",RosterLayout:"layout",
+    AddOrEditColumn:"layout",Users:"accounts",AddUser:"accounts",
+    ChangePassword:"accounts",DeleteAccount:"accounts",
+    AuditLog:"log",EditAuditEntry:"log",DeleteAuditEntry:"log",
+    ModifiedDeletedAuditEntries:"log",
+    ClosedDayExceptionalCorrection:"closedCorrection"
+  });
+  function openOwnedRoute(key){
+    if(!state.session || !Object.hasOwn(ownedRoutes,key))return false;
+    const destination=ownedRoutes[key],role=state.session.role;
+    if(destination==="accounts" && role==="Supervisor")return false;
+    if(destination==="closedCorrection" &&
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
+    if(["EditAuditEntry","DeleteAuditEntry"].includes(key) &&
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
+    if(key==="ModifiedDeletedAuditEntries" &&
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
+    if(destination==="home")renderAdmin(state.session);
+    else if(destination.startsWith("group:"))renderGroup(destination.slice(6));
+    else navigate(destination,key);
+    return true;
+  }
+  window.AltamamAdminSettings=Object.freeze({renderAdmin,renderGroup,renderSettings,openOwnedRoute});
+})();

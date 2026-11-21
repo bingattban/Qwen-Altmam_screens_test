@@ -1,0 +1,424 @@
+"use strict";
+(function(){
+ const make=(tag,text,cls)=>{
+   const e=document.createElement(tag);
+   if(text!==undefined)e.textContent=String(text);
+   if(cls)e.className=cls;
+   return e;
+ };
+ const button=(text,click)=>{
+   const b=make("button",text,"btn btn-outline");
+   if(/^العودة إلى|^رجوع/.test(String(text)))b.className+=" app-back-action";
+   b.type="button";b.addEventListener("click",click);return b;
+ };
+ const option=(value,title)=>{
+   const o=make("option",title);o.value=value;return o;
+ };
+ const showError=(box,error)=>{
+   // These fields originate from the authenticated C# response envelope.
+   // Use textContent only: person names and server messages are never HTML.
+   const conflicts=Array.isArray(error?.conflictInfo?.conflicts)
+     ? error.conflictInfo.conflicts.slice(0,100):[];
+   const fieldNames={
+     businessDate:"التاريخ",statusId:"الحالة",personIds:"الأفراد",
+     rangeStartDate:"من تاريخ",rangeEndDate:"إلى تاريخ",
+     mode:"نوع العملية",reason:"سبب التعديل",
+     previewToken:"معرّف المعاينة",siteId:"الموقع"
+   };
+   const fields=error?.validationErrors&&typeof error.validationErrors==="object"
+     ?Object.entries(fieldNames).filter(([key])=>
+       typeof error.validationErrors[key]==="string"&&error.validationErrors[key].trim())
+     :[];
+   const text=String(error?.message||"تعذرت العملية");
+   const summary=conflicts.length?text.split("\n")[0]:text;
+   const message=make("p",summary,"admin-warning attendance-conflict-warning");
+   box.replaceChildren(message);
+   if(conflicts.length){
+     const list=make("ul",undefined,"attendance-conflict-list");
+     for(const person of conflicts){
+       if(!person||typeof person!=="object")continue;
+       const name=String(person.name||"فرد غير معروف");
+       const number=String(person.serviceNumberA||"غير معروف");
+       const reason=String(person.reason||"تعارض في بيانات الفرد");
+       list.appendChild(make("li",
+         "«"+name+"» (الرقم (ع): "+number+"): "+reason,
+         "attendance-conflict-person"));
+     }
+     box.appendChild(list);
+   }
+   if(fields.length){
+     const list=make("ul",undefined,"attendance-validation-list");
+     for(const [key,label] of fields)
+       list.appendChild(make("li",label+": "+error.validationErrors[key],
+         "attendance-validation-field"));
+     box.appendChild(list);
+   }
+ };
+ function localDate(){
+   const now=new Date();
+   return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+       String(now.getDate()).padStart(2,"0")].join("-");
+ }
+ async function render(page){
+   const bridge=window.AltamamBridge;
+  const modalConfirm=text=>window.AltamamDialog?.confirm(text,{title:"تأكيد التمام"}) ?? Promise.resolve(confirm(text));
+   const day=localDate();
+   const host=make("div",undefined,"admin-attendance-host");
+   page.replaceChildren(host);
+   const header=make("section",undefined,"card");
+   header.append(make("h2","التمام اليومي","section-title"),
+       make("p","تحضير فردي أو جماعي لليوم الحالي. لا يحفظ أي تعديل قبل المراجعة.","section-description"));
+   const filters=make("div",undefined,"functional-toolbar");
+   const site=make("select"),status=make("select"),mode=make("select");
+   const search=make("input");search.type="search";
+   search.placeholder="بحث بالاسم أو الرقم (ع) في جميع الأفراد";
+   search.setAttribute("aria-label","البحث عن فرد للتحضير");
+   site.setAttribute("aria-label","الموقع");
+   status.setAttribute("aria-label","الحالة الجديدة");
+   mode.setAttribute("aria-label","نوع العملية");
+   site.appendChild(option("","جميع المواقع"));
+   status.appendChild(option("","اختر الحالة"));
+   mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
+   const list=make("div",undefined,"daily-roster-panel"),info=make("div");
+   const rangePanel=make("div",undefined,"card attendance-range-fields");
+   const rangeStart=make("input"),rangeEnd=make("input");
+   rangeStart.type="date";rangeEnd.type="date";
+   rangeStart.setAttribute("aria-label","من تاريخ");
+   rangeEnd.setAttribute("aria-label","إلى تاريخ");
+   rangeStart.value=day;rangeStart.min=day;rangeStart.max=day;
+   rangeEnd.value="";rangeEnd.min=day;
+   const fromLabel=make("label","من تاريخ *"),toLabel=make("label","إلى تاريخ *");
+   fromLabel.appendChild(rangeStart);toLabel.appendChild(rangeEnd);
+   rangePanel.append(make("h3","مدة الإجازة أو الإذن","section-title"),fromLabel,toLabel);
+   rangePanel.hidden=true;
+   const needsRange=()=>["STS-LEAVE","STS-PERMISSION"].includes(status.value);
+   const syncRange=()=>{
+     rangePanel.hidden=!needsRange();
+     rangeStart.required=rangeEnd.required=needsRange();
+   };
+   const rangePayload=()=>needsRange()?{rangeStartDate:rangeStart.value,
+       rangeEndDate:rangeEnd.value}:{};
+   const validRange=()=>{
+     if(!needsRange())return true;
+     if(!rangeStart.value||!rangeEnd.value||rangeStart.value!==day||
+        rangeEnd.value<rangeStart.value){
+       showError(info,new Error("يجب تحديد مدة صحيحة تبدأ اليوم وتنتهي في اليوم نفسه أو بعده."));
+       return false;
+     }
+     return true;
+   };
+   const choice=make("span","لم يتم تحديد أسماء");
+   const statusColors=new Map();
+   const colorPreview=make("span","اختر الحالة لعرض لونها","attendance-status-preview");
+   colorPreview.setAttribute("aria-live","polite");
+   const draftPanel=make("section",undefined,"card attendance-drafts attendance-drafts-modal");
+   draftPanel.hidden=true;
+   draftPanel.setAttribute("role","dialog");
+   draftPanel.setAttribute("aria-modal","true");
+   draftPanel.setAttribute("aria-label","مسودات التمام المحفوظة");
+   const draftResults=make("div");
+   const showDrafts=button("مسودات التمام المحفوظة",()=>{
+     draftPanel.hidden=false;
+     closeDrafts.focus?.();
+     void refreshDrafts();
+   });
+   const closeDrafts=button("إغلاق المسودات",()=>{
+     draftPanel.hidden=true;
+     showDrafts.focus?.();
+   },"btn btn-outline");
+   draftPanel.addEventListener("keydown",event=>{
+     if(event.key==="Escape"){
+       event.preventDefault();draftPanel.hidden=true;showDrafts.focus?.();
+     }
+   });
+   draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),
+     closeDrafts,draftResults);
+   const selected=new Set();
+   let activeDraftId=null;
+   const DAILY_PAGE_SIZE=100;
+   let pageNo=1,loading=false,nonce=0,previewVersion=0;
+   const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
+   const clearReview=()=>{previewVersion++;};
+   rangeStart.addEventListener("change",clearReview);
+   rangeEnd.addEventListener("change",clearReview);
+   const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
+   mode.addEventListener("change",()=>{
+     clearReview();
+     previewButton.textContent=mode.value==="revise"?"معاينة تغيير الحالة":"معاينة التحضير";
+   });
+   status.addEventListener("change",()=>{
+     clearReview();syncRange();
+     const color=statusColors.get(status.value);
+     colorPreview.textContent=color?
+       "الحالة: "+(Array.from(status.children).find(x=>x.value===status.value)?.textContent||""):
+       "اختر الحالة لعرض لونها";
+     if(colorPreview.style){
+       colorPreview.style.borderColor=color||"";
+       colorPreview.style.backgroundColor=color?color+"1F":"";
+     }
+   });
+   site.addEventListener("change",()=>{pageNo=1;reset();load();});
+   search.addEventListener("keydown",event=>{
+     if(event.key==="Enter"){event.preventDefault();pageNo=1;void load();}
+   });
+   const searchButton=button("بحث",()=>{pageNo=1;void load();});
+   const clearSearch=button("مسح البحث",()=>{
+     search.value="";pageNo=1;void load();
+   });
+   filters.append(site,status,colorPreview,mode,search,searchButton,clearSearch);
+   header.append(filters,rangePanel,choice,info,list);
+   host.appendChild(draftPanel);
+   host.insertBefore(header,draftPanel);
+   const fields=["تحديد","الرقم (ع)","الاسم","الموقع","الحالة الحالية"];
+   function table(headers){
+     const outer=make("div",undefined,"functional-table-wrap");
+     const t=make("table",undefined,"data-table functional-table");
+     const tr=make("tr");
+     headers.forEach(h=>tr.appendChild(make("th",h)));
+     const head=make("thead"),body=make("tbody");
+     head.appendChild(tr);t.append(head,body);outer.appendChild(t);
+     return {outer,body};
+   }
+   async function load(){
+     if(loading)return false;
+     loading=true;const current=++nonce;
+     list.replaceChildren(make("p","جارٍ تحميل كشف القوة..."));
+     try{
+       const response=await bridge.invoke("QueryDailyRoster",{
+         businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
+         term:search.value.trim(),page:pageNo,pageSize:DAILY_PAGE_SIZE
+       });
+       if(current!==nonce||!host.isConnected)return false;
+       const d=response.data||{};
+       const customColumns=window.AltamamRosterColumns?.columns(d)||[];
+       const t=table([...fields,...customColumns.map(col=>col.caption)]);
+       for(const p of d.items||[]){
+         const tr=make("tr"),td=make("td"),cb=make("input");
+         cb.type="checkbox";cb.checked=selected.has(p.personId);
+         cb.setAttribute("aria-label","تحديد "+p.name);
+         cb.addEventListener("change",()=>{
+           if(cb.checked&&selected.size>=100){
+             cb.checked=false;return showError(info,new Error("الحد 100 فرد لكل عملية."));
+           }
+           if(cb.checked)selected.add(p.personId);else selected.delete(p.personId);
+           summary();clearReview();
+         });
+         td.appendChild(cb);tr.appendChild(td);
+         [p.serviceNumberA,p.name,p.siteName].forEach(v=>tr.appendChild(make("td",v)));
+         const stateCell=make("td"),statePill=make("span",p.statusName,
+           "status-pill attendance-status-pill");
+         const savedColor=String(p.statusColor||"");
+         if(/^#[0-9a-fA-F]{6}$/.test(savedColor)){
+           if(statePill.style){
+             statePill.style.borderColor=savedColor;
+             statePill.style.backgroundColor=savedColor+"1F";
+           }
+         }
+         stateCell.appendChild(statePill);tr.appendChild(stateCell);
+         for(const value of window.AltamamRosterColumns?.values(p,customColumns)||[])
+           tr.appendChild(make("td",value||"—"));
+         t.body.appendChild(tr);
+       }
+       if(!t.body.children.length){
+         const tr=make("tr"),td=make("td","لا يوجد أفراد");td.colSpan=fields.length+customColumns.length;
+         tr.appendChild(td);t.body.appendChild(tr);
+       }
+       const pages=make("div",undefined,"functional-pager");
+       const prev=button("السابق",()=>{pageNo--;load();});
+       const next=button("التالي",()=>{pageNo++;load();});
+       prev.disabled=pageNo<=1;next.disabled=!d.hasNext;
+       pages.append(make("span","الإجمالي: "+(d.total||0)+" — صفحة "+pageNo+" (حتى "+DAILY_PAGE_SIZE+" اسم)"),prev,next);
+       list.replaceChildren(t.outer,pages);
+       return true;
+     }catch(e){if(current===nonce)showError(list,e);return false;}
+     finally{loading=false;}
+   }
+   async function refreshDrafts(){
+     draftResults.replaceChildren(make("p","جارٍ تحميل المسودات..."));
+     try{
+       const result=await bridge.invoke("ListAttendanceDrafts",{});
+       if(!host.isConnected)return;
+       if(!Array.isArray(result.data))throw Error("صيغة المسودات غير صالحة.");
+       const records=result.data;
+       showDrafts.textContent="مسودات التمام المحفوظة ("+records.length+")";
+       const content=make("div",undefined,"attendance-draft-list");
+       if(!records.length)content.appendChild(make("p","لا توجد مسودات محفوظة."));
+       for(const draft of records){
+         const row=make("div",undefined,"attendance-draft-row");
+         const total=Array.isArray(draft.selectedPersonIds)?draft.selectedPersonIds.length:0;
+         row.appendChild(make("span",(draft.businessDate||"؟")+" — "+total+" فرد"));
+         const restore=button("استعادة المسودة",async()=>{
+           if(draft.businessDate!==day)
+             return showError(info,new Error("لا يمكن استعادة مسودة من يوم سابق إلى تحضير اليوم."));
+           if(!Array.isArray(draft.selectedPersonIds)||!total||total>100||
+             draft.selectedPersonIds.some(id=>typeof id!=="string"||!id))
+             return showError(info,new Error("بيانات المسودة غير صالحة؛ لم تُستعد."));
+           const availableStatus=Array.from(status.children).some(o=>o.value===draft.targetStatusId);
+           const availableSite=!draft.siteId||Array.from(site.children).some(o=>o.value===draft.siteId);
+           if(!availableStatus||!availableSite)
+             return showError(info,new Error("حالة المسودة أو موقعها لم يعودا متاحين."));
+           site.value=draft.siteId||"";status.value=draft.targetStatusId;
+           syncRange();
+           mode.value="initial";previewButton.textContent="معاينة التحضير";
+           selected.clear();draft.selectedPersonIds.forEach(id=>selected.add(id));
+           activeDraftId=draft.draftId;pageNo=1;clearReview();summary();
+           await load();
+           info.replaceChildren(make("p","استعيدت المسودة للمراجعة فقط؛ لم يُحفظ أي تحضير.","settings-success"));
+         });
+         const remove=button("حذف المسودة",async()=>{
+           if(!await modalConfirm("تأكيد حذف المسودة المحفوظة دون حذف سجلات التحضير؟"))return;
+           remove.disabled=true;
+           try{
+             await bridge.invoke("DeleteAttendanceDraft",{draftId:draft.draftId});
+             if(activeDraftId===draft.draftId)activeDraftId=null;
+             await refreshDrafts();
+           }catch(e){showError(info,e);remove.disabled=false;}
+         });
+         row.append(restore,remove);content.appendChild(row);
+       }
+       draftResults.replaceChildren(content);
+     }catch(e){showError(draftResults,e);}
+   }
+   async function saveDraft(){
+     if(!status.value||selected.size<1||selected.size>100)
+       return showError(info,new Error("اختر حالة وواحداً إلى 100 فرد لحفظ المسودة."));
+     // Existing draft contract has no date range; never persist an invalid draft.
+     if(needsRange())return showError(info,
+       new Error("احفظ الإجازة أو الإذن بالمعاينة والتأكيد؛ المسودات لا تدعم المدد الزمنية."));
+     saveDraftButton.disabled=true;
+     try{
+       const payload={businessDate:day,siteId:site.value||"",targetStatusId:status.value,
+         selectedPersonIds:Array.from(selected).sort()};
+       if(activeDraftId)payload.draftId=activeDraftId;
+       const result=await bridge.invoke("SaveAttendanceDraft",payload);
+       if(!result.data||!result.data.draftId)throw Error("لم يؤكد الخادم حفظ المسودة.");
+       activeDraftId=result.data.draftId;
+       info.replaceChildren(make("p","حُفظت المسودة محلياً دون تنفيذ أي تحضير.","settings-success"));
+       await refreshDrafts();
+     }catch(e){showError(info,e);}
+     finally{saveDraftButton.disabled=false;}
+   }
+   const saveDraftButton=button("حفظ مسودة",saveDraft);
+   const cancelSelections=button("إلغاء التحديد",async()=>{
+     if(selected.size>0 && !await modalConfirm(
+       "لديك "+selected.size+" فرداً محدداً دون اعتماد. هل تريد إلغاء التحديد؟"))return;
+     reset();info.replaceChildren();await load();
+   });
+   draftPanel.insertBefore(button("تحديث المسودات",refreshDrafts),draftResults);
+   header.insertBefore(saveDraftButton,choice);
+   header.insertBefore(cancelSelections,choice);
+   header.insertBefore(showDrafts,choice);
+   async function preview(){
+     if(!status.value||selected.size===0)
+       return showError(info,new Error("اختر الحالة والأفراد."));
+     if(!validRange())return;
+     clearReview();info.replaceChildren();
+     const expectedPreviewVersion=previewVersion;
+     previewButton.disabled=true;
+     try{
+       const r=await bridge.invoke("PreviewAttendanceChange",{
+         businessDate:day,statusId:status.value,siteId:site.value,
+         personIds:Array.from(selected).sort(),mode:mode.value,...rangePayload()
+       });
+       if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+       const data=r.data||{};
+       if(!data.previewToken||!Array.isArray(data.persons))
+         throw Error("تعذر اعتماد المعاينة.");
+       const review=window.AltamamDialog?.attendanceReview;
+       if(typeof review!=="function")
+         throw Error("تعذر فتح نافذة معاينة التمام؛ لا يمكن اعتماد التحضير دون مراجعتها.");
+       const changing=data.mode==="revise";
+       const confirmationOptions={
+         title:changing?"معاينة تغيير حالة التحضير":"معاينة التحضير",
+         message:(changing?
+           "راجع الحالة السابقة والجديدة لكل فرد قبل تأكيد التغيير.":
+           "راجع الأسماء والأرقام (ع) والحالات قبل اعتماد التحضير.")+
+           (needsRange()?" المدة: من "+rangeStart.value+" إلى "+rangeEnd.value+".":""),
+         confirmLabel:changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير"
+       };
+       const accepted=await review(data,confirmationOptions);
+       if(!accepted||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+       const action=changing?"ReviseTodayAttendance":"SubmitAttendance";
+       // Native SQLCipher receipt, not a closed modal, proves a durable write.
+       const operationId=window.crypto?.randomUUID?.()||
+         ("attendance-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+       let submitting=false;
+       async function commitSamePreview(){
+         if(submitting||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+         submitting=true;
+         info.replaceChildren(make("p","جارٍ تثبيت التحضير في قاعدة البيانات وتسجيل العملية..."));
+         try{
+           const saved=await bridge.invoke(action,
+             {previewToken:data.previewToken,operationId},{timeoutMs:120000});
+           if(!saved?.data||!Number.isInteger(saved.data.count)||
+              saved.data.count!==data.persons.length){
+             const mismatch=new Error("لا يمكن تأكيد نتيجة التحضير من إيصال الخدمة؛ راجع كشف اليوم قبل أي محاولة جديدة.");
+             mismatch.errorCode="BridgeResultMismatch";
+             throw mismatch;
+           }
+           if(!host.isConnected)return;
+           reset();pageNo=1;
+           info.replaceChildren(make("p",changing?
+             "تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
+             "تم حفظ "+saved.data.count+" فرداً.","settings-success"));
+           const refreshed=await load();
+           if(refreshed!==true&&host.isConnected)
+             info.appendChild(make("p",
+               "تم الحفظ فعلياً، لكن تعذر تحديث الكشف؛ استخدم زر تحديث لقراءة البيانات الجديدة.",
+               "admin-warning"));
+         }catch(error){
+           if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+           showError(info,error);
+           if(error?.errorCode==="BridgeTimeout"||error?.errorCode==="BridgeOffline"){
+             info.appendChild(make("p",
+               "نتيجة الحفظ غير مؤكدة بعد فقدان الاستجابة؛ أعد إرسال نفس الطلب فقط.",
+               "section-description"));
+             info.appendChild(button("إعادة مراجعة وتأكيد التحضير",async()=>{
+               if(submitting||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+               const reaffirmed=await review(data,confirmationOptions);
+               if(reaffirmed&&host.isConnected&&previewVersion===expectedPreviewVersion)
+                 await commitSamePreview();
+             }));
+           }else{
+             info.appendChild(make("p",
+               error?.errorCode==="BridgeResultMismatch"
+                 ?"النتيجة غير مؤكدة؛ تحقق من التحضير المحفوظ قبل إعادة المعاينة."
+                 :"رفضت الخدمة هذا الحفظ؛ أعد المعاينة بعد مراجعة البيانات.",
+               "section-description"));
+           }
+         }finally{submitting=false;}
+       }
+       await commitSamePreview();
+       }catch(e){
+       if(host.isConnected&&previewVersion===expectedPreviewVersion)
+         showError(info,e);
+     }finally{previewButton.disabled=false;}
+   }
+   filters.appendChild(button("تحديث",()=>{reset();load();}));
+   const previewButton=button("معاينة التحضير",preview);
+   previewButton.className="btn btn-primary";
+   header.insertBefore(previewButton,choice);
+   header.insertBefore(button("العودة إلى إدارة القوة",async()=>{
+     if(selected.size>0 && !await modalConfirm(
+       "لديك "+selected.size+" فرداً محدداً لم يُحفظ تحضيرهم. هل تريد المغادرة دون اعتماد؟"))return;
+     reset();
+     window.AltamamAdminSettings.renderGroup("force");
+   }),filters);
+   try{
+     const [sites,statuses]=await Promise.all([
+       bridge.invoke("QuerySites",{}),bridge.invoke("GetActiveAttendanceStatuses",{})
+     ]);
+     for(const s of sites.data||[])if(s.active!==false)site.appendChild(option(s.siteId,s.name));
+     for(const x of statuses.data||[]){
+       const entry=option(x.statusId,x.displayName);
+       if(/^#[0-9a-fA-F]{6}$/.test(x.color||"")){
+         statusColors.set(x.statusId,x.color);
+         if(entry.style)entry.style.color=x.color;
+       }
+       status.appendChild(entry);
+     }
+     await Promise.all([load(),refreshDrafts()]);
+   }catch(e){showError(info,e);}
+ }
+ window.AltamamAttendance=Object.freeze({render});
+})();

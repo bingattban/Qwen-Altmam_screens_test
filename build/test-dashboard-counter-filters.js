@@ -1,0 +1,479 @@
+"use strict";
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
+class El{
+ constructor(tag){this.tag=tag;this.children=[];this.handlers={};this.attrs={};
+   this.className="";this.textContent="";this.style={};this.value="";this.dataset={};this.disabled=false;}
+ get classList(){const toggle=(name,on)=>{const tags=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);if(on)tags.push(name);this.className=tags.join(" ");};return{toggle,add:name=>toggle(name,true),remove:name=>toggle(name,false)};}
+ get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
+ get isConnected(){return viewport.all().includes(this);}
+ append(...nodes){this.children.push(...nodes);}
+ appendChild(node){this.children.push(node);return node;}
+ remove(){this.removed=true;}
+ replaceChildren(...nodes){this.children=nodes;}
+ addEventListener(name,fn){this.handlers[name]=fn;}
+ focus(){document.activeElement=this;}
+ querySelectorAll(){
+   return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&
+     !x.disabled&&!x.hidden);
+ }
+ querySelector(selector){
+   if(selector==='[data-status-filter="__AUTO_PREPARED__"]')
+     return this.all().find(x=>x.dataset.statusFilter==="__AUTO_PREPARED__")||null;
+   return null;
+ }
+ setAttribute(key,value){this.attrs[key]=value;}
+ getAttribute(key){return this.attrs[key]||null;}
+ removeAttribute(key){delete this.attrs[key];}
+ all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
+}
+const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
+ badge=new El("span"),events={},calls=[],nav={};
+for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
+let transferCount=0,expandedRoster=false,approveReview=true;
+let discardApproved=false,discardPrompts=0;
+let deferAutoReview=false,releaseAutoReview=null;
+let approveStatusForm=true;
+let statusLookupMode="normal",completeStatusLookup=null;
+let autoCommitFailure=null,autoCommitReceipt=null,failAutoRosterNext=false;
+const statusForms=[];
+let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
+  siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
+  savedBusinessDate:"2026-10-29",committedAtUtc:"2026-10-29T08:03:12Z",
+  autoSource:"تحضير تلقائي 08:00"}];
+const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
+ invoke:async(action,payload)=>{
+   calls.push({action,payload});
+   if(action==="GetCurrentSession")
+     return{data:{sessionNonce:"A".repeat(32),username:"tester",role:"Supervisor"}};
+   if(action==="QuerySites")
+     return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
+   if(action==="GetActiveAttendanceStatuses"){
+     if(statusLookupMode==="failure")throw Error("status lookup unavailable");
+     if(statusLookupMode==="empty")return {data:[]};
+     if(statusLookupMode==="deferred")return new Promise(resolve=>{completeStatusLookup=resolve;});
+     return{data:[{statusId:"STS-PRESENT",displayName:"موجود"},
+       {statusId:"STS-ABSENT",displayName:"غياب"}]};
+   }
+   if(action==="GetDashboardSummary")
+     return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
+       {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
+       {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
+   if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__"){
+     if(failAutoRosterNext){failAutoRosterNext=false;throw Error("roster refresh unavailable");}
+     const matching=autoPeople.filter(p=>!payload.term||
+       p.name.toLowerCase().includes(payload.term.toLowerCase())||
+       p.serviceNumberA.includes(payload.term));
+     return{data:{items:matching.slice((payload.page-1)*payload.pageSize,
+       payload.page*payload.pageSize),total:matching.length,hasNext:false}};
+   }
+   if(action==="QueryDailyRoster"){
+     const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
+       {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
+       {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"},
+       {personId:"P4",statusId:"__TRANSFER_DAY__",statusName:"تم نقله اليوم"}];
+     const selected=all.filter(p=>(!payload.statusId ||
+       (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId))
+       &&(!payload.term || p.personId.toLowerCase().includes(payload.term.toLowerCase())));
+     const visible=selected.slice((payload.page-1)*payload.pageSize,payload.page*payload.pageSize);
+     return{data:{items:visible.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
+       total:selected.length,hasNext:payload.page*payload.pageSize<selected.length}};
+   }
+   if(action==="PreviewAttendanceChange" && payload.mode==="revise")
+     return{data:{businessDate:payload.businessDate,previewToken:"R".repeat(64),
+       mode:"revise",statusName:"موجود",persons:payload.personIds.map(id=>{
+         const person=autoPeople.find(p=>p.personId===id);
+         return{...person,previousStatusName:person.statusName,
+           proposedStatusName:"موجود"};
+       })}};
+   if(action==="ReviseTodayAttendance"){
+     if(autoCommitFailure){const failure=autoCommitFailure;autoCommitFailure=null;throw failure;}
+     if(autoCommitReceipt){const receipt=autoCommitReceipt;autoCommitReceipt=null;return{data:receipt};}
+     return{data:{count:calls.filter(x=>x.action==="PreviewAttendanceChange").at(-1).payload.personIds.length}};
+   }
+   if(action==="PreviewAttendanceChange" && payload.mode==="carry")
+     return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
+       persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
+         previousStatusName:"غير محضر",proposedStatusName:"غياب"}]}};
+   if(action==="SubmitAttendance" && payload.mode==="carry")
+     return {data:{count:1,carriedForward:true}};
+   throw Error("Unexpected action "+action);
+ }};
+const document={activeElement:null,createElement:tag=>new El(tag),
+ getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction:logout,...nav})[id]||null,
+ querySelector:s=>s===".app-sidebar"?sidebar:null,
+ addEventListener:(name,fn)=>{events[name]=fn;}};
+const reviews=[];
+const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
+ AltamamDialog:{form:async(fields,opts)=>{
+     statusForms.push({fields,opts});
+     return approveStatusForm?{statusId:"STS-PRESENT"}:null;
+   },attendanceReview:async(data,opts)=>{
+     reviews.push({data,opts});
+     if(deferAutoReview)return new Promise(resolve=>{releaseAutoReview=resolve;});
+     return approveReview;
+   },
+   confirm:async()=>{discardPrompts++;return discardApproved;}}},
+ document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,
+ "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const counter=key=>viewport.all().find(x=>x.tag==="button"&&x.dataset.statusFilter===key);
+const lastRoster=()=>calls.filter(x=>x.action==="QueryDailyRoster").at(-1);
+async function settle(){await tick();await tick();await tick();}
+async function main(){
+ await events.DOMContentLoaded();await settle();
+ assert.ok(counter("all"),"total-force counter must be interactive");
+ assert.ok(!counter("__UNPREPARED__"),"unprepared counter must not appear");
+ assert.ok(!viewport.all().some(x=>x.textContent==="اكتمال التحضير"),
+   "completion card must be removed");
+ const cards=viewport.all().filter(x=>x.tag==="button"&&
+   x.className.includes("dashboard-filter-counter"));
+ assert.deepEqual(cards.map(x=>x.dataset.statusFilter),
+   ["all","STS-PRESENT","STS-ABSENT","__AUTO_PREPARED__"],
+   "order must be force, present, configured statuses then auto-prepared");
+ assert.ok(counter("STS-PRESENT"),"saved attendance counter must be interactive");
+ assert.ok(!counter("__TRANSFER_DAY__"),"zero transfers must hide the movement card");
+ assert.ok(!viewport.all().some(x=>x.className.includes("functional-status-filters")),
+   "remove redundant status chips below counters");
+ assert.equal(lastRoster().payload.statusId,"");
+ assert.equal(counter("all").attrs["aria-pressed"],"true");
+ const search=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
+ assert.ok(search,"dashboard needs a search field");
+ search.value="P2";
+ const submit=viewport.all().find(x=>x.tag==="button"&&x.textContent==="بحث");
+ assert.ok(submit);submit.handlers.click();await settle();
+ assert.equal(lastRoster().payload.term,"P2");
+ assert.equal(lastRoster().payload.page,1);
+ assert.equal(lastRoster().payload.statusId,"");
+ assert.ok(viewport.all().some(x=>x.textContent==="P2"));
+ assert.ok(!viewport.all().some(x=>x.textContent==="P1"));
+ const clear=viewport.all().find(x=>x.tag==="button"&&x.textContent==="مسح البحث");
+ clear.handlers.click();await settle();
+ assert.equal(lastRoster().payload.term,"");
+ assert.equal(counter("all").attrs["aria-pressed"],"true");
+ counter("STS-PRESENT").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"STS-PRESENT");
+ assert.equal(counter("STS-PRESENT").attrs["aria-pressed"],"true");
+ assert.equal(counter("all").attrs["aria-pressed"],"false");
+ assert.ok(viewport.all().some(x=>x.textContent==="P2"));
+ assert.equal(lastRoster().payload.page,1);
+ counter("STS-ABSENT").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"STS-ABSENT");
+ assert.equal(counter("STS-ABSENT").attrs["aria-pressed"],"true");
+ assert.ok(viewport.all().some(x=>x.textContent==="P3"));
+ counter("all").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"");
+ assert.equal(counter("all").attrs["aria-pressed"],"true");
+ transferCount=1;
+ const refresh=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث البيانات");
+ assert.ok(refresh);refresh.handlers.click();await settle();
+ assert.ok(counter("__TRANSFER_DAY__"),"movement card appears automatically when one transfer exists");
+ counter("__TRANSFER_DAY__").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"__TRANSFER_DAY__");
+ assert.ok(viewport.all().some(x=>x.textContent==="P4"));
+ assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
+ assert.ok(viewport.all().some(x=>x.className==="dashboard-eight-clock"),
+   "08:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
+ // No automatic manual carry-forward is triggered by selecting status counters.
+ assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
+   "PreviewAttendanceChange"].includes(x.action)).length,0);
+ assert.ok(counter("__AUTO_PREPARED__"),"automatic-attendance counter is always visible");
+ const registerOpener=counter("__AUTO_PREPARED__");
+ registerOpener.focus();registerOpener.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="QueryDailyRoster").at(-1).payload.statusId,
+   "__AUTO_PREPARED__");
+ const readOnly=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+ assert.ok(readOnly,"automatic attendance opens an independent read-only register");
+ assert.equal(viewport.all().filter(x=>x===readOnly).length,1,
+   "automatic attendance modal is mounted exactly once inside the dashboard viewport");
+ assert.equal(readOnly.attrs["aria-modal"],"true",
+   "independent register must announce that it is a real modal");
+ const registerClose=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق");
+ assert.equal(document.activeElement,registerClose,
+   "opening the automatic register moves keyboard focus inside the modal");
+ const registerControls=()=>readOnly.all().filter(x=>
+   ["button","input","select","textarea"].includes(x.tag)&&!x.disabled&&!x.hidden);
+ assert.ok(registerControls().length>=3,"keyboard trap has active form controls");
+ let wrapBack=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:true,preventDefault(){wrapBack=true}});
+ assert.equal(wrapBack,true,"Shift+Tab at first control is intercepted");
+ assert.equal(document.activeElement,registerControls().at(-1),
+   "Shift+Tab wraps to the last enabled control");
+ let wrapForward=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:false,preventDefault(){wrapForward=true}});
+ assert.equal(wrapForward,true,"Tab at last control is intercepted");
+ assert.equal(document.activeElement,registerClose,"Tab wraps back to first control");
+ document.activeElement=registerOpener;
+ let recoverFocus=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:false,preventDefault(){recoverFocus=true}});
+ assert.equal(recoverFocus,true,"Tab from outside cannot escape the active modal");
+ assert.equal(document.activeElement,registerClose,"focus is restored inside the modal");
+ assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
+ assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
+ assert.ok(readOnly.all().some(x=>x.textContent==="تحضير تلقائي 08:00"),
+   "the automatic register must show the persisted source of preparation");
+ assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29"),
+   "the automatic register must display the date of the saved attendance");
+ assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29T08:03:12Z"),
+   "the register must show the actual saved timestamp rather than assumed 08:00");
+ const selectedCheck=readOnly.all().find(x=>x.tag==="input"&&x.type==="checkbox");
+ assert.ok(selectedCheck,"each automatic record allows individual selection");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "opening register and selecting entries must not save attendance");
+ assert.ok(!readOnly.all().some(x=>x.tag==="select"),
+   "status changes must be selected in a separate modal, not inline in the read-only register");
+ const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة");
+ approveStatusForm=false;
+ const priorPreviews=calls.filter(x=>x.action==="PreviewAttendanceChange").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="PreviewAttendanceChange").length,priorPreviews,
+   "canceled status modal must not issue a bridge preview or persist");
+ approveStatusForm=true;approveReview=false;
+ await edit.handlers.click();await settle();
+ assert.equal(reviews.length,1,"single-person change opens native verified preview");
+ assert.equal(statusForms.length,2,"each status choice starts with a standalone modal");
+ assert.equal(statusForms[0].fields[0].name,"statusId");
+ assert.equal(statusForms[0].fields[0].required,true);
+ assert.equal(reviews[0].data.persons[0].previousStatusName,"غياب");
+ assert.equal(reviews[0].data.persons[0].proposedStatusName,"موجود");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "cancelling the preview must never write a change");
+ approveReview=true;
+ await edit.handlers.click();await settle();
+ assert.equal(reviews.length,2);
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,1,
+   "single change commits only after modal confirmation");
+ assert.ok(readOnly.all().some(x=>x.textContent==="P3"),
+   "auto-prepared register remains displayed following a successful revision");
+ // Definitive failures must not replay a stale preview or create false success.
+ const autoNotice=()=>readOnly.all().find(x=>x.className==="auto-attendance-feedback");
+ const retryAction=()=>autoNotice().all().find(x=>x.tag==="button"&&
+   x.textContent==="إعادة مراجعة وتأكيد تغيير الحالة");
+ autoCommitFailure=Object.assign(new Error("Stale preview"),{errorCode:"ConflictStale"});
+ let beforeAttempt=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1);
+ assert.ok(!retryAction(),"definitive ConflictStale cannot replay a consumed preview");
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "stale preview must not report success");
+ // A wrong or malformed native receipt is not proof that any row was saved.
+ autoCommitReceipt={count:0};
+ await edit.handlers.click();await settle();
+ assert.ok(!retryAction(),"unverified native count cannot authorize replay");
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "wrong native count must not report success");
+ autoCommitReceipt={count:1.5};
+ await edit.handlers.click();await settle();
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "fractional native count must not report success");
+ // A lost reply may have committed; retry only the SAME preview and operationId
+ // after a fresh, explicit human review, never from a new native preview.
+ autoCommitFailure=Object.assign(new Error("response missing"),{errorCode:"BridgeTimeout"});
+ beforeAttempt=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1);
+ const lostPayload=calls.filter(x=>x.action==="ReviseTodayAttendance").at(-1).payload;
+ const retry=retryAction();
+ assert.ok(retry,"ambiguous timeout requires an explicit same-intent retry choice");
+ approveReview=false;
+ await retry.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1,
+   "declined replay review must not write");
+ approveReview=true;
+ failAutoRosterNext=true;
+ await retry.handlers.click();await settle();
+ const retried=calls.filter(x=>x.action==="ReviseTodayAttendance");
+ assert.equal(retried.length,beforeAttempt+2,
+   "approved retry calls native exactly once more");
+ assert.equal(retried.at(-1).payload.operationId,lostPayload.operationId,
+   "replay MUST preserve the initial operation id");
+ assert.equal(retried.at(-1).payload.previewToken,lostPayload.previewToken,
+   "replay MUST preserve the initial preview token");
+ assert.ok(autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "confirmed native success persists after read-only roster refresh failure");
+ assert.ok(autoNotice().all().some(x=>x.textContent.includes("تحديث القائمة")),
+   "a failed read-only refresh must be reported separately");
+ assert.ok(!retryAction(),"completed intent must remove the retry action");
+ // Multi-selection with one common new state must use ONE server transaction.
+ autoPeople.push({personId:"P5",name:"P5",serviceNumberA:"12346",
+   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
+   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"});
+ const searchAuto=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="بحث");
+ searchAuto.handlers.click();await settle();
+ const selectPage=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="تحديد الصفحة");
+ assert.ok(selectPage,"bulk-selection control exists");
+ selectPage.handlers.click();await settle();
+ const counterAuto=readOnly.all().find(x=>x.className==="auto-attendance-selection-info");
+ assert.ok(counterAuto.textContent.includes("2"),"both visible records are selected");
+ assert.ok(!readOnly.all().some(x=>x.tag==="select"),
+   "group status selection also belongs in the separate modal");
+ const bulk=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تغيير المحددين");
+ approveReview=false;
+ const priorCommits=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await bulk.handlers.click();await settle();
+ assert.equal(reviews.at(-1).data.persons.length,2,
+   "review must list every selected person");
+ assert.deepEqual(Array.from(reviews.at(-1).data.persons.map(p=>p.personId)).sort(),
+   ["P3","P5"]);
+ assert.ok(reviews.at(-1).data.persons.every(p=>
+   p.previousStatusName==="غياب"&&p.proposedStatusName==="موجود"),
+   "preview identifies each former and proposed attendance status");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorCommits,
+   "declining two-person preview does not commit");
+ approveReview=true;
+ await bulk.handlers.click();await settle();
+ const commits=calls.filter(x=>x.action==="ReviseTodayAttendance");
+ assert.equal(commits.length,priorCommits+1,
+   "bulk approval issues exactly one atomic C# commit");
+ assert.equal(counterAuto.textContent,"المحددون: 0 من 100",
+   "selection resets only after successful confirmation");
+ // Pending selections on the automatic register require a separate, explicit
+ // discard confirmation; both refusal and approval must leave attendance saved
+ // only by the verified preview/commit path.
+ selectPage.handlers.click();await settle();
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100");
+ const clearPending=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إلغاء التحديد");
+ const priorWrites=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await clearPending.handlers.click();await settle();
+ assert.equal(discardPrompts,1,"clearing a pending batch must ask for confirmation");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
+   "declined discard must preserve both selected persons");
+ // A dashboard refresh cannot erase a pending selection merely because
+ // the background counters and roster are redrawn.
+ const refreshBehindModal=viewport.all().find(x=>x.tag==="button"&&
+   x.textContent==="تحديث البيانات");
+ refreshBehindModal.handlers.click();await settle();
+ assert.equal(viewport.all().filter(x=>x===readOnly).length,1,
+   "refreshed dashboard must keep the active modal in the same viewport");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
+   "refresh must preserve the operator's uncommitted selection");
+ assert.equal(registerOpener.isConnected,false,
+   "dashboard refresh replaces the original automatic-register trigger");
+ const refreshedOpener=counter("__AUTO_PREPARED__");
+ assert.ok(refreshedOpener&&refreshedOpener!==registerOpener,
+   "the refreshed dashboard presents a new automatic counter");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+ discardApproved=true;
+ await clearPending.handlers.click();await settle();
+ assert.equal(counterAuto.textContent,"المحددون: 0 من 100",
+   "approved discard clears the selection without committing");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+ selectPage.handlers.click();await settle();
+ const closeRegister=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق");
+ discardApproved=false;
+ await closeRegister.handlers.click();await settle();
+ assert.equal(readOnly.removed,undefined,"refusing close preserves the register");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100");
+ discardApproved=true;
+ assert.ok(readOnly.handlers.keydown,"modal handles keyboard dismissal at the overlay boundary");
+ readOnly.handlers.keydown({key:"Escape",preventDefault(){}});
+ await settle();
+ assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
+ assert.equal(document.activeElement,refreshedOpener,
+   "closing after a dashboard redraw restores focus to the current automatic counter");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+
+ // A queued approval must never write attendance after the operator leaves
+ // the automatic register (e.g. navigation to another top-level section).
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const abandoned=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+ assert.ok(abandoned,"fresh automatic register can reopen after a prior close");
+ assert.ok(!abandoned.all().some(x=>x.tag==="select"));
+ deferAutoReview=true;
+ const writesBeforeNavigation=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ const startReview=abandoned.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة");
+ startReview.handlers.click();await settle();
+ assert.equal(typeof releaseAutoReview,"function",
+   "a real attendanceReview must remain pending for the race regression");
+ context.window.AltamamFunctional.render("settings");await settle();
+ assert.equal(abandoned.removed,true,"leaving the dashboard unmounts automatic register");
+ releaseAutoReview(true);await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,writesBeforeNavigation,
+   "late human approval after navigation must not commit stale attendance");
+ deferAutoReview=false;releaseAutoReview=null;
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ assert.ok(counter("all"),"navigation does not break the four main sections");
+
+ // A status lookup is independent of reading saved automatic attendance.
+ // Exercise the shipped controller; only the bridge reply boundary is supplied.
+ const countAction=action=>calls.filter(x=>x.action===action).length;
+ for(const mode of ["failure","empty"]){
+   statusLookupMode=mode;
+   counter("__AUTO_PREPARED__").handlers.click();await settle();
+   const register=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+   assert.ok(register.all().some(x=>x.textContent==="P3"),mode+": persisted attendance remains visible");
+   assert.ok(register.all().some(x=>x.textContent==="غياب"),mode+": saved status remains visible");
+   assert.ok(register.all().some(x=>x.textContent.includes(mode==="failure"?
+     "status lookup unavailable":"لا توجد حالات نشطة")),mode+": lookup problem is explicit");
+   const beforePreview=countAction("PreviewAttendanceChange"),beforeWrite=countAction("ReviseTodayAttendance");
+   const priorForm=statusForms.length;
+   register.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة").handlers.click();
+   await settle();
+   assert.equal(statusForms.length,priorForm+1);
+   assert.deepEqual(Array.from(statusForms.at(-1).fields[0].options.map(x=>x.value)),[""],
+     mode+": stale choices from a previous register cannot be offered");
+   assert.equal(countAction("PreviewAttendanceChange"),beforePreview,mode+": no unverified preview");
+   assert.equal(countAction("ReviseTodayAttendance"),beforeWrite,mode+": no attendance write");
+   register.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق").handlers.click();await settle();
+ }
+ statusLookupMode="deferred";
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const pendingRegister=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+ assert.ok(pendingRegister.all().some(x=>x.textContent==="P3"),
+   "saved rows load before the independent status lookup completes");
+ assert.equal(typeof completeStatusLookup,"function");
+ context.window.AltamamFunctional.render("settings");await settle();
+ assert.equal(pendingRegister.removed,true);
+ const rosterAfterNavigation=countAction("QueryDailyRoster");
+ const detachedNodes=pendingRegister.all().length;
+ completeStatusLookup({data:[{statusId:"LATE",displayName:"late status"}]});await settle();
+ assert.equal(countAction("QueryDailyRoster"),rosterAfterNavigation,
+   "late lookup must not reload a disposed register");
+ assert.equal(pendingRegister.all().length,detachedNodes,
+   "late lookup must not mutate detached UI");
+ statusLookupMode="normal";
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const recovered=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+ const beforeRecoveryPreview=countAction("PreviewAttendanceChange"),beforeRecoveryWrite=countAction("ReviseTodayAttendance");
+ approveReview=false;
+ recovered.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة").handlers.click();await settle();
+ assert.equal(countAction("PreviewAttendanceChange"),beforeRecoveryPreview+1,
+   "reopening after recovery uses fresh valid status choices");
+ assert.equal(countAction("ReviseTodayAttendance"),beforeRecoveryWrite,
+   "declining the recovered preview still cannot commit");
+ assert.ok(statusForms.at(-1).fields[0].options.some(x=>x.value==="STS-PRESENT"));
+ assert.ok(!statusForms.at(-1).fields[0].options.some(x=>x.value==="LATE"));
+ recovered.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق").handlers.click();await settle();
+
+ expandedRoster=true;
+ counter("all").handlers.click();await settle();
+ const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
+ const dailyRows=()=>dailyPanel().all().find(x=>x.tag==="tbody").children;
+ const navButton=name=>viewport.all().find(x=>x.tag==="button"&&x.textContent===name);
+ assert.ok(dailyPanel(),"only daily roster gets dedicated spacing");
+ assert.equal(lastRoster().payload.pageSize,100,"request 100 roster entries per page");
+ assert.equal(dailyRows().length,100,"100 names loaded on the first roster page");
+ assert.equal(dailyRows()[0].children[0].textContent,"1");
+ assert.equal(dailyRows()[99].children[0].textContent,"100");
+ assert.equal(navButton("السابق").disabled,true);
+ navButton("التالي").handlers.click();await settle();
+ assert.equal(lastRoster().payload.page,2);
+ assert.equal(dailyRows().length,100);
+ assert.equal(dailyRows()[0].children[0].textContent,"101");
+ navButton("التالي").handlers.click();await settle();
+ assert.equal(dailyRows().length,35,"235 names require 100+100+35 rows");
+ assert.equal(dailyRows()[0].children[0].textContent,"201");
+ assert.equal(navButton("التالي").disabled,true);
+ navButton("السابق").handlers.click();await settle();
+ assert.equal(dailyRows().length,100);
+ assert.ok(viewport.className.includes("daily-dashboard"),"daily view activates flexible full-height layout");
+ const css=fs.readFileSync(path.join(__dirname,"../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+ assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel\s*\{/,
+   "daily roster must fill the available desktop viewport");
+ assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel>\.functional-table-wrap\s*\{/,
+   "daily roster scrolling must be internal to the full-height table");
+ console.log("DASHBOARD COUNTER FILTERS PASS: 100-row pages, counters, full-height layout and pager");
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

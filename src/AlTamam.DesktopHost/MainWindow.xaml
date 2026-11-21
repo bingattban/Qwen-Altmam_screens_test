@@ -1,0 +1,49 @@
+<Window x:Class="AlTamam.DesktopHost.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="التمام اليومي"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="CanResize"
+        ShowInTaskbar="True"
+        WindowState="Normal">
+    <!-- The WebView2 control is created in code-behind and fills the window. -->
+    <Grid x:Name="webViewHost" Background="#F5F7FA">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!-- Trusted WPF menu lives OUTSIDE WebView2; no browser request can
+             trigger the physical native password + confirmation workflow. -->
+        <Menu Grid.Row="0" FlowDirection="RightToLeft"
+              Background="#EAF0F6" FontFamily="Segoe UI" FontSize="13">
+            <MenuItem Header="ملف">
+                <MenuItem Header="استعادة نسخة احتياطية بأمان"
+                          Click="OnNativeRestoreMenuClick" />
+                <MenuItem Header="تصدير مفتاح الاسترداد المشفر"
+                          Click="OnNativeRecoveryKeyExportClick" />
+            </MenuItem>
+        </Menu>
+        <!-- Native startup feedback is visible immediately while WebView2 and the encrypted DB initialize. -->
+        <Border Grid.RowSpan="2" x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10"
+                Background="#F1F5F9" FlowDirection="RightToLeft">
+            <Border Width="470" MaxWidth="470" Padding="32" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#FFFFFF"
+                    BorderBrush="#0D9488" BorderThickness="0,0,0,4" CornerRadius="16">
+                <Border.Effect>
+                    <DropShadowEffect Color="#102B45" BlurRadius="24" Opacity="0.14" ShadowDepth="4" />
+                </Border.Effect>
+                <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                    <TextBlock Text="التمام اليومي" FontSize="30" FontWeight="Bold"
+                               FontFamily="Segoe UI" HorizontalAlignment="Center"
+                               Foreground="#0F2942" />
+                    <Border Width="68" Height="3" Margin="0,13,0,3" CornerRadius="2"
+                            HorizontalAlignment="Center" Background="#0D9488" />
+                    <TextBlock x:Name="startupMessage" Text="{Binding Message}"
+                               FontFamily="Segoe UI" FontSize="16" Margin="0,18,0,0"
+                               TextAlignment="Center" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" Foreground="#475569" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

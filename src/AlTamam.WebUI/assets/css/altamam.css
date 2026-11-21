@@ -1,0 +1,2445 @@
+/* Offline fonts: Cairo headings, Tajawal interface and data. */
+@font-face {
+  font-family: "AlTamam Cairo";
+  src: url("../fonts/Cairo-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+:root {
+  --bg-main: #F1F5F9;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F8FAFC;
+  --primary-navy: #0F2942;
+  --primary-navy-hover: #163A5F;
+  --accent-teal: #0D9488;
+  --accent-teal-hover: #0F766E;
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --border-color: #CBD5E1;
+  --positive: #15803D;
+  --warning: #B45309;
+  --critical: #BE123C;
+  --shadow-sm: 0 1px 3px rgba(22, 50, 79, 0.08);
+  --shadow-md: 0 4px 12px rgba(22, 50, 79, 0.12);
+  --radius: 10px;
+  --border-subtle: #E2E8F0;
+  --accent-teal-soft: rgba(13,148,136,.12);
+  --status-info: #0369A1; --status-info-bg: #E0F2FE; --status-info-border: #BAE6FD;
+  --status-positive: #15803D; --status-positive-bg: #DCFCE7; --status-positive-border: #BBF7D0;
+  --status-warning: #B45309; --status-warning-bg: #FEF3C7; --status-warning-border: #FDE68A;
+  --status-movement: #6D28D9; --status-movement-bg: #EDE9FE; --status-movement-border: #DDD6FE;
+  --status-critical: #BE123C; --status-critical-bg: #FFE4E6; --status-critical-border: #FECDD3;
+}
+
+body.dark-theme {
+  --bg-main: #0B1524;
+  --bg-surface: #132238;
+  --bg-subtle: #1C304D;
+  --primary-navy: #1E4268;
+  --primary-navy-hover: #28527E;
+  --accent-teal: #14B8A6;
+  --accent-teal-hover: #2DD4BF;
+  --text-main: #F1F5F9;
+  --text-muted: #94A3B8;
+  --border-color: #2A4365;
+  --border-subtle: #365171;
+  --accent-teal-soft: rgba(20,184,166,.17);
+  --status-info-bg: #123A59; --status-positive-bg: #193E32;
+  --status-warning-bg: #493717; --status-movement-bg: #342C62;
+  --status-critical-bg: #53253A;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "AlTamam Tajawal", "AlTamam Cairo", Tahoma, "Segoe UI", Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  direction: rtl;
+  text-align: right;
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header & Top Shell */
+.app-topbar {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  min-height: 62px;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  z-index: 30;
+}
+
+.brand-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--accent-teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: #FFFFFF;
+}
+
+.brand-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.brand-subtitle {
+  font-size: 11px;
+  color: #CBD5E1;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge-pill {
+  background: rgba(255, 255, 255, 0.14);
+  color: #FFFFFF;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Main Layout */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - 62px);
+}
+
+.app-sidebar {
+  width: 245px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-color);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nav-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 6px 10px 4px;
+}
+
+.nav-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  padding: 11px 14px;
+  border-radius: 8px;
+  text-align: right;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-btn:hover {
+  background: var(--bg-subtle);
+}
+
+.nav-btn.active {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+}
+
+.app-main {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Breadcrumb & Page Header */
+.breadcrumb-bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.breadcrumb-path {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-teal);
+}
+
+/* Cards & Grids */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.counters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 12px;
+}
+
+.counter-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-right: 5px solid var(--primary-navy);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.counter-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.counter-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.counter-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.counter-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Filter Chips */
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-chip {
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-chip.active {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  border-color: var(--primary-navy);
+}
+
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Buttons & Inputs */
+.btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 15px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-navy-hover);
+}
+
+.btn-teal {
+  background: var(--accent-teal);
+  color: #FFFFFF;
+}
+
+.btn-teal:hover:not(:disabled) {
+  background: var(--accent-teal-hover);
+}
+
+.btn-danger {
+  background: var(--critical);
+  color: #FFFFFF;
+}
+
+.btn-outline {
+  background: var(--bg-surface);
+  border-color: var(--border-color);
+  color: var(--text-main);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+
+.form-control, .form-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Data Tables & Sticky Monthly Grid */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.data-table th,
+table.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.data-table th {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+table.data-table tr:hover td {
+  background: var(--bg-subtle);
+}
+
+/* Sticky right columns for Monthly Attendance Table */
+.monthly-scroll-container {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  position: relative;
+}
+
+table.monthly-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+}
+
+table.monthly-table th,
+table.monthly-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
+  text-align: center;
+}
+
+table.monthly-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  z-index: 10;
+}
+
+table.monthly-table .sticky-col-1 {
+  position: sticky;
+  right: 0;
+  width: 55px;
+  min-width: 55px;
+  background: var(--bg-surface);
+  z-index: 8;
+  font-weight: 700;
+}
+table.monthly-table .sticky-col-2 {
+  position: sticky;
+  right: 55px;
+  width: 95px;
+  min-width: 95px;
+  background: var(--bg-surface);
+  z-index: 8;
+}
+table.monthly-table .sticky-col-3 {
+  position: sticky;
+  right: 150px;
+  width: 175px;
+  min-width: 175px;
+  background: var(--bg-surface);
+  z-index: 8;
+  text-align: right;
+  font-weight: 600;
+}
+table.monthly-table .sticky-col-4 {
+  position: sticky;
+  right: 325px;
+  width: 125px;
+  min-width: 125px;
+  background: var(--bg-surface);
+  z-index: 8;
+  border-left: 2px solid var(--primary-navy);
+}
+table.monthly-table thead .sticky-col-1,
+table.monthly-table thead .sticky-col-2,
+table.monthly-table thead .sticky-col-3,
+table.monthly-table thead .sticky-col-4 {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  z-index: 15;
+}
+
+/* Paired Management Tiles */
+.tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.nav-tile {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-right: 5px solid var(--accent-teal);
+  border-radius: var(--radius);
+  padding: 18px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.nav-tile-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.nav-tile-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Status Pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Modal & Toast */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 27, 43, 0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 22px;
+  box-shadow: var(--shadow-md);
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+}
+
+.toast-item {
+  background: var(--primary-navy);
+  color: #FFFFFF;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-right: 4px solid var(--accent-teal);
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+}
+
+@media (max-width: 860px) {
+  .app-body {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    width: 100%;
+    border-left: none;
+    border-bottom: 1px solid var(--border-color);
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .nav-btn {
+    white-space: nowrap;
+    width: auto;
+  }
+}
+
+/* Four-section Arabic navigation with nested, accessible route groups. */
+#appViewport { display:flex; flex-direction:column; gap:16px; min-width:0; width:100%; }
+.main-section-heading { padding:20px 22px; }
+.section-description { color:var(--text-muted); margin-top:8px; }
+.section-title { font-size:17px; font-weight:700; margin-bottom:15px; }
+.route-tree { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
+.route-item { border:1px solid var(--border-color); border-radius:var(--radius); background:var(--bg-surface); padding:12px; min-width:0; }
+.route-item-root { border-right:4px solid var(--accent-teal); }
+.route-item-heading { display:flex; gap:8px; align-items:center; }
+.route-link { color:var(--text-main); text-decoration:none; font-weight:700; line-height:1.6; display:block; padding:8px 10px; border-radius:7px; min-height:38px; flex:1; }
+.route-link:hover, .route-link:focus-visible { background:var(--bg-subtle); outline-color:var(--accent-teal); }
+.route-children { margin-top:8px; color:var(--text-muted); }
+.route-children-toggle { padding:7px 10px; cursor:pointer; font-weight:600; font-size:12px; }
+.route-children-list { margin-top:7px; display:flex; flex-direction:column; gap:8px; padding-right:12px; border-right:1px solid var(--border-color); }
+.route-children-list .route-item { box-shadow:none; }
+.shared-route-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr)); gap:8px; }
+.shared-route-grid .route-link { border:1px solid var(--border-color); }
+@media (max-width:860px) {
+ .app-main { padding:12px; width:100%; min-width:0; }
+ .route-tree { grid-template-columns:1fr; }
+}
+
+/* Functional dashboard, archival read-only grid and secure login. */
+.functional-header h1 {margin:0}
+.functional-toolbar {display:flex;align-items:center;justify-content:flex-start;gap:12px;flex-wrap:wrap}
+.functional-toolbar select {min-width:190px;max-width:320px}
+.functional-feedback {color:var(--text-muted);min-height:0}
+.functional-feedback:empty{display:none}
+.functional-counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.functional-counters .counter-card{background:var(--bg-surface);border:1px solid var(--border-color);padding:14px;border-radius:var(--radius)}
+.functional-status-filters{display:flex;flex-wrap:wrap;gap:9px}
+.functional-status-filters .filter-chip{border:1px solid var(--border-color);background:var(--bg-surface);color:var(--text-main);font-weight:700}
+.functional-status-filters .filter-chip.active{border-color:var(--accent-teal);box-shadow:0 0 0 2px var(--accent-teal) inset}
+.functional-table-wrap{width:100%;overflow:auto;max-height:65vh;border:1px solid var(--border-color);border-radius:var(--radius)}
+.functional-table{width:100%;min-width:640px;border-collapse:separate;border-spacing:0}
+.functional-table th,.functional-table td{white-space:nowrap;padding:10px 12px;border-bottom:1px solid var(--border-color);background:var(--bg-surface)}
+.functional-table th{position:sticky;top:0;z-index:5;background:var(--bg-subtle)}
+.functional-pager{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.functional-pager button:disabled{opacity:.45;cursor:not-allowed}
+.monthly-scroll{max-height:64vh}
+.monthly-scroll .functional-table{width:max-content;min-width:100%}
+.monthly-scroll .day-cell{min-width:47px;text-align:center;white-space:nowrap}
+.monthly-day-detail{font:inherit;cursor:pointer;color:inherit;background:transparent;border:0;
+ padding:5px 8px;min-width:100%;font-weight:700}
+.monthly-day-detail:focus-visible{outline:2px solid var(--accent-teal);outline-offset:2px}
+.monthly-cell-details{margin-block:10px;line-height:1.75}
+.monthly-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.monthly-detail-content{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
+.monthly-detail-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.monthly-detail-row span{overflow-wrap:anywhere}
+.monthly-detail-revisions{grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:12px}
+.monthly-detail-revision{padding:10px 0;border-bottom:1px solid var(--border-color)}
+.monthly-scroll .fixed-one{right:0;width:62px;min-width:62px}
+.monthly-scroll .fixed-two{right:62px;width:118px;min-width:118px}
+.monthly-scroll .fixed-three{right:180px;width:190px;min-width:190px;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.monthly-scroll .fixed-four{right:370px;width:135px;min-width:135px}
+.monthly-scroll .pinned{position:sticky;z-index:3;background:var(--bg-surface)}
+.monthly-scroll th.pinned{z-index:8;background:var(--bg-subtle)}
+.functional-archive{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.functional-archive select{min-width:145px}
+.auth-form{max-width:490px;margin:24px auto;width:min(100%,490px);display:flex;flex-direction:column;gap:16px}
+.auth-form .form-field{display:flex;flex-direction:column;gap:7px;font-weight:700}
+.auth-form .form-input{width:100%;font:inherit;padding:12px;border:1px solid var(--border-color);background:var(--bg-surface);color:var(--text-main);border-radius:8px}
+.ui-alert{padding:14px;border-radius:8px;background:var(--bg-subtle);color:var(--text-main);text-align:center}
+.ui-error{border:1px solid var(--critical);color:var(--critical);background:var(--bg-surface)}
+@media(max-width:720px){
+ .functional-counters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .functional-archive>*{flex:1}
+ .functional-table-wrap{max-height:55vh}
+}
+
+.app-sidebar[hidden], #logoutAction[hidden] { display:none !important; }
+
+.monthly-scroll th { white-space: pre-line; text-align:center; }
+
+/* Consistent Cairo headings; fields and tables stay Tajawal for readability. */
+h1,h2,h3,.page-title,.brand-title,.section-title,.nav-section-label { font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif; }
+button,input,select,textarea,table { font-family:inherit; }
+
+/* Administration and settings: functional nested RTL cards, not screen placeholders. */
+.admin-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+.admin-card{min-width:0}
+.admin-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.admin-tile{min-height:48px;white-space:normal;text-align:center;line-height:1.55}
+.admin-input{display:flex;flex-direction:column;gap:6px;min-width:160px;flex:1;font-weight:600}
+.admin-input input{width:100%;max-width:100%}
+.admin-warning{border:1px solid var(--border-color);border-right:4px solid var(--warning);background:var(--bg-subtle);border-radius:7px;padding:12px;line-height:1.8;margin-top:8px}
+.admin-card .section-title{margin-bottom:14px}
+.admin-card>p{margin-top:10px}
+.admin-card .functional-toolbar{margin-bottom:16px}
+.admin-note{margin-top:14px;min-width:0;word-break:break-word}
+.admin-row-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.admin-color{display:inline-block;padding:5px 10px;border-radius:4px}
+@media(max-width:700px){.admin-groups{grid-template-columns:1fr}.admin-action-grid{grid-template-columns:1fr 1fr}}
+
+/* Administration: only primary tiles appear until a section is opened. */
+.admin-section-heading{padding:20px 24px}
+.admin-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:16px;align-items:stretch}
+.admin-primary-tile{font:inherit;color:var(--text-main);background:var(--bg-surface);border:1px solid var(--border-color);border-radius:14px;box-shadow:var(--shadow-sm);min-height:164px;width:100%;padding:22px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;text-align:center;transition:background .15s,border-color .15s,box-shadow .15s}
+.admin-primary-tile:hover{background:var(--bg-subtle);border-color:var(--accent-teal);box-shadow:var(--shadow-md)}
+.admin-primary-tile:focus-visible,.admin-subsection-tile:focus-visible{outline:3px solid var(--accent-teal);outline-offset:3px}
+.admin-primary-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:13px;background:var(--bg-subtle);color:var(--accent-teal);font-family:inherit;font-size:29px;line-height:1}
+.admin-primary-title{font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;font-size:19px;font-weight:800}
+.admin-primary-chevron{font-size:12px;color:var(--text-muted)}
+.admin-subpage-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.admin-subpage-heading .section-title{margin:0}
+.admin-subpage-heading .section-description{flex-basis:100%;margin:0;order:3}
+.admin-subsection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
+.admin-subsection-tile{min-height:105px;border:1px solid var(--border-color);background:var(--bg-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 14px;color:var(--text-main);font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;font-size:16px;font-weight:700;text-align:center;cursor:pointer}
+.admin-subsection-tile:hover{background:var(--bg-subtle);border-color:var(--accent-teal)}
+
+/* Settings: distinct actionable panels with clear operational status. */
+.settings-heading{padding:21px 24px}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.settings-panel{min-width:0;display:flex;flex-direction:column;gap:13px;padding:22px}
+.settings-panel-title{display:flex;align-items:center;gap:11px;margin:0;padding-bottom:12px;border-bottom:1px solid var(--border-color)}
+.settings-panel-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--bg-subtle);color:var(--accent-teal);font-family:"AlTamam Tajawal",sans-serif;font-size:23px}
+.settings-copy{color:var(--text-muted);font-size:13px;line-height:1.8}
+.settings-properties{display:flex;flex-direction:column;gap:0;min-width:0}
+.settings-property{padding:11px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--border-color)}
+.settings-property:last-child{border-bottom:0}
+.settings-property-label{color:var(--text-muted);font-size:13px;min-width:0}
+.settings-property-value{font-weight:700;overflow-wrap:anywhere;text-align:left;max-width:67%;direction:auto}
+.settings-action{align-self:flex-start;min-height:39px}
+.settings-feedback{min-width:0;overflow-wrap:anywhere}
+.settings-feedback:empty{display:none}
+.settings-success{border-right:4px solid var(--positive);padding:12px;background:var(--bg-subtle);border-radius:8px;line-height:1.7}
+@media(max-width:960px){.settings-grid{grid-template-columns:1fr}}
+@media(max-width:620px){
+ .admin-home-grid,.admin-subsection-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .admin-primary-tile{min-height:138px;padding:16px 8px}
+ .admin-primary-title{font-size:15px}
+ .admin-primary-icon{width:43px;height:43px;font-size:25px}
+ .admin-subsection-tile{min-height:85px;font-size:14px}
+ .settings-panel{padding:16px}
+ .settings-property{flex-wrap:wrap}
+ .settings-property-value{text-align:right;max-width:100%}
+}
+
+/* Single-screen desktop canvas; only long data tables scroll inside their own panel.
+   Compact short displays while preserving usable 12+ px text and focus targets. */
+html,body{min-height:100%;height:100%;overflow:hidden}
+body{min-width:0}
+.app-body{flex:1;min-height:0;max-height:calc(100dvh - 62px);overflow:hidden}
+.app-main{height:100%;min-width:0;min-height:0;overflow:hidden;padding:clamp(8px,1.5vw,18px)}
+#appViewport{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.card{min-width:0}
+.functional-table-wrap{max-height:min(56dvh,620px);overscroll-behavior:contain}
+.monthly-scroll{max-height:min(58dvh,680px);overflow-x:auto;scrollbar-gutter:stable}
+.monthly-scroll .current-day-column{box-shadow:inset 0 0 0 2px var(--accent-teal);font-weight:800}
+.monthly-scroll th.current-day-column{background:var(--accent-teal);color:#fff}
+.monthly-scroll td.current-day-column{border-inline:2px solid var(--accent-teal)}
+.admin-card .functional-toolbar{gap:8px}
+.admin-card .functional-toolbar>*{min-width:0}
+.admin-site-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end}
+.admin-site-form .btn{min-height:42px}
+.app-dialog-copy{line-height:1.85;overflow-wrap:anywhere;margin:8px 0 16px}
+.app-dialog-field{display:flex;flex-direction:column;gap:8px;font-weight:700;margin-bottom:12px}
+.app-dialog-field textarea,.app-dialog-field input{width:100%;background:var(--bg-surface);border:1px solid var(--border-color);color:var(--text-main);font-size:15px;padding:12px;border-radius:8px}
+.app-dialog-error{color:var(--critical);min-height:20px}
+.app-dialog-actions{display:flex;justify-content:flex-start;gap:12px;margin-top:16px;flex-wrap:wrap}
+.modal-backdrop{z-index:1000;align-items:center;justify-content:center}
+.modal-box{width:min(95vw,540px);max-height:min(85dvh,650px);margin:auto;border:1px solid var(--accent-teal);box-shadow:0 18px 56px rgba(0,0,0,.3)}
+.modal-box .card-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.modal-box .card-header .page-title{font-size:19px}
+@media(max-height:800px){
+ .app-topbar{min-height:49px;padding:5px 14px;gap:6px}
+ .app-body{max-height:calc(100dvh - 49px)}
+ .app-sidebar{width:208px;padding:8px}
+ .app-main{padding:8px 12px}
+ #appViewport{gap:8px}
+ .admin-section-heading,.admin-subpage-heading,.settings-heading{padding:10px 15px}
+ .admin-subsection-grid,.admin-home-grid{gap:9px}
+ .admin-primary-tile{min-height:100px;padding:11px}
+ .admin-subsection-tile{min-height:62px;padding:10px}
+ .card{padding:12px}
+ .admin-card .section-title{margin-bottom:7px}
+ .functional-toolbar{gap:7px}
+ .functional-table th,.functional-table td{padding:6px 9px}
+ .functional-table-wrap{max-height:calc(100dvh - 260px)}
+ .monthly-scroll{max-height:calc(100dvh - 305px)}
+}
+@media(max-width:1020px){.admin-site-form{grid-template-columns:repeat(2,minmax(0,1fr))}.app-sidebar{width:190px}}
+@media(max-width:670px){html,body{overflow:auto;height:auto}.app-body{max-height:none;overflow:visible}.app-main{overflow:visible}.admin-site-form{grid-template-columns:1fr}#appViewport{overflow:visible}.modal-box{max-height:85dvh}}
+
+/* Dashboard counters double as the only attendance-state filters. */
+.functional-counters .dashboard-filter-counter{
+  appearance:none;display:flex;flex-direction:column;align-items:stretch;justify-content:center;
+  width:100%;min-width:0;font:inherit;text-align:right;color:var(--text-main);
+  background:var(--bg-surface);border:1px solid var(--border-color);
+  border-right:5px solid var(--primary-navy);border-radius:var(--radius);
+  padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s;
+}
+.functional-counters .dashboard-filter-counter:hover{background:var(--bg-subtle);border-color:var(--accent-teal);box-shadow:var(--shadow-sm)}
+.functional-counters .dashboard-filter-counter.active{background:var(--bg-subtle);border-color:var(--accent-teal);box-shadow:inset 0 0 0 2px var(--accent-teal)}
+.functional-counters .dashboard-filter-counter:focus-visible{outline:3px solid var(--accent-teal);outline-offset:3px}
+.functional-counters .dashboard-filter-counter .counter-label,.functional-counters .dashboard-filter-counter .counter-value{display:block;pointer-events:none}
+.attendance-confirm-action{min-width:190px;min-height:43px;font-weight:800}
+
+/* Keep pagination controls in the visible footer. Only the table body scrolls. */
+.functional-paged-area,
+:is(.admin-note,.admin-card,.card,div):has(> .functional-table-wrap):has(> .functional-pager){
+  display:flex;flex-direction:column;min-height:0;
+  max-height:calc(100dvh - 255px);
+}
+.functional-paged-area>.functional-table-wrap,
+:is(.admin-note,.admin-card,.card,div):has(> .functional-table-wrap):has(> .functional-pager)>.functional-table-wrap{
+  flex:1 1 auto;min-height:0;overflow:auto;max-height:min(54dvh,560px);
+}
+.functional-paged-area>.functional-pager,
+:is(.admin-note,.admin-card,.card,div):has(> .functional-table-wrap):has(> .functional-pager)>.functional-pager{
+  position:relative;flex:0 0 auto;margin-top:0;padding:10px 12px;
+  border-top:1px solid var(--border-color);background:var(--bg-surface);
+  z-index:12;min-height:48px;
+}
+.functional-paged-area>.monthly-scroll{max-height:min(48dvh,520px)}
+@media(max-height:760px){
+ .functional-paged-area,
+ :is(.admin-note,.admin-card,.card,div):has(> .functional-table-wrap):has(> .functional-pager){
+   max-height:calc(100dvh - 205px)}
+ .functional-paged-area>.functional-table-wrap{max-height:min(41dvh,425px)}
+ .functional-paged-area>.functional-pager{min-height:45px;padding:6px 8px}
+}
+
+/* Monthly navigation stays in the upper toolbar; the paging footer remains
+   outside the horizontally scrollable historical day grid. */
+.functional-toolbar>.monthly-period-nav{white-space:nowrap;min-width:114px}
+@media(max-width:720px){.functional-toolbar>.monthly-period-nav{min-width:0;flex:1 1 auto}}
+
+/* Monthly roster: legible Arabic, unclipped identity/site fields, moving date highlight. */
+.monthly-scroll .functional-table{
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;
+  font-size:14px;line-height:1.6;
+}
+.monthly-scroll .functional-table th{
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:14px;font-weight:800;line-height:1.55;
+  white-space:pre-line;text-align:center;padding:9px 8px;
+}
+.monthly-scroll .functional-table td{
+  font-size:14px;font-weight:700;line-height:1.65;
+  vertical-align:middle;padding:8px 9px;
+}
+.monthly-scroll .fixed-three{
+  width:205px;min-width:205px;max-width:205px;
+  white-space:normal;overflow:visible;text-overflow:clip;
+  overflow-wrap:anywhere;font-weight:700;
+}
+.monthly-scroll .fixed-four{right:385px;width:145px;min-width:145px;
+  white-space:normal;overflow-wrap:anywhere}
+.monthly-scroll td.current-day-column .monthly-day-detail{font-size:18px}
+.monthly-scroll .monthly-day-detail{
+  display:block;font-family:inherit;color:inherit;
+  font-size:15px;line-height:1.5;font-weight:900;
+  padding:8px 5px;min-height:40px;
+}
+.monthly-scroll th.pinned{box-shadow:inset 0 -2px 0 var(--border-color)}
+.monthly-scroll .monthly-day-detail:hover{
+  outline:2px solid currentColor;outline-offset:-3px;border-radius:5px;
+}
+
+/* Preview confirmation uses the existing centered application dialog, not
+   a second inline card or a browser-native confirmation. */
+.modal-backdrop:has(.attendance-review) .modal-box{
+  width:min(94vw,850px);max-height:min(90dvh,760px);
+}
+.attendance-review{min-width:0;display:flex;flex-direction:column;gap:10px}
+.attendance-review-summary{
+  margin:0;padding:10px 12px;background:var(--bg-subtle);
+  color:var(--text-main);font-size:15px;font-weight:800;
+  border-radius:8px;line-height:1.8;
+}
+.attendance-review-scroll{
+  max-height:min(47dvh,430px);overflow:auto;
+  border:1px solid var(--border-color);border-radius:8px;
+  overscroll-behavior:contain;
+}
+.attendance-review-table{width:100%;min-width:550px;
+  border-collapse:separate;border-spacing:0;font-size:14px;
+}
+.attendance-review-table th,.attendance-review-table td{
+  text-align:right;white-space:normal;overflow-wrap:anywhere;
+  padding:10px 12px;border-bottom:1px solid var(--border-color);
+  line-height:1.6;color:var(--text-main);
+}
+.attendance-review-table th{
+  position:sticky;top:0;z-index:1;
+  background:var(--bg-subtle);font-weight:800;
+}
+.attendance-review-table tbody tr:nth-child(even) td{background:var(--bg-subtle)}
+.attendance-review-warning{
+  color:var(--text-muted);line-height:1.65;font-size:13px;margin:3px 0 0;
+}
+@media(max-height:720px){
+  .attendance-review-scroll{max-height:35dvh}
+}
+
+
+/* Search sizing across dashboard, roster, archives, reports and admin dialogs.
+   Match the existing button height and scale responsively without hard widths. */
+:is(.functional-toolbar,.admin-card,.person-report-page,.separation-screen)
+  input[type="search"]{
+  box-sizing:border-box;flex:1 1 285px;width:min(100%,420px);
+  min-width:min(100%,230px);min-height:46px;
+  padding:10px 15px;font-size:16px;font-weight:600;line-height:1.5;
+  border:1px solid var(--border-color);border-radius:9px;
+  background:var(--bg-surface);color:var(--text-main);
+}
+:is(.functional-toolbar,.admin-card) .admin-input:has(input[type="search"]),
+.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 1 300px;min-width:min(100%,230px);max-width:580px;
+}
+:is(.functional-toolbar,.admin-card) .admin-input input[type="search"]{
+  width:100%;max-width:none;
+}
+@media(max-width:680px){
+  .functional-toolbar input[type="search"]{
+    width:100%;flex-basis:100%;min-width:0;
+  }
+}
+
+/* Fixed monthly headers must remain clearly legible against sticky columns. */
+.monthly-scroll .functional-table thead th.pinned{
+  background:var(--primary-navy);color:#fff;opacity:1;
+  font-size:16px;font-weight:900;letter-spacing:0;
+  line-height:1.65;padding:12px 9px;min-height:48px;
+  border-bottom:3px solid var(--accent-teal);
+  box-shadow:inset 0 -3px 0 var(--accent-teal);
+  text-shadow:0 1px 1px rgba(0,0,0,.22);
+}
+/* Dedicated scrollable report overlay: result tables never replace selection. */
+.person-report-modal:not([hidden]){
+  position:fixed;inset:0;z-index:1200;
+  display:flex;align-items:center;justify-content:center;
+  padding:clamp(8px,2vw,22px);background:rgba(0,0,0,.68);
+}
+.person-report-modal[hidden]{display:none!important}
+.person-report-dialog{
+  box-sizing:border-box;display:flex;flex-direction:column;gap:12px;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--accent-teal);border-radius:15px;
+  box-shadow:0 20px 65px rgba(0,0,0,.34);
+  width:min(96vw,1300px);max-height:min(94dvh,980px);
+  padding:clamp(12px,2vw,22px);overflow:hidden;
+}
+.person-report-dialog>.person-report-actions{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  flex-shrink:0;border-bottom:1px solid var(--border-color);padding-bottom:10px;
+}
+.person-report-actions>.section-title{margin:0;flex:1 1 230px}
+.person-report-dialog>.functional-feedback{flex-shrink:0;overflow-wrap:anywhere}
+.person-report-dialog>.person-report-content{overflow-y:auto;min-height:0;min-width:0}
+.person-report-dialog .functional-table-wrap{max-height:50dvh}
+@media(max-width:650px){
+ .person-report-dialog{width:100%;max-height:96dvh;padding:12px}
+ .person-report-dialog>.person-report-actions>*{flex:1 1 auto}
+}
+
+/* Uniform field scale also covers the older admin search forms using text inputs. */
+.admin-input .form-control{min-height:46px;font-size:16px;padding:10px 13px;line-height:1.5}
+.functional-toolbar input[placeholder*="بحث"],
+.functional-toolbar input[aria-label*="بحث"]{min-height:46px;font-size:16px;flex:1 1 285px;max-width:580px}
+
+/* Daily roster: use the remaining desktop height, not a 41vh table cap.
+   The viewport owns the page; the table scrolls and the pager stays visible. */
+#appViewport.daily-dashboard{
+  height:100%;overflow:hidden;gap:6px
+}
+#appViewport.daily-dashboard>.functional-header{
+  flex:0 0 auto;padding:6px 12px
+}
+#appViewport.daily-dashboard>.functional-header .page-title{
+  margin:0;font-size:18px;line-height:1.3
+}
+#appViewport.daily-dashboard>.functional-toolbar{
+  flex:0 0 auto;flex-wrap:nowrap;overflow-x:auto;
+  gap:6px;padding:5px 8px;min-height:0
+}
+#appViewport.daily-dashboard>.functional-toolbar>*{flex-shrink:0}
+#appViewport.daily-dashboard>.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 1 220px;min-width:190px;max-width:none
+}
+#appViewport.daily-dashboard>.functional-toolbar input[type="search"]{
+  width:100%;min-width:190px;min-height:34px;
+  padding:5px 9px;font-size:14px
+}
+#appViewport.daily-dashboard>.functional-toolbar select,
+#appViewport.daily-dashboard>.functional-toolbar .btn{
+  min-height:34px;padding:5px 9px;font-size:13px
+}
+#appViewport.daily-dashboard>.functional-feedback{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;
+  align-items:center;gap:5px 12px;font-size:12px
+}
+#appViewport.daily-dashboard>.functional-feedback .section-description{
+  margin:0;line-height:1.4
+}
+#appViewport.daily-dashboard>.functional-counters{
+  display:flex;grid-template-columns:none;flex:0 0 auto;
+  gap:6px;overflow-x:auto;overflow-y:hidden;min-height:0;
+  scrollbar-width:thin
+}
+#appViewport.daily-dashboard>.functional-counters .counter-card{
+  flex:1 0 116px;min-width:116px;max-width:180px;
+  min-height:52px;gap:1px;padding:5px 9px;border-radius:7px
+}
+#appViewport.daily-dashboard>.functional-counters .counter-label{
+  font-size:11px;line-height:1.25
+}
+#appViewport.daily-dashboard>.functional-counters .counter-value{
+  font-size:20px;line-height:1.15
+}
+#appViewport.daily-dashboard>.daily-roster-panel{
+  display:flex;flex-direction:column;flex:1 1 0;
+  height:auto;min-height:0;max-height:none;
+  overflow:hidden;padding:0
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap{
+  flex:1 1 auto;min-height:0;max-height:none;
+  overflow:auto;scrollbar-gutter:stable
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-pager{
+  flex:0 0 auto;margin:0;min-height:38px;
+  padding:4px 9px;gap:8px
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-pager .btn{
+  min-height:29px;padding:4px 10px
+}
+/* One-line, uniform-height cells keep names legible and show more at once;
+   allow horizontal scrolling on narrow windows rather than tiny text. */
+.daily-roster-panel .functional-table{width:100%;min-width:780px;table-layout:fixed}
+.daily-roster-panel .functional-table th,
+.daily-roster-panel .functional-table td{
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;
+  font-size:14px;font-weight:700;line-height:1.3;
+  height:34px;padding:4px 8px;box-sizing:border-box;
+  vertical-align:middle;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+  border-bottom:1px solid var(--border-color);
+  border-inline-start:1px solid var(--border-color)
+}
+.daily-roster-panel .functional-table th{
+  font-weight:800;text-align:right;background:var(--bg-subtle)
+}
+.daily-roster-panel .functional-table tbody tr:nth-child(even) td{
+  background:var(--bg-subtle)
+}
+.daily-roster-panel .functional-table th:first-child,
+.daily-roster-panel .functional-table td:first-child{
+  width:62px;text-align:center
+}
+.daily-roster-panel .functional-table th:nth-child(2),
+.daily-roster-panel .functional-table td:nth-child(2){width:115px}
+.daily-roster-panel .functional-table th:nth-child(3),
+.daily-roster-panel .functional-table td:nth-child(3){width:34%}
+.daily-roster-panel .functional-table th:last-child,
+.daily-roster-panel .functional-table td:last-child{width:135px}
+.daily-roster-panel .functional-table input[type="checkbox"]{
+  width:18px;height:18px;accent-color:var(--accent-teal)
+}
+/* The attendance-selection list uses the same dense table and a visible pager. */
+.admin-attendance-host .daily-roster-panel{
+  display:flex;flex-direction:column;min-height:0
+}
+.admin-attendance-host .daily-roster-panel>.functional-table-wrap{
+  max-height:min(66dvh,740px);overflow:auto
+}
+.admin-attendance-host .daily-roster-panel>.functional-pager{
+  flex:0 0 auto;margin:0;min-height:38px;padding:5px 8px
+}
+/* Very short/small screens can scroll the whole dashboard if needed;
+   never collapse the roster to a tiny zero-height strip. */
+@media(max-height:580px),(max-width:670px){
+  #appViewport.daily-dashboard{height:auto;overflow-y:auto}
+  #appViewport.daily-dashboard>.daily-roster-panel{
+    flex:0 0 auto;min-height:220px;max-height:70dvh
+  }
+  #appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap{
+    max-height:calc(70dvh - 42px)
+  }
+}
+
+/* Consistent high-density, readable table treatment in every application screen.
+   Monthly sticky-day positioning and the dashboard's full-height shell are kept. */
+#appViewport table.unified-app-table,
+#appModalBody table.unified-app-table{
+  border-collapse:separate;border-spacing:0;
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;font-size:14px
+}
+#appViewport table.unified-app-table :is(th,td),
+#appModalBody table.unified-app-table :is(th,td){
+  box-sizing:border-box;vertical-align:middle;line-height:1.4;
+  min-height:35px;padding:5px 8px;border-bottom:1px solid var(--border-color);
+  border-inline-start:1px solid var(--border-color)
+}
+#appViewport table.unified-app-table th,
+#appModalBody table.unified-app-table th{
+  font-weight:800;white-space:normal;text-align:right
+}
+#appViewport table.unified-app-table td,
+#appModalBody table.unified-app-table td{
+  font-weight:650
+}
+#appViewport table.unified-app-table tbody tr:nth-child(even):not([hidden]) td,
+#appModalBody table.unified-app-table tbody tr:nth-child(even):not([hidden]) td{
+  background:var(--bg-subtle)
+}
+#appViewport table.unified-app-table tbody tr[hidden],
+#appModalBody table.unified-app-table tbody tr[hidden]{display:none}
+#appViewport .table-expanded-scroll{
+  max-height:var(--usable-table-height,calc(100dvh - 210px));
+  min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+#appModalBody .table-expanded-scroll{
+  max-height:min(58dvh,620px);overflow:auto;min-height:0;overscroll-behavior:contain
+}
+#appViewport .table-expanded-paged{
+  display:flex;flex-direction:column;min-height:0;
+  max-height:min(91dvh,calc(100dvh - 96px))
+}
+#appViewport .table-expanded-paged>.table-expanded-scroll{
+  flex:1 1 auto;min-height:0;
+  max-height:var(--usable-table-height,calc(100dvh - 180px))
+}
+#appViewport .table-expanded-paged>.functional-pager{
+  position:relative;flex:0 0 auto;margin:0;min-height:42px;
+  background:var(--bg-surface);padding:6px 10px;z-index:12;
+  border-top:1px solid var(--border-color)
+}
+/* Use the existing daily-dashboard full-height flex contract unchanged. */
+#appViewport.daily-dashboard>.daily-roster-panel>.table-expanded-scroll{
+  max-height:none;flex:1 1 auto
+}
+.table-local-search{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--bg-surface);border-bottom:1px solid var(--border-color);
+  padding:5px 9px;font-size:13px;font-weight:700
+}
+.table-local-search input{
+  flex:1 1 220px;min-width:130px;max-width:450px;
+  background:var(--bg-surface);color:var(--text-main);border:1px solid var(--border-color);
+  border-radius:7px;padding:6px 10px;min-height:34px;font:inherit
+}
+.table-local-count{margin-inline-start:auto;color:var(--text-muted);font-weight:600}
+.table-expanded-scroll.has-local-table-search table.unified-app-table thead th{
+  top:43px
+}
+@media(max-width:700px){
+  .table-local-search{gap:5px;padding:5px}
+  .table-local-search input{flex-basis:150px}
+  #appViewport .table-expanded-scroll{max-height:min(72dvh,610px)}
+}
+/* Retain all monthly-column pinning, centered dates and current-day highlight. */
+#appViewport .monthly-scroll table.unified-app-table thead th{
+  text-align:center;white-space:pre-line
+}
+#appViewport .monthly-scroll table.unified-app-table thead th.pinned{
+  z-index:15
+}
+
+/* Monthly attendance: fit as many readable people as the window permits.
+   Keep the chronological calendar, four sticky columns and visible pager. */
+#appViewport.monthly-dashboard{
+  height:100%;min-height:0;overflow:hidden;gap:6px
+}
+#appViewport.monthly-dashboard>.functional-header{
+  flex:0 0 auto;padding:6px 12px
+}
+#appViewport.monthly-dashboard>.functional-header .page-title{
+  margin:0;font-size:18px;line-height:1.3
+}
+#appViewport.monthly-dashboard>.functional-toolbar{
+  flex:0 0 auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+  gap:6px;min-height:0;padding:5px 8px;scrollbar-width:thin
+}
+#appViewport.monthly-dashboard>.functional-toolbar>*{flex-shrink:0}
+#appViewport.monthly-dashboard>.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 0 220px;min-width:210px;max-width:340px
+}
+#appViewport.monthly-dashboard>.functional-toolbar input[type="search"]{
+  box-sizing:border-box;width:100%;max-width:none;
+  min-height:34px;padding:5px 9px;font-size:14px
+}
+#appViewport.monthly-dashboard>.functional-toolbar :is(select,.btn),
+#appViewport.monthly-dashboard>.monthly-archive-controls :is(select,.btn){
+  min-height:34px;padding:5px 9px;font-size:13px
+}
+#appViewport.monthly-dashboard>.functional-feedback:not(:empty){flex:0 0 auto}
+#appViewport.monthly-dashboard> :is(.functional-export-preview,.monthly-cell-details)[hidden]{
+  display:none!important
+}
+#appViewport.monthly-dashboard> :is(.functional-export-preview,.monthly-cell-details):not([hidden]){
+  flex:0 0 auto;max-height:min(24dvh,190px);overflow:auto
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel{
+  display:flex;flex-direction:column;flex:1 1 0;
+  min-width:0;min-height:0;height:auto;max-height:none;
+  overflow:hidden;padding:0
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-scroll{
+  flex:1 1 0;min-height:0;max-height:none;
+  overflow:auto;scrollbar-gutter:stable
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.functional-pager{
+  position:relative;flex:0 0 auto;min-height:38px;
+  margin:0;padding:4px 9px;gap:8px;z-index:12;
+  background:var(--bg-surface);border-top:1px solid var(--border-color)
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.functional-pager .btn{
+  min-height:29px;padding:4px 10px
+}
+#appViewport.monthly-dashboard>.monthly-archive-controls{
+  flex:0 0 auto;min-height:0;gap:8px;padding:5px 9px;
+  margin:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin
+}
+#appViewport.monthly-dashboard>.monthly-archive-controls>*{flex-shrink:0}
+/* A compact cell keeps a clear font. Longer names may wrap to the next
+   line rather than disappearing behind an ellipsis. */
+#appViewport.monthly-dashboard .monthly-scroll .functional-table :is(th,td){
+  box-sizing:border-box;vertical-align:middle;
+  font-size:14px;line-height:1.35;padding:4px 7px;
+  border-bottom:1px solid var(--border-color)
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table tbody tr{
+  height:35px
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-three{
+  white-space:normal;overflow-wrap:anywhere;overflow:visible;
+  text-overflow:clip;font-weight:750
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-four{
+  white-space:normal;overflow-wrap:anywhere
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table thead th.day-column{
+  white-space:pre-line;text-align:center;line-height:1.3;padding:5px 6px;
+  font-weight:800
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table thead th.pinned{
+  background:var(--primary-navy);color:#fff;font-size:15px;
+  font-weight:900;white-space:normal;text-align:center;
+  border-bottom:3px solid var(--accent-teal)
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table .day-cell{
+  min-width:44px;text-align:center
+}
+#appViewport.monthly-dashboard .monthly-scroll .monthly-day-detail{
+  min-height:28px;padding:3px 5px;font-size:14px;
+  font-weight:800;line-height:1.25
+}
+#appViewport.monthly-dashboard .monthly-scroll td.current-day-column .monthly-day-detail{
+  font-size:16px;font-weight:900
+}
+#appViewport.monthly-dashboard .monthly-scroll th.current-day-column{
+  background:var(--accent-teal);color:#fff
+}
+/* Very small screens retain scrolling instead of crushing the calendar. */
+@media(max-height:580px),(max-width:670px){
+  #appViewport.monthly-dashboard{height:auto;overflow-y:auto}
+  #appViewport.monthly-dashboard>.monthly-grid-panel{
+    flex:0 0 auto;min-height:220px;max-height:72dvh
+  }
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-scroll{
+    max-height:calc(72dvh - 42px)
+  }
+}
+
+/* Read-only, keyboard-accessible register of automatic attendance at 08:00. */
+.auto-attendance-overlay{
+  position:fixed;inset:0;z-index:1200;display:flex;
+  align-items:center;justify-content:center;padding:clamp(7px,2vw,20px);
+  background:rgba(0,0,0,.68)
+}
+.auto-attendance-dialog{
+  display:flex;flex-direction:column;gap:10px;
+  width:min(96vw,1220px);max-height:90dvh;min-height:0;overflow:hidden;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--accent-teal);box-shadow:0 18px 54px rgba(0,0,0,.3)
+}
+.auto-attendance-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.auto-attendance-heading .page-title{margin:0;font-size:19px}
+.auto-attendance-dialog>.section-description{margin:0;line-height:1.65}
+.auto-attendance-dialog>.functional-toolbar{gap:8px;padding:0;flex:0 0 auto}
+.auto-attendance-dialog>.functional-toolbar .form-field{flex:1 1 200px}
+.auto-attendance-dialog>.functional-toolbar .auto-attendance-status-select{flex:1 1 190px;min-width:170px}
+.auto-attendance-dialog .auto-attendance-selection-info{font-weight:800;white-space:nowrap}
+.auto-attendance-dialog .auto-attendance-results{
+  flex:1 1 auto;min-height:130px;overflow:hidden
+}
+.auto-attendance-dialog .auto-attendance-results>.functional-table-wrap{
+  height:100%;max-height:none;overflow:auto;scrollbar-gutter:stable
+}
+.auto-attendance-dialog .functional-table{width:100%;min-width:1120px;table-layout:fixed}
+.auto-attendance-dialog .functional-table :is(th,td){
+  padding:6px 9px;min-height:36px;font-size:14px;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis
+}
+.auto-attendance-dialog .functional-table :is(th,td):first-child{width:58px;text-align:center}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(2){width:65px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(3){width:125px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(4){width:19%}
+.auto-attendance-dialog .functional-table :is(th,td):last-child{width:160px}
+.auto-attendance-dialog>.functional-pager{flex:0 0 auto;margin:0;padding:8px 0 0;border-top:1px solid var(--border-color)}
+@media(max-width:670px){
+  .auto-attendance-dialog{max-height:96dvh;padding:10px}
+  .auto-attendance-heading .page-title{font-size:16px}
+  .auto-attendance-dialog .section-description{font-size:12px}
+}
+
+/* Distinct legible dashboard column titles, while compact data rows remain untouched. */
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap
+  .functional-table thead th{
+  position:sticky;top:0;z-index:8;
+  padding:10px 9px;min-height:46px;height:auto;
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:16px;font-weight:900;line-height:1.5;
+  white-space:normal;overflow:visible;text-overflow:clip;
+  text-align:center;vertical-align:middle;
+  background:var(--primary-navy);color:#fff;
+  border-bottom:3px solid var(--accent-teal);
+  border-inline-start:1px solid rgba(255,255,255,.28)
+}
+#appViewport.daily-dashboard>.daily-roster-panel
+  .functional-table thead th:nth-child(3){text-align:right;padding-inline:15px}
+#appViewport.daily-dashboard>.daily-roster-panel
+  .functional-table thead th:last-child{min-width:145px}
+
+/* Keep related automatic-attendance settings aligned and readable. */
+.settings-attendance-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-block:10px}
+.settings-attendance-fields .admin-input{min-width:0}
+@media(max-width:640px){.settings-attendance-fields{grid-template-columns:minmax(0,1fr)}}
+.auto-attendance-overlay[hidden]{display:none!important}
+.auto-attendance-overlay .monthly-cell-details{max-height:85vh;overflow:auto;width:min(760px,94vw)}
+
+/* One consistent direction for navigational back controls in RTL screens. */
+.app-back-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;direction:rtl}
+.app-back-action::before{content:"→";display:inline-block;flex:0 0 auto;font-size:1.2em;font-weight:900;direction:ltr;unicode-bidi:isolate}
+.app-back-action:focus-visible{outline:2px solid var(--accent-teal);outline-offset:2px}
+
+/* Explain active-force membership separately from the historical month roster. */
+.monthly-force-totals{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;
+  border:1px solid var(--border-color);border-radius:10px;padding:9px 14px;
+  background:var(--bg-surface);color:var(--text-main);min-width:0}
+.monthly-force-totals strong{color:var(--accent-teal);font-size:15px;font-weight:900}
+.monthly-force-totals span{font-size:14px;font-weight:700}
+.monthly-force-totals small{display:block;flex-basis:100%;font-size:12px;line-height:1.5;color:var(--text-muted)}
+#appViewport.monthly-dashboard>.monthly-force-totals{flex:0 0 auto}
+
+/* Equal settings cards: preserve the shared palette and readable RTL fields. */
+.settings-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-auto-rows:1fr;gap:16px;align-items:stretch;
+}
+.settings-grid>.settings-panel{
+  grid-column:auto;min-width:0;min-height:360px;height:100%;
+  box-sizing:border-box;padding:22px;gap:14px;
+}
+.settings-panel-title{min-height:54px;align-items:center;line-height:1.7}
+.settings-panel-icon{flex:0 0 38px}
+.settings-panel .settings-copy{margin:0}
+.settings-panel .settings-action{
+  align-self:stretch;width:100%;min-height:42px;
+  white-space:normal;line-height:1.6;
+}
+.settings-panel .settings-attendance-fields{width:100%;min-width:0}
+.settings-panel .admin-input{display:flex;flex-direction:column;gap:5px;min-width:0}
+.settings-panel .form-control{width:100%;min-width:0;box-sizing:border-box}
+@media(max-width:760px){
+  .settings-grid{grid-template-columns:minmax(0,1fr);grid-auto-rows:auto}
+  .settings-grid>.settings-panel{min-height:0;height:auto;padding:16px}
+}
+/* Plain count by the editing screen title (no extra rows or table changes). */
+.admin-force-inline-count{margin-inline-start:8px;font-size:.95em;font-weight:800;
+  color:inherit;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* Uniform offline search fields without changing the meaning of screen filters. */
+:is(#appViewport,.auto-attendance-overlay,#appModalBody) input.app-smart-search{
+  width:100%;min-width:0;min-height:42px;max-width:100%;
+  padding:9px 13px;border:1px solid var(--border-color);border-radius:9px;
+  background:var(--bg-surface);color:var(--text-main);font:inherit;
+  font-size:15px;line-height:1.5;outline-offset:2px
+}
+:is(#appViewport,.auto-attendance-overlay,#appModalBody) input.app-smart-search:focus{
+  border-color:var(--accent-teal);outline:2px solid color-mix(in srgb,var(--accent-teal) 18%,transparent)
+}
+:is(.functional-toolbar,.admin-card,.person-report-page) input.app-smart-search{
+  flex:1 1 220px
+}
+.auto-attendance-dialog .auto-attendance-status-select{
+  width:100%;min-width:140px;max-width:100%;min-height:39px;
+  padding:5px 8px;background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-radius:7px;font:inherit
+}
+.auto-attendance-dialog .functional-table{min-width:850px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(6){width:180px}
+.auto-attendance-dialog .functional-table :is(th,td):last-child{width:150px}
+/* The verified confirmation must appear ABOVE the auto-prepared register. */
+body:has(.auto-attendance-overlay) #appModalBackdrop.open{z-index:1400}
+/* Daily administrative attendance: legible headers without enlarging data rows. */
+.admin-attendance-host .daily-roster-panel .functional-table thead th{
+  position:sticky;top:0;z-index:7;
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:16px;font-weight:900;line-height:1.55;
+  text-align:center;vertical-align:middle;
+  padding:10px 12px;white-space:normal;overflow:visible;text-overflow:clip;
+  background:var(--primary-navy);color:#fff;
+  border-bottom:3px solid var(--accent-teal);
+  border-inline-start:1px solid rgba(255,255,255,.24)
+}
+.admin-attendance-host .daily-roster-panel .functional-table thead th:nth-child(3){
+  text-align:right;padding-inline:16px
+}
+.admin-attendance-host .daily-roster-panel .functional-table thead th:nth-child(5){
+  min-width:155px
+}
+
+/* Common detail previews: concise facts and bounded, scrollable table content. */
+.app-preview-properties{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;min-width:0}
+.app-preview-property{display:flex;flex-direction:column;gap:4px;min-width:0;padding:8px 11px;
+  border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle)}
+.app-preview-property dt{font-size:12px;font-weight:700;color:var(--text-muted)}
+.app-preview-property dd{font-size:14px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;margin:0}
+@media(max-width:620px){.app-preview-properties{grid-template-columns:minmax(0,1fr)}}
+
+/* Wide, readable search fields. Keep their labels visually compact without
+   modifying ARIA names or changing keyboard search behavior. */
+input.app-unified-search{
+  box-sizing:border-box;width:100%;min-width:200px;max-width:360px;
+  height:38px;min-height:38px;flex:1 1 240px;
+  padding:6px 12px;border:1px solid var(--border-color);
+  border-radius:8px;background:var(--bg-surface);color:var(--text-main);
+  font:600 14px/1.5 "AlTamam Tajawal",sans-serif
+}
+input.app-unified-search::placeholder{color:var(--text-muted);opacity:1;font-size:13px}
+label.app-unified-search-wrap{
+  display:flex;flex:1 1 240px;min-width:200px;max-width:360px;gap:0
+}
+label.app-unified-search-wrap>.app-unified-search-caption{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0
+}
+/* Modal-first institutional design — shared by all 69 standalone routes and the
+   active WebView2 shell. No remote dependencies or inline-script exceptions. */
+.app-topbar{
+  min-height:62px;background:linear-gradient(135deg,#0B1F33,#133353);
+  box-shadow:0 2px 15px rgba(5,18,32,.18)
+}
+.brand-logo{
+  background:linear-gradient(135deg,#14B8A6,#0D9488);
+  box-shadow:0 3px 10px rgba(13,148,136,.22);border-radius:10px
+}
+.brand-title,.page-title,.section-title,.card-header h2,
+.data-table th,.functional-table th{
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif
+}
+.page-title{font-size:20px;font-weight:800;line-height:1.5}
+.section-title{font-size:17px;font-weight:800;line-height:1.5}
+.badge-pill{border:1px solid rgba(255,255,255,.18);font-weight:700;
+  background:rgba(255,255,255,.10);backdrop-filter:blur(4px)}
+.app-sidebar{width:235px}
+.nav-btn{border-radius:10px;transition:background .16s,color .16s,box-shadow .16s;
+  position:relative}
+.nav-btn.active{color:var(--text-main);background:var(--accent-teal-soft);
+  box-shadow:inset -4px 0 var(--accent-teal);font-weight:800}
+.nav-btn:hover{background:var(--accent-teal-soft);color:var(--text-main)}
+.card,.breadcrumb-bar{border-color:var(--border-color)}
+.data-table thead th,.functional-table thead th{
+  background:var(--primary-navy);color:#fff;
+  border-bottom:3px solid var(--accent-teal);
+  font-size:14px;font-weight:800
+}
+.data-table tbody td,.functional-table tbody td{
+  vertical-align:middle;font-size:14px;line-height:1.6;padding:8px 12px
+}
+:is(.app-modal-overlay,.modal-backdrop,.person-report-modal,.auto-attendance-overlay){
+  overscroll-behavior:contain
+}
+.app-modal-overlay:not([hidden]){
+  position:fixed;inset:0;z-index:1250;display:flex;align-items:center;
+  justify-content:center;padding:clamp(10px,2vw,24px);
+  background:rgba(7,18,32,.63);backdrop-filter:blur(3px)
+}
+.app-modal-overlay[hidden]{display:none!important}
+.app-modal-surface,.app-modal-overlay>.card,.app-modal-overlay>.modal-box{
+  width:min(94vw,720px);max-height:90dvh;min-width:0;
+  overflow:auto;border:1px solid var(--border-color);border-radius:14px;
+  background:var(--bg-surface);color:var(--text-main);
+  box-shadow:0 22px 64px rgba(1,12,24,.32)
+}
+.modal-sm,.app-modal-overlay.modal-sm>.card{width:min(94vw,480px)}
+.modal-md,.app-modal-overlay.modal-md>.card{width:min(94vw,720px)}
+.modal-lg,.app-modal-overlay.modal-lg>.card{width:min(95vw,940px)}
+.modal-xl,.app-modal-overlay.modal-xl>.card{width:min(96vw,1220px)}
+.modal-backdrop{backdrop-filter:blur(3px)}
+.modal-backdrop.open{animation:app-modal-in .15s ease-out}
+.modal-backdrop .modal-box{
+  display:flex;flex-direction:column;overflow:hidden;max-height:90dvh;
+  width:min(94vw,720px);max-width:none;border-radius:14px;padding:0
+}
+.modal-backdrop .modal-box>.card-header{
+  position:sticky;top:0;z-index:2;flex:none;padding:15px 20px;
+  background:var(--bg-surface);border-bottom:1px solid var(--border-subtle)
+}
+.modal-backdrop .modal-box>#appModalBody{
+  display:flex;flex-direction:column;gap:12px;padding:16px 20px;
+  overflow-y:auto;max-height:calc(90dvh - 77px);min-height:0
+}
+#appModalBody>.app-dialog-actions{
+  position:sticky;bottom:-16px;z-index:3;background:var(--bg-surface);
+  border-top:1px solid var(--border-color);padding:13px 0 2px;
+  margin-top:auto
+}
+.modal-backdrop:has(.attendance-review) .modal-box{width:min(95vw,940px)}
+.modal-backdrop:has(.attendance-review-table) .modal-box{width:min(95vw,940px)}
+.modal-backdrop:has(.app-preview-properties) .modal-box{width:min(94vw,720px)}
+@keyframes app-modal-in{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){
+  .modal-backdrop.open{animation:none}
+}
+/* Calendar export is a true viewport modal, despite keeping its existing DOM
+   identity so existing Node tests and async cancellation retain ownership. */
+#appViewport.monthly-dashboard>.functional-export-preview:not([hidden]){
+  display:flex;flex-direction:column;gap:12px;
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(94vw,720px);max-height:90dvh;overflow-y:auto;
+  z-index:1250;padding:18px 20px;border-radius:14px;
+  background:var(--bg-surface);color:var(--text-main);
+  box-shadow:0 0 0 100vmax rgba(7,18,32,.63),
+    0 24px 60px rgba(1,12,24,.28)
+}
+#appViewport.monthly-dashboard>.functional-export-preview[hidden]{
+  display:none!important
+}
+.functional-export-preview>.form-control{width:100%;max-width:100%}
+.monthly-scroll th.fixed-four,.monthly-scroll td.fixed-four{
+  box-shadow:-5px 0 7px -7px rgba(2,14,28,.65)
+}
+.monthly-day-detail{border-radius:6px;padding:3px 7px;min-height:24px}
+.dashboard-eight-clock{border:1px solid var(--status-warning-border);
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border-radius:999px;padding:6px 12px;font-weight:800}
+.dashboard-filter-counter.active,.dashboard-filter-counter[aria-pressed="true"]{
+  box-shadow:0 0 0 2px var(--accent-teal);background:var(--accent-teal-soft)
+}
+.dashboard-filter-counter{border-top:4px solid var(--accent-teal);border-radius:10px}
+.counter-value{font-variant-numeric:tabular-nums;font-weight:900}
+.status-pill{display:inline-flex;align-items:center;gap:7px;max-width:100%;
+  border-radius:999px;padding:4px 11px;font-weight:800;
+  background:var(--bg-subtle);border:1px solid var(--border-color)}
+.status-pill:before{content:"";width:7px;height:7px;flex:none;
+  border-radius:50%;background:var(--status-dot,currentColor)}
+.auth-form{width:min(94vw,540px);margin:auto;overflow:hidden}
+#appViewport:has(.auth-form){min-height:calc(100dvh - 150px);
+  display:flex;flex-direction:column;justify-content:center;align-items:center}
+.auth-form .form-control{min-height:40px}
+.admin-primary-tile,.admin-subsection-tile{
+  transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
+  border-radius:12px
+}
+.admin-primary-tile:hover,.admin-subsection-tile:hover{
+  transform:translateY(-2px);border-color:var(--accent-teal);
+  box-shadow:var(--shadow-md)
+}
+.settings-danger-zone{
+  border:2px dashed var(--critical);
+  background:color-mix(in srgb,var(--critical) 7%,var(--bg-surface))
+}
+.auto-attendance-overlay{backdrop-filter:blur(3px)}
+.person-report-dialog{width:min(96vw,1220px);max-height:90dvh}
+.person-report-chip-list{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.person-report-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--accent-teal-soft);border:1px solid var(--accent-teal);
+  padding:4px 8px;border-radius:999px
+}
+.person-report-chip .btn{padding:2px 7px;min-height:26px}
+.person-report-tabs{display:flex;flex-wrap:wrap;gap:6px;
+  position:sticky;top:0;background:var(--bg-surface);z-index:3;padding:8px}
+.person-report-tabs .active{background:var(--accent-teal);color:#fff}
+.person-report-content>.card[hidden]{display:none!important}
+/* Responsive modal surfaces keep readable RTL data and local scrolling. */
+@media(max-width:700px){
+  .app-sidebar{width:100%;max-width:none}
+  .modal-backdrop .modal-box,.app-modal-surface{max-height:94dvh}
+  .modal-backdrop .modal-box>#appModalBody{max-height:calc(94dvh - 75px)}
+  .app-modal-overlay:not([hidden]){padding:6px}
+  .person-report-dialog{width:98vw}
+}
+
+/* Conditional action windows stay in the original DOM tree for UI tests.
+   They are fixed overlays when opened and never grow the underlying page. */
+.app-operational-modal:not([hidden]),
+.app-popup-on-content:not(:empty),
+.app-popup-when-properties:has(.settings-properties),
+.app-reset-verification-modal:has(input[type="password"]),
+.admin-create-person[open],
+.separation-selected:not(:empty),
+.separation-retry:not(:empty),
+.attendance-drafts-modal:not([hidden]){
+  position:fixed!important;inset:auto;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  z-index:1250;display:flex!important;flex-direction:column;gap:10px;
+  width:min(94vw,720px);max-height:90dvh;overflow-y:auto;
+  border:1px solid var(--border-color);border-radius:14px;
+  padding:18px 20px;background:var(--bg-surface);color:var(--text-main);
+  box-shadow:0 0 0 100vmax rgba(7,18,32,.63),
+    0 24px 65px rgba(0,10,24,.28);
+}
+.app-operational-modal[hidden],.attendance-drafts-modal[hidden]{display:none!important}
+.status-live-preview{
+  display:inline-flex;align-items:center;gap:8px;
+  width:max-content;max-width:100%;padding:8px 13px;
+  border:1px solid var(--border-color);border-radius:999px;
+  overflow-wrap:anywhere;font-weight:800;
+  transition:border-color .15s ease,background-color .15s ease
+}
+.status-live-preview::before{width:9px;height:9px}
+.app-operational-modal:focus-within{outline:2px solid transparent}
+.app-operational-modal:not([hidden]){gap:0;overflow:hidden;padding:0}
+.app-operational-modal>.app-modal-sticky-header{
+  flex:none;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px 20px;background:var(--bg-surface);
+  border-bottom:1px solid var(--border-subtle)
+}
+.app-operational-modal>.app-modal-sticky-header>.section-title{margin:0}
+.app-operational-modal>.app-modal-scroll-body{
+  flex:1 1 auto;min-height:0;max-height:calc(90dvh - 140px);
+  overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:10px;padding:16px 20px
+}
+.app-operational-modal>.app-modal-sticky-footer:not(:empty){
+  flex:none;display:flex;flex-wrap:wrap;gap:10px;
+  align-items:center;padding:12px 20px;
+  border-top:1px solid var(--border-subtle);background:var(--bg-subtle)
+}
+.app-operational-modal>.app-modal-sticky-footer:empty{display:none}
+.app-operational-modal.modal-sm{width:min(94vw,480px)}
+.app-operational-modal.modal-md{width:min(94vw,720px)}
+.app-operational-modal.modal-lg,.app-popup-on-content.modal-lg{width:min(95vw,940px)}
+.app-operational-modal.modal-xl{width:min(96vw,1220px)}
+.app-modal-close{align-self:flex-end;flex:none}
+body:has(.app-operational-modal:not([hidden]),
+  .app-popup-on-content:not(:empty),.separation-selected:not(:empty),
+  .separation-retry:not(:empty),.attendance-drafts-modal:not([hidden]),
+  .admin-create-person[open],.app-reset-verification-modal input[type="password"])
+  #appModalBackdrop.open{z-index:1450}
+.admin-create-person:not([open]){
+  background:transparent;border:none;box-shadow:none;padding:0;max-width:max-content
+}
+.admin-create-person:not([open])>summary{
+  display:inline-flex;align-items:center;padding:9px 14px;border-radius:9px
+}
+.admin-create-person[open]>summary{position:sticky;top:-18px;z-index:4;
+  background:var(--bg-surface);padding:12px 0;border-bottom:1px solid var(--border-color)}
+.attendance-drafts-modal .attendance-draft-list{
+  max-height:55dvh;overflow-y:auto;overscroll-behavior:contain
+}
+.app-export-progress{width:100%;height:14px;accent-color:var(--accent-teal)}
+.auth-password-field{position:relative}
+.auth-password-toggle{
+  position:absolute;inset-inline-end:9px;bottom:8px;z-index:1;
+  margin:0;min-height:29px;padding:3px 9px;font-size:12px;
+  border-radius:7px;background:var(--bg-subtle)
+}
+.auth-password-field>.form-control{padding-inline-end:130px}
+.auth-brand{
+  display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;
+  column-gap:12px;padding:16px 18px;margin:-16px -16px 6px;
+  color:#fff;background:linear-gradient(135deg,#0F2942,#163A5F);
+  border-radius:10px 10px 0 0
+}
+.auth-brand .section-title{color:#fff;margin:0}
+.auth-brand .section-description{grid-column:2;color:#D8E8F1;margin:0}
+.auth-brand-mark{
+  grid-row:1/3;display:grid;place-items:center;width:44px;height:44px;
+  border-radius:10px;background:linear-gradient(135deg,#14B8A6,#0D9488);
+  color:#fff;font:900 24px/1 "AlTamam Cairo",sans-serif
+}
+.auth-first-run{width:min(94vw,740px);display:flex;flex-direction:column;gap:0}
+.auth-password-policy{display:flex;flex-wrap:wrap;gap:8px}
+.auth-policy-chip{padding:5px 10px;background:var(--bg-subtle);
+  border:1px solid var(--border-color);border-radius:999px;
+  color:var(--text-muted);font-weight:700}
+.auth-policy-chip.valid{color:var(--status-positive);
+  background:var(--status-positive-bg);border-color:var(--status-positive-border)}
+.counter-percentage{font-size:12px;font-weight:800;color:var(--text-muted);
+  border-radius:999px;border:1px solid var(--border-color);padding:2px 8px}
+.monthly-detail-content.app-preview-properties{
+  grid-template-columns:repeat(4,minmax(0,1fr))
+}
+.monthly-detail-content.app-preview-properties>.monthly-detail-row{
+  border:1px solid var(--border-subtle);border-radius:9px;padding:9px;
+  background:var(--bg-subtle);min-width:0;overflow-wrap:anywhere
+}
+.monthly-detail-content.app-preview-properties>.monthly-detail-revisions{
+  grid-column:1/-1
+}
+@media(max-width:780px){
+  .auth-first-run{grid-template-columns:minmax(0,1fr)}
+  .monthly-detail-content.app-preview-properties{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+}
+@media(max-width:520px){
+  .monthly-detail-content.app-preview-properties{
+    grid-template-columns:minmax(0,1fr)
+  }
+}
+
+/* Size selection is scoped to the unified dialog; existing stacked dialog
+   tests retain the original #appModalBackdrop node and focus semantics. */
+.modal-backdrop.dialog-sm .modal-box{width:min(94vw,480px)}
+.modal-backdrop.dialog-md .modal-box{width:min(94vw,720px)}
+.modal-backdrop.dialog-lg .modal-box{width:min(95vw,940px)}
+.modal-backdrop.dialog-xl .modal-box{width:min(96vw,1220px)}
+.app-dialog-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.app-dialog-form .app-dialog-field{min-width:0}
+.app-dialog-form :is(input,textarea,select){width:100%;min-width:0}
+.app-dialog-form .app-dialog-field:has(textarea){grid-column:1/-1}
+@media(max-width:650px){.app-dialog-form{grid-template-columns:minmax(0,1fr)}}
+#appViewport.monthly-dashboard>.monthly-archive-controls{
+  width:100%;margin:0;padding:9px 12px;background:var(--bg-surface);
+  border:1px solid var(--border-color);border-radius:9px
+}
+
+/* Modal-in-modal confirmations (e.g. export from a report) must be frontmost. */
+body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450}
+.attendance-review-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.app-dialog-countdown{
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border:1px solid var(--status-warning-border);border-radius:9px;
+  padding:10px 14px;font-weight:900;text-align:center;
+}
+@media(max-width:720px){
+  .attendance-review-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:450px){
+  .attendance-review-stats{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Batch 2 — remaining operational areas (movements, correction, audit).
+   Shared tokens inherit both themes, and dialogs stay mounted inside the
+   originating screen for scoped Windows UI smoke tests. */
+.closed-correction-fields{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px 16px;align-items:end;margin:12px 0
+}
+.closed-correction-fields>.admin-input{min-width:0}
+.closed-correction-fields>.admin-input:last-child{grid-column:1/-1}
+.closed-policy-banner{
+  padding:11px 14px;border:1px solid var(--status-warning-border);
+  border-inline-start:4px solid var(--status-warning);
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border-radius:10px;font-weight:800
+}
+.closed-policy-banner.is-enabled{
+  background:var(--status-positive-bg);border-color:var(--status-positive-border);
+  border-inline-start-color:var(--status-positive);color:var(--status-positive)
+}
+.audit-detail-overlay{z-index:1350}
+.audit-detail-overlay>.auto-attendance-dialog{
+  width:min(95vw,1000px);max-height:90dvh
+}
+.audit-preview-facts{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;min-width:0
+}
+.audit-preview-facts>.settings-property{
+  min-width:0;overflow-wrap:anywhere;
+  background:var(--bg-subtle);border:1px solid var(--border-subtle);
+  border-radius:9px;padding:9px 12px
+}
+.audit-chain-badge{margin:10px 0}
+.audit-chain-ok{color:var(--status-positive);
+  background:var(--status-positive-bg);border-color:var(--status-positive-border)}
+.audit-chain-warning{color:var(--status-critical);
+  background:var(--status-critical-bg);border-color:var(--status-critical-border)}
+.audit-diff-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.audit-diff-card{min-width:0;border-radius:10px;border:1px solid var(--border-color);
+  background:var(--bg-subtle);padding:12px}
+.audit-json{max-height:260px;overflow:auto;direction:ltr;text-align:left;
+  unicode-bidi:plaintext;white-space:pre-wrap;overflow-wrap:anywhere;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-radius:7px;padding:10px;
+  font:500 12px/1.7 Consolas,monospace}
+.movement-selection-counter{
+  align-self:flex-start;font-size:14px;font-weight:800;padding:5px 12px;
+  border-radius:999px;background:var(--accent-teal-soft);
+  border:1px solid var(--accent-teal);color:var(--text-main)
+}
+.movement-retry-panel:not(:empty){
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:flex;flex-direction:column;gap:12px;z-index:1250;
+  padding:22px;width:min(94vw,600px);max-height:90dvh;overflow:auto;
+  background:var(--bg-surface);border:1px solid var(--border-color);
+  border-radius:14px;box-shadow:0 0 0 100vmax rgba(7,18,32,.63),
+    0 24px 65px rgba(0,10,24,.28)
+}
+.transfer-review-summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.transfer-review-summary>.app-preview-property{border-top:3px solid var(--accent-teal)}
+/* Match sticky, bounded table flows on every actual operational screen. */
+:is(.admin-card,.separation-screen,.person-report-page)
+  .functional-table-wrap{max-width:100%;overflow:auto;overscroll-behavior:contain}
+:is(.app-operational-modal,.audit-detail-overlay,.movement-retry-panel)
+  .functional-table-wrap{max-height:min(55dvh,550px)}
+@media(max-width:760px){
+  .closed-correction-fields,.audit-preview-facts,.audit-diff-grid{
+    grid-template-columns:minmax(0,1fr)
+  }
+  .transfer-review-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:420px){
+  .transfer-review-summary{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Historical detail: distinguish registered movements and present revisions
+   as a bounded table in the actual monthly cell modal. */
+.monthly-movement-banner{
+  grid-column:1/-1;padding:12px 14px;
+  background:var(--status-movement-bg);
+  color:var(--status-movement);
+  border:1px solid var(--status-movement-border);
+  border-inline-start:4px solid var(--status-movement);
+  border-radius:9px;font-weight:800
+}
+.monthly-revision-history{grid-column:1/-1;min-width:0}
+.monthly-revision-table{
+  overflow:auto;max-height:min(42dvh,400px);
+  overscroll-behavior:contain;border-radius:9px;
+  border:1px solid var(--border-color)
+}
+.monthly-revision-table .functional-table{
+  min-width:650px;font-size:13px
+}
+.monthly-revision-table th{
+  position:sticky;top:0;z-index:1;
+  background:var(--primary-navy);color:#fff
+}
+.functional-export-preview .app-preview-properties{grid-template-columns:repeat(4,minmax(0,1fr))}
+.functional-export-preview .app-export-progress{width:100%;height:14px}
+@media(max-width:760px){
+  .functional-export-preview .app-preview-properties{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+}
+@media(max-width:430px){
+  .functional-export-preview .app-preview-properties{
+    grid-template-columns:minmax(0,1fr)
+  }
+}
+
+/* One-line tile guidance without replacing the section's canonical title. */
+.admin-tile-subtitle{
+  display:block;max-width:100%;min-width:0;
+  font-size:12px;font-weight:600;color:var(--text-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  line-height:1.45
+}
+.admin-subsection-tile{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.admin-subsection-tile .admin-tile-subtitle{font-size:11px}
+.admin-primary-tile .admin-tile-subtitle{color:var(--text-muted)}
+
+/* A persistent RTL caption inside each input border, never above it.
+   Native checkboxes, radio and file pickers retain their original controls. */
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea)){
+  position:relative;display:flex;flex-direction:column;gap:0;min-width:0
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea))>span:first-child{
+  position:absolute;inset-block-start:7px;inset-inline-start:13px;
+  inset-inline-end:13px;z-index:1;pointer-events:none;
+  color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea))>:is(input,select,textarea){
+  box-sizing:border-box;width:100%;min-height:64px;min-width:0;
+  padding-block:27px 8px;padding-inline:13px;line-height:1.5;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-radius:8px
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + textarea)>textarea{min-height:106px}
+.auth-form .auth-password-field>input.form-input{padding-inline-end:140px}
+
+
+/* First-run / login: one reusable accessible floating-field component.
+   The caption uses a real label[for], not a placeholder that vanishes with data. */
+.auth-form .auth-floating-field{
+  position:relative;display:block;min-width:0;min-height:60px
+}
+.auth-form .auth-floating-field>.form-input{
+  display:block;box-sizing:border-box;width:100%;min-width:0;min-height:60px;
+  padding-block:25px 9px;padding-inline:48px 15px;
+  border:1.5px solid var(--border-color);border-radius:12px;
+  background:var(--bg-surface);color:var(--text-main);
+  font:inherit;font-size:16px;line-height:1.5;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.auth-form .auth-floating-field>.form-input:focus{
+  outline:none;border-color:var(--accent-teal);
+  box-shadow:0 0 0 3px var(--accent-teal-soft)
+}
+.auth-form .auth-floating-caption{
+  position:absolute;inset-inline-start:48px;top:50%;
+  transform:translateY(-50%);
+  max-width:calc(100% - 112px);z-index:1;
+  font-size:14px;font-weight:700;line-height:1.3;
+  color:var(--text-muted);pointer-events:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:top .15s ease,font-size .15s ease,color .15s ease
+}
+.auth-form .form-input:focus~.auth-floating-caption,
+.auth-form .form-input:not(:placeholder-shown)~.auth-floating-caption,
+.auth-form .form-input:-webkit-autofill~.auth-floating-caption{
+  top:13px;font-size:11px;color:var(--accent-teal)
+}
+.auth-form .auth-field-icon{
+  position:absolute;inset-inline-start:15px;top:50%;
+  transform:translateY(-50%);z-index:2;
+  pointer-events:none;font-size:17px;line-height:1
+}
+.auth-form .auth-password-field>input.form-input{
+  padding-inline-end:54px
+}
+.auth-form .auth-password-toggle{
+  position:absolute;inset-inline-end:10px;top:50%;bottom:auto;
+  transform:translateY(-50%);z-index:3;
+  display:grid;place-items:center;width:38px;height:38px;
+  min-height:38px;margin:0;padding:0;
+  border:1px solid transparent;border-radius:10px;
+  color:var(--text-muted);background:var(--bg-subtle);
+  cursor:pointer;font:inherit;font-size:18px
+}
+.auth-form .auth-password-toggle:hover,
+.auth-form .auth-password-toggle:focus-visible{
+  color:var(--accent-teal);border-color:var(--accent-teal);
+  outline:2px solid var(--accent-teal-soft);outline-offset:1px
+}
+/* First-run setup: always-visible creation action on limited-height Windows.
+   Only the fields scroll; the header, status and submit action remain visible. */
+#appViewport:has(.auth-first-run){
+  height:100%;min-height:0;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:0;padding:clamp(8px,1.5vh,18px) 0 8px
+}
+.auth-setup-heading{
+  flex:none;width:min(94vw,740px);margin:0 0 clamp(7px,1.5vh,14px);
+  font-size:clamp(23px,3vw,32px);line-height:1.3;
+  color:var(--text-main);font-weight:900;text-align:center
+}
+.auth-form.auth-first-run{
+  flex:1 1 auto;display:flex;flex-direction:column;
+  min-height:0;max-height:100%;max-width:740px;width:min(94vw,740px);
+  margin:0 auto;padding:0;gap:0;overflow:hidden;
+  border-radius:16px;box-shadow:var(--shadow-md)
+}
+.auth-first-run>.auth-brand{
+  flex:none;width:100%;margin:0;padding:15px 20px;
+  border-radius:16px 16px 0 0
+}
+.auth-first-run>.auth-setup-fields{
+  flex:1 1 auto;min-height:0;width:100%;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-content:start;gap:12px;padding:16px 20px;
+  overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+.auth-first-run .auth-setup-fields>.auth-password-area,
+.auth-first-run .auth-setup-fields>.auth-password-field,
+.auth-first-run .auth-setup-fields>.auth-info-box{grid-column:1/-1}
+.auth-password-area{display:grid;gap:11px;min-width:0}
+.auth-first-run .auth-password-policy{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;margin:0;padding:0
+}
+.auth-first-run .auth-policy-chip{
+  display:flex;align-items:center;gap:8px;min-height:39px;
+  border:1px solid var(--border-color);border-radius:10px;
+  padding:7px 10px;background:var(--bg-subtle);
+  font-size:12px;line-height:1.4;color:var(--text-muted);font-weight:700
+}
+.auth-first-run .auth-policy-icon{
+  flex:none;display:grid;place-items:center;width:21px;height:21px;
+  border:1px solid var(--border-color);border-radius:50%;
+  font-size:15px;line-height:1
+}
+.auth-first-run .auth-policy-chip.valid{
+  background:var(--status-positive-bg);border-color:var(--status-positive-border);
+  color:var(--status-positive)
+}
+.auth-first-run .auth-policy-chip.valid .auth-policy-icon{
+  border-color:var(--status-positive);color:var(--status-positive)
+}
+.auth-first-run .auth-setup-fields>.auth-info-box{
+  padding:12px 15px;margin:0;
+  border:1px solid var(--border-color);
+  border-inline-start:3px solid var(--accent-teal);
+  border-radius:10px;background:var(--bg-subtle);
+  color:var(--text-main);font-size:13px;line-height:1.65
+}
+.auth-first-run>.auth-submit-footer{
+  flex:none;display:flex;flex-direction:column;gap:8px;width:100%;
+  padding:11px 20px 13px;background:var(--bg-surface);
+  border-top:1px solid var(--border-color);
+  box-shadow:0 -4px 14px rgba(7,18,32,.06);z-index:1
+}
+.auth-first-run>.auth-submit-footer>.auth-status:empty{display:none}
+.auth-first-run>.auth-submit-footer>.btn.btn-primary{
+  display:block;width:100%;min-height:52px;padding:12px 20px;
+  border-radius:12px;font-size:16px;font-weight:900
+}
+@media(max-width:780px){
+  .auth-first-run>.auth-setup-fields{grid-template-columns:minmax(0,1fr)}
+  .auth-first-run .auth-password-policy{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+}
+@media(max-height:740px){
+  #appViewport:has(.auth-first-run){padding-block:6px}
+  .auth-setup-heading{font-size:23px;margin-bottom:7px}
+  .auth-first-run>.auth-brand{padding:10px 16px}
+  .auth-first-run>.auth-setup-fields{padding:12px 16px;gap:10px}
+  .auth-first-run>.auth-submit-footer{padding:8px 16px}
+}
+@media(max-width:420px){
+  .auth-first-run .auth-password-policy{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Batch 01 — personnel creation, identity editing and account management.
+   Inherits the shared inset RTL captions; no duplicate form-field component. */
+.admin-create-person[open]{
+  padding:0;gap:0;overflow:hidden;width:min(94vw,760px);
+  border:1px solid var(--border-color);border-radius:16px
+}
+.admin-create-person[open]>summary{
+  position:sticky;top:0;z-index:3;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;width:100%;
+  min-height:64px;margin:0;padding:17px 22px;border:0;border-radius:0;
+  background:var(--primary-navy);color:#fff;
+  font-size:18px;font-weight:900;text-align:right
+}
+.admin-create-person[open]>summary::after{
+  content:"✕";display:grid;place-items:center;flex:none;
+  width:31px;height:31px;border:1px solid #FFFFFF66;border-radius:9px
+}
+.admin-create-person[open]>summary:focus-visible{
+  outline:3px solid var(--accent-teal);outline-offset:-4px
+}
+.admin-create-person[open]>.admin-site-form{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;gap:14px;padding:20px 22px 10px
+}
+.admin-create-person[open]>.admin-site-form>.admin-input{min-width:0}
+.admin-create-person[open]>.admin-site-form>.admin-input:last-child{grid-column:1/-1}
+.admin-create-person[open]>.admin-form-hint{
+  margin:0 22px;color:var(--critical);font-size:13px;font-weight:700
+}
+.admin-create-person[open]>.admin-form-hint:empty{display:none}
+.admin-create-person[open]>.admin-person-actions{
+  display:flex;flex-wrap:wrap;gap:12px;padding:15px 22px;
+  border-top:1px solid var(--border-subtle);background:var(--bg-subtle)
+}
+.admin-person-actions>.btn{min-height:48px;padding:12px 20px;border-radius:11px}
+.admin-person-actions>.btn-primary{flex:1 1 230px}
+.admin-create-person[open]>.admin-note{
+  margin:0;max-height:37dvh;overflow:auto;
+  overscroll-behavior:contain;padding:0 22px 16px
+}
+.admin-create-person[open]>.admin-note:empty{display:none}
+.admin-create-person[open]>.admin-note .functional-table-wrap{max-height:30dvh}
+.admin-create-person .admin-input :is(input,select)[aria-invalid="true"]{
+  border-color:var(--critical)!important;
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--critical) 15%,transparent)
+}
+.admin-create-person[open] .admin-input :is(input,select):focus-visible,
+.admin-user-form .admin-input :is(input,select):focus-visible{
+  outline:none;border-color:var(--accent-teal);
+  box-shadow:0 0 0 3px var(--accent-teal-soft)
+}
+.admin-user-form .app-modal-scroll-body{gap:16px}
+.admin-user-form .admin-account-form-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;gap:14px;min-width:0
+}
+.admin-user-form .admin-account-form-grid>.admin-account-person-search,
+.admin-user-form .admin-account-form-grid>.admin-account-credentials{
+  grid-column:1/-1
+}
+.admin-account-person-search{display:flex;gap:10px;align-items:center;min-width:0}
+.admin-account-person-search>.admin-input{flex:1;min-width:0}
+.admin-account-person-search>.btn{
+  flex:none;min-height:48px;padding-inline:18px;border-radius:10px
+}
+.admin-user-form .admin-account-form-grid>.section-description{
+  margin:0;color:var(--text-muted)
+}
+.admin-user-form .admin-account-credentials{
+  display:grid;grid-template-columns:minmax(0,1fr);gap:11px;min-width:0
+}
+.admin-secret-field{position:relative;min-width:0}
+.admin-secret-field>input.form-control{padding-inline-end:54px!important}
+.admin-secret-reveal{
+  position:absolute;inset-inline-end:10px;bottom:12px;
+  display:grid;place-items:center;width:35px;height:35px;
+  padding:0;min-height:35px;border-radius:9px;
+  border:1px solid var(--border-color);color:var(--text-main);
+  background:var(--bg-subtle);font:inherit;font-size:17px;cursor:pointer
+}
+.admin-secret-reveal:hover,.admin-secret-reveal:focus-visible{
+  border-color:var(--accent-teal);color:var(--accent-teal);
+  outline:2px solid var(--accent-teal-soft);outline-offset:1px
+}
+.admin-password-policy{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;margin:2px 0 4px
+}
+.admin-password-rule{
+  display:flex;gap:7px;align-items:center;min-width:0;
+  padding:7px 10px;border-radius:9px;
+  background:var(--bg-subtle);border:1px solid var(--border-color);
+  color:var(--text-muted);font-size:12px;font-weight:700;line-height:1.45
+}
+.admin-password-rule-icon{
+  display:grid;place-items:center;flex:none;width:19px;height:19px;
+  border:1px solid var(--border-color);border-radius:50%;font-size:13px
+}
+.admin-password-rule.valid{
+  background:var(--status-positive-bg);border-color:var(--status-positive-border);
+  color:var(--status-positive)
+}
+.admin-password-rule.valid>.admin-password-rule-icon{
+  color:var(--status-positive);border-color:var(--status-positive)
+}
+.admin-user-form .app-modal-sticky-footer>.btn{
+  min-height:46px;padding-inline:20px;border-radius:10px
+}
+.admin-user-form .app-modal-sticky-footer>.btn-primary{flex:1}
+.admin-users-list .functional-table-wrap{
+  border-radius:12px;max-height:min(53dvh,560px)
+}
+.admin-users-list .functional-table th{
+  background:var(--bg-subtle);color:var(--text-main)
+}
+.admin-users-list .functional-table td{vertical-align:middle}
+@media(max-width:700px){
+  .admin-create-person[open]>.admin-site-form,
+  .admin-user-form .admin-account-form-grid{
+    grid-template-columns:minmax(0,1fr)
+  }
+  .admin-account-person-search{flex-wrap:wrap}
+  .admin-account-person-search>.btn{width:100%}
+  .admin-password-policy{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:430px){
+  .admin-create-person[open]>.admin-site-form{padding:14px}
+  .admin-create-person[open]>summary{padding:15px}
+  .admin-create-person[open]>.admin-person-actions{padding:12px 14px}
+  .admin-password-policy{grid-template-columns:minmax(0,1fr)}
+}
+
+
+/* Batch 02 — site and status operations. All actions remain modal and audited. */
+.admin-site-create-form .app-modal-scroll-body,
+.admin-status-create-form .app-modal-scroll-body{gap:15px}
+.admin-site-create-form .app-modal-scroll-body>label.admin-input{width:100%;min-width:0}
+.admin-site-create-form .app-modal-sticky-footer>.btn-primary,
+.admin-status-create-form .app-modal-sticky-footer>.btn-primary{
+  min-height:48px;flex:1 1 220px;border-radius:11px
+}
+.admin-site-create-form .admin-input :is(input,select):focus-visible,
+.admin-status-create-form .admin-input :is(input,select):focus-visible{
+  outline:none;border-color:var(--accent-teal);
+  box-shadow:0 0 0 3px var(--accent-teal-soft)
+}
+.admin-status-create-form .admin-status-fields{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;gap:12px;min-width:0
+}
+.admin-status-create-form .admin-status-fields>label.admin-input{
+  min-width:0;margin:0
+}
+.admin-status-create-form .admin-status-fields>label.admin-input:first-child{
+  grid-column:1/-1
+}
+.admin-status-create-form .admin-status-fields input[type="color"]{
+  display:block;cursor:pointer;padding:27px 9px 7px;min-height:64px;
+  background:var(--bg-surface);border-radius:10px
+}
+.admin-status-create-form .status-live-preview{
+  width:100%;justify-content:center;min-height:52px;
+  padding:12px 15px;border-radius:11px;
+  font-size:15px;line-height:1.5;white-space:normal;
+  border-width:2px;background:var(--bg-subtle)
+}
+.admin-status-create-form .status-live-preview::before{
+  width:13px;height:13px;flex:none
+}
+.admin-status-create-form .admin-note{margin:0}
+@media(max-width:580px){
+  .admin-status-create-form .admin-status-fields{
+    grid-template-columns:minmax(0,1fr)
+  }
+  .admin-status-create-form .admin-status-fields>label.admin-input:first-child{
+    grid-column:auto
+  }
+}
+
+
+/* Search box height regression — one-row RTL search inputs are sized to their
+   containing screen, never by a column label's flex-basis. */
+:is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+  label.app-unified-search-wrap{
+  box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;
+  align-self:center;flex:1 1 260px;width:min(100%,440px);min-width:0;max-width:440px;
+  height:44px;min-height:44px;max-height:44px;margin:0;gap:0
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+  label.app-unified-search-wrap>input.app-unified-search{
+  box-sizing:border-box;display:block;flex:0 0 auto;flex-basis:auto;
+  width:100%;min-width:0;max-width:100%;
+  height:44px;min-height:44px;max-height:44px;
+  padding:8px 13px;border:1px solid var(--border-color);
+  border-radius:10px;background:var(--bg-surface);color:var(--text-main);
+  font:600 14px/1.5 "AlTamam Tajawal",sans-serif
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+  .functional-toolbar>label.app-unified-search-wrap{
+  flex:1 1 260px;min-width:min(100%,210px);max-width:440px
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+  .functional-toolbar>input[type="search"]{
+  box-sizing:border-box;flex:1 1 260px;width:min(100%,440px);
+  min-width:min(100%,210px);max-width:440px;
+  height:44px;min-height:44px;max-height:44px;
+  padding:8px 13px;border:1px solid var(--border-color);
+  border-radius:10px;background:var(--bg-surface);color:var(--text-main);
+  font:600 14px/1.5 "AlTamam Tajawal",sans-serif
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+  :is(.functional-toolbar>input[type="search"],
+      label.app-unified-search-wrap>input.app-unified-search):focus-visible{
+  outline:2px solid var(--accent-teal);outline-offset:1px;
+  border-color:var(--accent-teal)
+}
+/* The daily and monthly one-row toolbars use 34px search controls, matching
+   adjacent selectors and action buttons while retaining horizontal scrolling. */
+#appViewport:is(.daily-dashboard,.monthly-dashboard)>
+  .functional-toolbar>label.app-unified-search-wrap,
+#appViewport:is(.daily-dashboard,.monthly-dashboard)>
+  .functional-toolbar>label.app-unified-search-wrap>input.app-unified-search{
+  height:34px;min-height:34px;max-height:34px
+}
+#appViewport:is(.daily-dashboard,.monthly-dashboard)>
+  .functional-toolbar>label.app-unified-search-wrap{
+  flex:0 1 300px;min-width:210px;max-width:340px
+}
+#appViewport .separation-tabs{
+  display:flex;flex-wrap:wrap;gap:8px;padding:0 0 12px;
+  margin:0 0 14px;border-bottom:1px solid var(--border-color)
+}
+#appViewport .separation-tabs>.btn{
+  min-width:130px;min-height:42px;border-radius:10px;font-weight:700
+}
+#appViewport .separation-tab-content{min-width:0}
+@media(max-width:680px){
+  :is(#appViewport,#appModalBody,.auto-attendance-overlay,body)
+    .functional-toolbar>label.app-unified-search-wrap{min-width:190px}
+  #appViewport .separation-tabs>.btn{flex:1 1 130px}
+}
+
+/* Operations log only: preserve the existing navy/teal header, row colors,
+   Cairo/Tajawal typography and buttons. Long Arabic reasons/descriptions use
+   real multiline cells, not ellipses or 100px columns. Horizontal scrolling
+   on compact windows avoids squeezing nine separate columns into one line. */
+.audit-log-card .audit-log-table-wrap,
+.audit-log-card .audit-history-table-wrap{
+  max-width:100%;max-height:min(60dvh,600px);overflow:auto;
+}
+.audit-log-table{min-width:1300px;width:100%;table-layout:fixed}
+.audit-log-table :is(th,td),
+.audit-history-table :is(th,td){
+  white-space:normal;word-break:normal;overflow-wrap:anywhere;
+  text-align:right;vertical-align:top;line-height:1.75;padding:10px 12px;
+}
+.audit-log-table thead th,.audit-history-table thead th{vertical-align:middle}
+.audit-log-table :is(th,td):nth-child(1){width:50px;text-align:center}
+.audit-log-table :is(th,td):nth-child(2){width:145px}
+.audit-log-table :is(th,td):nth-child(3){width:145px}
+.audit-log-table :is(th,td):nth-child(4){width:150px}
+.audit-log-table :is(th,td):nth-child(5){
+  width:155px;white-space:nowrap;direction:ltr;text-align:center;
+}
+.audit-log-table :is(th,td):nth-child(6){width:170px}
+.audit-log-table :is(th,td):nth-child(7){width:110px}
+.audit-log-table :is(th,td):nth-child(8){width:265px}
+.audit-log-table :is(th,td):nth-child(9){width:110px;text-align:center}
+.audit-log-table tbody tr{height:auto}
+.audit-log-table td:last-child{vertical-align:middle}
+.audit-log-table td:last-child .btn{white-space:nowrap;padding:7px 9px}
+/* The audit history popup uses the same visual system, with extra room for
+   its two historical descriptions and the mandatory reason text. */
+.audit-history-table{min-width:1500px;width:100%;table-layout:fixed}
+.audit-history-table :is(th,td):nth-child(1){width:125px;direction:ltr;text-align:center}
+.audit-history-table :is(th,td):nth-child(2){width:72px;text-align:center}
+.audit-history-table :is(th,td):nth-child(3){width:145px}
+.audit-history-table :is(th,td):nth-child(4),
+.audit-history-table :is(th,td):nth-child(5){width:235px}
+.audit-history-table :is(th,td):nth-child(6),
+.audit-history-table :is(th,td):nth-child(7){width:95px}
+.audit-history-table :is(th,td):nth-child(8){width:220px}
+.audit-history-table :is(th,td):nth-child(9){width:145px}
+.audit-history-table :is(th,td):nth-child(10){width:133px;direction:ltr;text-align:center}
+
+/* Phase 06: keep all declined-person diagnostics legible in Arabic RTL. */
+.attendance-conflict-warning{white-space:pre-line}
+.attendance-status-preview{display:inline-flex;align-items:center;min-height:34px;
+  border-inline-start:4px solid transparent;padding:4px 10px;
+  border-radius:8px;color:var(--text-main);font-weight:700}
+.attendance-status-pill{display:inline-block;border:1px solid var(--border-color);
+  border-radius:10px;padding:3px 9px}
+
+
+/* Phase 08: 12-day calendar window. The toolbar never scrolls away with
+   day cells; existing four sticky identity columns retain their colors. */
+#appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  gap:10px;min-height:39px;padding:4px 10px;background:var(--bg-surface);
+  border-top:1px solid var(--border-color);font-size:13px;font-weight:700
+}
+#appViewport.monthly-dashboard .monthly-day-window-nav .btn{
+  min-height:29px;padding:4px 12px;font-size:13px
+}
+#appViewport.monthly-dashboard .monthly-day-window-nav .btn:disabled{
+  opacity:.45;cursor:not-allowed
+}
+@media(max-width:1100px){
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+    min-height:36px;gap:6px;padding:3px 6px
+  }
+  #appViewport.monthly-dashboard .monthly-day-window-nav .btn{
+    min-height:28px;padding:3px 8px;font-size:12px
+  }
+}
+@media(max-width:760px){
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+    justify-content:space-between;flex-wrap:wrap
+  }
+}
+
+/* Bounded leave/permission: a compact RTL date pair below status selection. */
+.admin-attendance-host .attendance-range-fields:not([hidden]){
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;margin-block:12px;padding:14px;
+  border:1px solid var(--border-color);border-radius:12px;
+  background:var(--bg-surface)
+}
+.admin-attendance-host .attendance-range-fields[hidden]{display:none!important}
+.admin-attendance-host .attendance-range-fields>.section-title{grid-column:1/-1;margin:0}
+.admin-attendance-host .attendance-range-fields>label{
+  display:flex;flex-direction:column;gap:6px;font-weight:700;min-width:0
+}
+.admin-attendance-host .attendance-range-fields input[type="date"]{
+  width:100%;min-width:0;min-height:35px;box-sizing:border-box;
+  padding:6px 10px;border:1px solid var(--border-color);border-radius:8px;
+  background:var(--bg-surface);color:var(--text-main);font:inherit
+}
+@media(max-width:600px){
+  .admin-attendance-host .attendance-range-fields:not([hidden]){grid-template-columns:1fr}
+}
+
+/* شاشة تعديل تمام سابق: جدول الأيام ومربعات الحالة السابقة في النافذة المنبثقة */
+.historical-attendance-range-card .historical-day-box{
+  min-width:96px;text-align:center;font-weight:700;
+  background:var(--bg-subtle);border:1px solid var(--border-color);
+  border-radius:8px;padding:8px 10px
+}
+.historical-previous-statuses-box{
+  display:flex;flex-direction:column;gap:8px;margin-bottom:14px;
+  padding:12px;border:1px solid var(--border-color);border-radius:10px;
+  background:var(--bg-subtle)
+}
+.historical-previous-statuses-box>.admin-input-label{
+  font-size:13px;font-weight:800;color:var(--text-muted)
+}
+.historical-status-boxes-row{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center
+}
+.historical-status-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:8px;font-weight:700;font-size:13px;
+  background:var(--bg-surface);border:1px solid var(--accent-teal);
+  color:var(--text-main)
+}
+.historical-confirm-statement{
+  margin-top:12px;padding:12px 14px;border-radius:10px;
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border:1px solid var(--status-warning-border);font-weight:800;line-height:1.7
+}

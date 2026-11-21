@@ -1,0 +1,327 @@
+using System.Text.Json.Nodes;
+using AlTamam.Application.Bridge;
+using AlTamam.Domain.Enums;
+using AlTamam.Infrastructure.Persistence;
+using AlTamam.Tests.Fixtures;
+using Microsoft.Data.Sqlite;
+using Xunit;
+
+namespace AlTamam.Tests.Bridge;
+
+/// <summary>03.02-03.04: the founding administrator is one-time, independent
+/// from every personnel record, and may provide a purely optional full name.</summary>
+public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
+{
+    private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
+    private AlTamamDbContext _db = null!;
+    private BridgeSharedServices _service = null!;
+    public async Task InitializeAsync()
+    {
+        _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex);
+        await _db.InitializeAsync();
+        _service = new BridgeSharedServices(_db);
+    }
+    public Task DisposeAsync() => Task.CompletedTask;
+    public void Dispose()
+    {
+        _db?.Dispose();
+        SyntheticFixtures.DeleteTempDatabase(_path);
+    }
+    private string Scalar(string sql)
+    {
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = sql;
+        return q.ExecuteScalar()?.ToString() ?? "";
+    }
+    private void Exec(string sql)
+    {
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = sql;
+        q.ExecuteNonQuery();
+    }
+
+    [Fact]
+    public async Task SetupRequiresStrongOwnerChosenCredentials_AndCannotRepeat()
+    {
+        Assert.False(await _service.IsProvisionedAsync());
+        var weak = await _service.ProvisionFirstAdministratorAsync(
+            "chosenOwner", "12345678", CancellationToken.None, "صاحب البرنامج");
+        Assert.False(weak.Success);
+        Assert.False(await _service.IsProvisionedAsync());
+
+        // Founder and later users share the three-English/three-digit minimum.
+        Assert.False((await _service.ProvisionFirstAdministratorAsync(
+            "chosenOwner","Abc12",CancellationToken.None)).Success);
+        var setup = await _service.ProvisionFirstAdministratorAsync(
+            "chosenOwner", "test-password-123", CancellationToken.None, "صاحب البرنامج");
+        Assert.True(setup.Success, setup.UserMessage);
+        Assert.True(await _service.IsProvisionedAsync());
+        Assert.Equal("صاحب البرنامج",Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
+        Assert.Equal("", Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons;"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
+        Assert.Equal("الإدارة العامة - صاحب البرنامج", Scalar(
+            "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        var admin = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
+            "chosenOwner",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var accounts = await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),admin,CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
+            visible[0]!["fullName"]!.GetValue<string>());
+        var audit=new AuditOverlayService(_db);
+        var query=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        Assert.True(query.Success,query.UserMessage);
+        var entry=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(query.Data)["items"])));
+        Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
+            entry["actorDisplay"]!.GetValue<string>());
+        // Later edits of the profile must not rewrite event-time audit snapshots.
+        Exec("UPDATE Users SET FoundingFullName='اسم جديد' WHERE Role=1;");
+        var after=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        var immutable=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(after.Data)["items"])));
+        Assert.Equal(entry["actorDisplay"]!.GetValue<string>(),
+            immutable["actorDisplay"]!.GetValue<string>());
+
+        var duplicate = await _service.ProvisionFirstAdministratorAsync(
+            "anotherOwner", "test-password-123", CancellationToken.None);
+        Assert.False(duplicate.Success);
+        Exec("UPDATE Users SET ActiveFlag=0 WHERE Role=1;");
+        Assert.True(await _service.IsProvisionedAsync());
+        Assert.False((await _service.ProvisionFirstAdministratorAsync(
+            "againOwner", "test-password-123", CancellationToken.None)).Success);
+        Assert.Throws<SqliteException>(() => Exec("""
+            INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+              CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+              FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,
+              RowVersion)
+            VALUES('TST-EVIL-GA',NULL,'second-ga','second-ga',1,'synthetic','salt',0,1,
+                   0,'TST','TST','2026-01-01T00:00:00Z',1);
+            """));
+    }
+
+    [Fact]
+    public async Task FirstRun_AcceptsExactlyThreeEnglishLettersAndThreeAsciiDigits_WithoutSymbol()
+    {
+        const string password = "Abc123";
+        var result = await _service.ProvisionFirstAdministratorAsync(
+            "minimum-owner", password, CancellationToken.None);
+        Assert.True(result.Success, result.UserMessage);
+        var (principal, error) = await _service.AuthenticateAsync(
+            "minimum-owner", password, CancellationToken.None);
+        Assert.NotNull(principal);
+        Assert.Null(error);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
+    }
+
+    [Theory]
+    [InlineData("Abc12!x")]
+    [InlineData("plainpassword12")]
+    [InlineData("ABC١٢٣")]
+    public async Task DirectFoundingHelper_CannotBypassStrongCredentialPolicy(
+        string password)
+    {
+        var attempted = await _service.CreateUserInternalAsync(
+            "direct-founder", password, UserRole.GeneralAdministration,
+            requiresSetup: false, CancellationToken.None);
+        Assert.False(attempted.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.False(await _service.IsProvisionedAsync());
+    }
+
+    [Theory]
+    [InlineData(UserRole.OrdinaryAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task InternalFirstUseHelper_MustNotCreateUnlinkedNonfounderAccounts(
+        UserRole role)
+    {
+        var attempted = await _service.CreateUserInternalAsync(
+            "unlinked-user", "Abc123!secure", role,
+            requiresSetup: false, CancellationToken.None);
+        Assert.False(attempted.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.False(await _service.IsProvisionedAsync());
+    }
+
+    [Fact]
+    public async Task FounderNameMayBeOmitted_AndRoleUsernameRemainVisible()
+    {
+        var setup = await _service.ProvisionFirstAdministratorAsync(
+            "founderOptional", "test-password-123", CancellationToken.None);
+        Assert.True(setup.Success,setup.UserMessage);
+        Assert.Equal("", Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
+        Assert.Equal("الإدارة العامة",Scalar(
+            "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        var actor = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
+            "founderOptional",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var accounts = await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),actor,CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Equal("الإدارة العامة - founderOptional",
+            visible[0]!["fullName"]!.GetValue<string>());
+        Assert.Null(visible[0]!["personId"]);
+    }
+
+    [Fact]
+    public async Task PermanentIDs_CannotBeReassignedAndHistoricalPersonsCannotBeDeleted()
+    {
+        var setup = await _service.ProvisionFirstAdministratorAsync(
+            "immutableOwner", "test-password-123", CancellationToken.None);
+        Assert.True(setup.Success, setup.UserMessage);
+        Exec("""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('PER-ORIGINAL','اسم قديم','اسم قديم','7777','7777',
+                '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+            """);
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Persons SET PersonId='PER-REPLACEMENT' WHERE PersonId='PER-ORIGINAL';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "DELETE FROM Persons WHERE PersonId='PER-ORIGINAL';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Sites SET SiteId='SITE-CHANGED' WHERE SiteId='SITE-UNSPECIFIED';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE AttendanceStatusDefinitions SET StatusId='STS-CHANGED' WHERE StatusId='STS-PRESENT';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "DELETE FROM AttendanceStatusDefinitions WHERE StatusId='STS-PRESENT';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET UserId='USR-REPLACED' WHERE Role=1;"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons WHERE PersonId='PER-ORIGINAL';"));
+    }
+
+    [Fact]
+    public async Task InternalBootstrapCannotCreateAnUnlinkedSupervisorOrConsumeFirstRun()
+    {
+        // Only the owner-chosen founding GeneralAdmin can be bootstrapped
+        // without a roster record. Later accounts use the roster-checked service.
+        var rejected = await _service.CreateUserInternalAsync(
+            "orphan-supervisor", "test-password-123", UserRole.Supervisor,
+            requiresSetup: false, CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.False(await _service.IsProvisionedAsync());
+
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "actual-founder", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Users WHERE Role=1 AND LinkedPersonId IS NULL;"));
+    }
+
+    [Fact]
+    public async Task FoundingRoleCanNeverBeDemotedToBypassPermanentRosterIndependence()
+    {
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "immutable-founder", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Exec("""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('PER-ROLE-BYPASS','فرد تجريبي','فرد تجريبي','8080','8080',
+                '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+            """);
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET Role=3 WHERE Role=1;"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET Role=3,LinkedPersonId='PER-ROLE-BYPASS' WHERE Role=1;"));
+        Assert.Equal("1", Scalar("SELECT Role FROM Users WHERE Username='immutable-founder';"));
+        Assert.Equal("", Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+    }
+
+    [Fact]
+    public async Task NewNonFounderAccountsMustBeLinkedToAnActiveRosterPersonAtSqlCipherBoundary()
+    {
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "owner-roster", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Assert.Throws<SqliteException>(() => Exec("""
+            INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+                CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+                FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,
+                CreatedAtUtc,RowVersion)
+            VALUES('TST-ORPHAN',NULL,'orphan','orphan',3,'testhash','testsalt',0,1,
+                0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1);
+            """));
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users WHERE Role=3;"));
+    }
+
+    [Fact]
+    public async Task FounderCannotBeLinkedToAnyRosterPerson_EvenWhenRealAndActive()
+    {
+        var setup=await _service.ProvisionFirstAdministratorAsync(
+            "realOwner","test-password-123",CancellationToken.None,"صاحب الحساب المؤسس");
+        Assert.True(setup.Success,setup.UserMessage);
+        string userId=Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
+        var actor=new BridgePrincipal(userId,"realOwner",UserRole.GeneralAdministration,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        Exec("""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('PER-FOUNDER-TEST','اسم فرد مستقل','اسم فرد مستقل','5555','5555',
+                '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+            """);
+        // The SQLCipher boundary must reject even a direct UPDATE performed
+        // outside WebView2, regardless of account privilege or person's status.
+        Assert.Throws<SqliteException>(()=>Exec(
+            "UPDATE Users SET LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
+        Assert.Throws<SqliteException>(()=>Exec(
+            "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
+        Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+        Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
+        Assert.Equal("صاحب الحساب المؤسس",Scalar(
+            "SELECT FoundingFullName FROM Users WHERE Role=1;"));
+
+        var accounts=await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),actor,CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Single(items);
+        var listed=Assert.IsType<JsonObject>(items[0]);
+        Assert.Null(listed["personId"]);
+        Assert.Equal("",listed["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("الإدارة العامة - realOwner (صاحب الحساب المؤسس)",
+            listed["fullName"]!.GetValue<string>());
+        Assert.DoesNotContain(ActionManifest.All,
+            action=>action.Action=="LinkFoundingAdministrator");
+        Assert.Equal("الإدارة العامة - صاحب الحساب المؤسس",Scalar(
+            "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        Assert.Equal("0",Scalar(
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));
+
+        // The founder's lifecycle never depends on a roster person's lifecycle.
+        Exec("UPDATE Persons SET ActiveFlag=0,OrganizationalStatus=3 WHERE PersonId='PER-FOUNDER-TEST';");
+        Assert.Equal("1",Scalar("SELECT ActiveFlag FROM Users WHERE Role=1;"));
+        Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+    }
+    [Fact]
+    public async Task FoundingAuditEvidence_BlocksReprovisioningAfterLegacyUserRowDeletion()
+    {
+        var first = await _service.ProvisionFirstAdministratorAsync(
+            "founder-proof", "test-password-123", CancellationToken.None);
+        Assert.True(first.Success, first.UserMessage);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        // Deliberately simulate a legacy/manual database change, not application logout.
+        Exec("DELETE FROM Users WHERE Role=1;");
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.True(await _service.IsProvisionedAsync());
+        var second = await _service.ProvisionFirstAdministratorAsync(
+            "second-founder", "test-password-123", CancellationToken.None);
+        Assert.False(second.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+    }
+
+}

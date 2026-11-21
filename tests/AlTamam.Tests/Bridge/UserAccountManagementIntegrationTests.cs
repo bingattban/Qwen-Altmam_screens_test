@@ -1,0 +1,669 @@
+using System.Text.Json.Nodes;
+using AlTamam.Application.Bridge;
+using AlTamam.Domain.Enums;
+using AlTamam.Domain.Policies;
+using AlTamam.Infrastructure.Persistence;
+using AlTamam.Infrastructure.Security;
+using AlTamam.Tests.Fixtures;
+using Xunit;
+
+namespace AlTamam.Tests.Bridge;
+
+public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDisposable
+{
+    private readonly string _path=SyntheticFixtures.CreateTempDatabasePath();
+    private AlTamamDbContext _db=null!;
+    private const string SafePassword="Abc123!secure";
+    private readonly BridgePrincipal _general = new("TST-GA","ga-test",UserRole.GeneralAdministration,
+        "0123456789abcdef0123456789abcdef");
+    private readonly BridgePrincipal _ordinary = new("TST-OA","oa-test",UserRole.OrdinaryAdministration,
+        "abcdef0123456789abcdef0123456789");
+
+    public async Task InitializeAsync()
+    {
+        _db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex);
+        await _db.InitializeAsync();
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+              NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+              OrganizationalStatus,ActiveFlag,RowVersion)
+            VALUES('TST-ACTIVE-1','مستخدم اختباري','مستخدم اختباري','970001','970001',
+              '2026-10-01','2026-10-01T10:00:00Z',1,1,1);
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+              NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+              OrganizationalStatus,ActiveFlag,RowVersion)
+            VALUES('TST-ACTIVE-2','مشرف اختباري','مشرف اختباري','970002','970002',
+              '2026-10-01','2026-10-01T10:00:00Z',1,1,1);
+            """;
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public void SubsequentUserPasswordRequiresThreeEnglishLettersAndThreeAsciiDigits_NotASymbol()
+    {
+        Assert.True(PasswordPolicyValidator.Validate("Abc123").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123عربي").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123٤").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Abc12٤").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Ab12!").IsValid);
+    }
+
+    [Fact]
+    public async Task AccountCreationAndPasswordChange_AcceptExactlySixCharactersWithoutSymbols()
+    {
+        var svc = new UserAccountManagementService(_db);
+        var created = await svc.CreateAsync(new JsonObject
+        {
+            ["username"] = "minimum-credential-user",
+            ["password"] = "Abc123",
+            ["passwordConfirmation"] = "Abc123",
+            ["personId"] = "TST-ACTIVE-1",
+            ["role"] = "Supervisor"
+        }, _general, default);
+        Assert.True(created.Success, created.UserMessage);
+
+        using var conn = _db.CreateOpenConnection();
+        using var query = conn.CreateCommand();
+        query.CommandText = """
+            SELECT UserId, CredentialHash, PasswordSalt
+            FROM Users WHERE Username='minimum-credential-user';
+            """;
+        string id;
+        using (var reader = await query.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            id = reader.GetString(0);
+            Assert.True(PasswordSecurity.VerifyPassword("Abc123", reader.GetString(1), reader.GetString(2)));
+        }
+        var changed = await svc.ChangePasswordAsync(new JsonObject
+        {
+            ["userId"] = id,
+            ["expectedRevision"] = 1L,
+            ["password"] = "XYZ789"
+        }, _general, default);
+        Assert.True(changed.Success, changed.UserMessage);
+
+        using var check = conn.CreateCommand();
+        check.CommandText = "SELECT CredentialHash, PasswordSalt FROM Users WHERE UserId=$id;";
+        check.Parameters.AddWithValue("$id", id);
+        using var updated = await check.ExecuteReaderAsync();
+        Assert.True(await updated.ReadAsync());
+        Assert.True(PasswordSecurity.VerifyPassword("XYZ789", updated.GetString(0), updated.GetString(1)));
+        Assert.False(PasswordSecurity.VerifyPassword("Abc123", updated.GetString(0), updated.GetString(1)));
+    }
+
+    [Fact]
+    public async Task MissingOrMismatchedPasswordConfirmation_IsRejectedBeforeCredentialWrite()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var intent=new JsonObject {
+            ["username"]="confirm-security",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        };
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        intent["passwordConfirmation"]="Mismatch123!";
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        using var conn=_db.CreateOpenConnection();
+        using var cmd=conn.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        intent["passwordConfirmation"]=SafePassword;
+        Assert.True((await svc.CreateAsync(intent,_general,default)).Success);
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+    }
+
+    [Theory]
+    [InlineData(null, "الإدارة العامة - founder-creator")]
+    [InlineData("صاحب الحساب", "الإدارة العامة - founder-creator (صاحب الحساب)")]
+    public async Task FounderCreatorSnapshot_UsesSpecialLabelWithOptionalName_WithoutPersonLink(
+        string? optionalFullName,string expectedCreator)
+    {
+        var auth=new BridgeSharedServices(_db);
+        var setup=await auth.ProvisionFirstAdministratorAsync(
+            "founder-creator",SafePassword,default,optionalFullName);
+        Assert.True(setup.Success,setup.UserMessage);
+        string founderId=Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
+        var founder=new BridgePrincipal(founderId,"founder-creator",
+            UserRole.GeneralAdministration,"0123456789abcdef0123456789abcdef");
+        var accounts=new UserAccountManagementService(_db);
+        var created=await accounts.CreateAsync(new JsonObject
+        {
+            ["username"]="supervisor-by-founder",["password"]=SafePassword,
+            ["passwordConfirmation"]=SafePassword,["personId"]="TST-ACTIVE-1",
+            ["role"]="Supervisor",["operationId"]="OP-FOUNDER-CREATOR-00001"
+        },founder,default);
+        Assert.True(created.Success,created.UserMessage);
+
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            SELECT LinkedPersonId FROM Users WHERE UserId=$founder;
+            """;
+        q.Parameters.AddWithValue("$founder",founderId);
+        Assert.Equal(DBNull.Value,await q.ExecuteScalarAsync());
+        q.CommandText="""
+            SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='supervisor-by-founder';
+            """;
+        Assert.Equal(expectedCreator,Assert.IsType<string>(await q.ExecuteScalarAsync()));
+
+        var listed=await accounts.ListAsync(new JsonObject(),founder,default);
+        Assert.True(listed.Success,listed.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(listed.Data)["items"]);
+        var child=Assert.IsType<JsonObject>(items.Single(row=>
+            row!["username"]!.GetValue<string>()=="supervisor-by-founder"));
+        Assert.Equal(expectedCreator,child["createdBy"]!.GetValue<string>());
+
+        // A later correction of the optional founding name must NOT rewrite
+        // the historical creator display stored on the created account.
+        q.CommandText="UPDATE Users SET FoundingFullName='اسم مؤسس لاحق' WHERE UserId=$founder;";
+        await q.ExecuteNonQueryAsync();
+        q.CommandText="""
+            SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='supervisor-by-founder';
+            """;
+        Assert.Equal(expectedCreator,Assert.IsType<string>(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
+    public async Task GeneralAdministration_CreatesLinkedOrdinaryAccountWithAuditAndArgon2id()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var result=await svc.CreateAsync(new JsonObject {
+            ["username"]="Person.Test",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
+        },_general,CancellationToken.None);
+        Assert.True(result.Success,result.UserMessage);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            SELECT CredentialHash,PasswordSalt,LinkedPersonId,NormalizedUsername
+            FROM Users WHERE Username='Person.Test';
+            """;
+        string hash,salt,personId,normalized;
+        using(var reader=await q.ExecuteReaderAsync()) {
+            Assert.True(await reader.ReadAsync());
+            hash=reader.GetString(0);salt=reader.GetString(1);
+            personId=reader.GetString(2);normalized=reader.GetString(3);
+        }
+        Assert.True(PasswordSecurity.VerifyPassword(SafePassword,hash,salt));
+        Assert.Equal("TST-ACTIVE-1",personId);
+        Assert.Equal("person.test",normalized);
+        q.CommandText="SELECT NewValueJson FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        var eventValue=Assert.IsType<string>(await q.ExecuteScalarAsync());
+        Assert.DoesNotContain(SafePassword,eventValue);
+        Assert.DoesNotContain(hash,eventValue);
+        Assert.DoesNotContain(salt,eventValue);
+        q.CommandText="SELECT COUNT(*) FROM UserRoleHistory;";
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
+    public async Task CreateAccount_RepeatedOperation_ReturnsSameUserWithoutExtraAuditOrRoleHistory()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var payload=new JsonObject {
+            ["username"]="same-intent",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor",
+            ["operationId"]="OPERATION-USER-000001"
+        };
+        var first=await svc.CreateAsync(payload,_general,CancellationToken.None);
+        var replay=await svc.CreateAsync((JsonObject)payload.DeepClone(),_general,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data)["userId"]!.GetValue<string>(),
+            Assert.IsType<JsonObject>(replay.Data)["userId"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM Users WHERE Username='same-intent';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM UserRoleHistory;";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        var changed=(JsonObject)payload.DeepClone();
+        changed["personId"]="TST-ACTIVE-2";
+        var conflict=await svc.CreateAsync(changed,_general,CancellationToken.None);
+        Assert.False(conflict.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ConflictStale,conflict.ErrorCode);
+    }
+
+    [Fact]
+    public async Task OrdinaryAdministration_CanOnlyCreateSupervisorNotOrdinary()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var denied=await svc.CreateAsync(new JsonObject {
+            ["username"]="denied",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
+        },_ordinary,CancellationToken.None);
+        Assert.False(denied.Success);
+        var success=await svc.CreateAsync(new JsonObject {
+            ["username"]="supervisor-test",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
+        },_ordinary,CancellationToken.None);
+        Assert.True(success.Success,success.UserMessage);
+        var users=await svc.ListAsync(new JsonObject(),_ordinary,CancellationToken.None);
+        Assert.Equal(1L,Assert.IsType<JsonObject>(users.Data)["total"]!.GetValue<long>());
+        var supervisor=new BridgePrincipal("TST-SUP","sup",UserRole.Supervisor,
+            "99887766554433221100aabbccddeeff");
+        Assert.False((await svc.ListAsync(new JsonObject(),supervisor,CancellationToken.None)).Success);
+    }
+
+    [Fact]
+    public async Task SupervisorRejectedAccountActions_NeverRevealAccountExistenceOrRosterEligibility()
+    {
+        var service=new UserAccountManagementService(_db);
+        var created=await service.CreateAsync(new JsonObject {
+            ["username"]="private-account",["password"]=SafePassword,
+            ["passwordConfirmation"]=SafePassword,["personId"]="TST-ACTIVE-1",
+            ["role"]="OrdinaryAdministration"
+        },_general,CancellationToken.None);
+        Assert.True(created.Success,created.UserMessage);
+        string id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        var supervisor=new BridgePrincipal("TST-SUP-REJECT","supervisor",
+            UserRole.Supervisor,"8899aabbccddeeff0011223344556677");
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Change(string userId)
+            => await service.ChangePasswordAsync(new JsonObject {
+                ["userId"]=userId,["expectedRevision"]=1L,["password"]="Abc123!another"
+            },supervisor,CancellationToken.None);
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Reactivate(string userId)
+            => await service.ReactivateAsync(new JsonObject {
+                ["userId"]=userId,["expectedRevision"]=1L,["reason"]="مراجعة حساب مصرح بها"
+            },supervisor,CancellationToken.None);
+
+        var foundChange=await Change(id);
+        var missingChange=await Change("USR-PERSON-NEVER-EXISTED");
+        var foundReturn=await Reactivate(id);
+        var missingReturn=await Reactivate("USR-PERSON-NEVER-EXISTED");
+        foreach(var denied in new[]{foundChange,missingChange,foundReturn,missingReturn})
+        {
+            Assert.False(denied.Success);
+            Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.Unauthorized,denied.ErrorCode);
+        }
+        Assert.Equal(foundChange.UserMessage,missingChange.UserMessage);
+        Assert.Equal(foundReturn.UserMessage,missingReturn.UserMessage);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode IN ('USER_PASSWORD_CHANGE','USER_REACTIVATE');";
+        Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task OrdinaryAdmin_CannotEnumerateInaccessibleAccountsThroughPasswordOrReactivation()
+    {
+        var service=new UserAccountManagementService(_db);
+        var created=await service.CreateAsync(new JsonObject {
+            ["username"]="inaccessible-admin",["password"]=SafePassword,
+            ["passwordConfirmation"]=SafePassword,["personId"]="TST-ACTIVE-1",
+            ["role"]="OrdinaryAdministration"
+        },_general,CancellationToken.None);
+        Assert.True(created.Success,created.UserMessage);
+        string protectedId=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        const string nonexistent="USR-NOT-A-REAL-ACCOUNT";
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Password(string target)
+            => await service.ChangePasswordAsync(new JsonObject {
+                ["userId"]=target,["expectedRevision"]=1L,
+                ["password"]="Abc123!another"
+            },_ordinary,default);
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Disable(string target)
+            => await service.DeactivateAsync(new JsonObject {
+                ["userId"]=target,["expectedRevision"]=1L
+            },_ordinary,default);
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Reactivate(string target)
+            => await service.ReactivateAsync(new JsonObject {
+                ["userId"]=target,["expectedRevision"]=1L,
+                ["reason"]="طلب تدقيق صلاحيات الإدارة العادية"
+            },_ordinary,default);
+
+        foreach(var attempt in new Func<string,Task<AlTamam.Contracts.Bridge.BridgeResponse>>[]{
+            Password,Disable,Reactivate})
+        {
+            var known=await attempt(protectedId);
+            var missing=await attempt(nonexistent);
+            Assert.False(known.Success);
+            Assert.False(missing.Success);
+            Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.Unauthorized,known.ErrorCode);
+            Assert.Equal(known.ErrorCode,missing.ErrorCode);
+            Assert.Equal(known.UserMessage,missing.UserMessage);
+        }
+        using var db=_db.CreateOpenConnection();
+        using var q=db.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode IN ('USER_PASSWORD_CHANGE','USER_DEACTIVATE','USER_REACTIVATE');";
+        Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task RotationRevokesPriorSessionsAndDisablingDoesNotEraseAccount()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var create=await svc.CreateAsync(new JsonObject {
+            ["username"]="person-password",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        },_general,CancellationToken.None);
+        Assert.True(create.Success,create.UserMessage);
+        string userId=Assert.IsType<JsonObject>(create.Data)["userId"]!.GetValue<string>();
+        using(var c=_db.CreateOpenConnection()) {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="""
+                INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+                VALUES('00112233445566778899aabbccddeeff',$id,3,
+                  '2026-10-01T00:00:00Z','2028-10-01T00:00:00Z',0);
+                """;
+            cmd.Parameters.AddWithValue("$id",userId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var bad=await svc.ChangePasswordAsync(new JsonObject {
+            ["userId"]=userId,["expectedRevision"]=1L,["password"]="abc"
+        },_general,CancellationToken.None);
+        Assert.False(bad.Success);
+        var rotated=await svc.ChangePasswordAsync(new JsonObject {
+            ["userId"]=userId,["expectedRevision"]=1L,["password"]="New123!secure"
+        },_general,CancellationToken.None);
+        Assert.True(rotated.Success,rotated.UserMessage);
+        using(var c=_db.CreateOpenConnection()) {
+            using var q=c.CreateCommand();
+            q.CommandText="SELECT RevokedFlag FROM UserSessions WHERE UserId=$id;";
+            q.Parameters.AddWithValue("$id",userId);
+            Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        }
+        var disabled=await svc.DeactivateAsync(new JsonObject {
+            ["userId"]=userId,["expectedRevision"]=2L
+        },_general,CancellationToken.None);
+        Assert.True(disabled.Success,disabled.UserMessage);
+        using(var c=_db.CreateOpenConnection()) {
+            using var q=c.CreateCommand();
+            q.CommandText="SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+            q.Parameters.AddWithValue("$id",userId);
+            Assert.Equal(0L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        }
+    }
+
+
+    [Fact]
+    public async Task CreatedBy_UsesFrozenActualRosterName_AndListPagesHaveSequentialIndices()
+    {
+        // Founding GeneralAdmin has no roster link. Only roster-linked ordinary creators use real roster names.
+        var (hash,salt)=PasswordSecurity.HashPassword(SafePassword);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+                    CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+                    FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
+                VALUES('TST-GA',NULL,'ga-test','ga-test',1,
+                    $hash,$salt,0,1,0,'TST-GA','ga-test','2026-01-01T00:00:00Z',1);
+                """;
+            q.Parameters.AddWithValue("$hash",hash);q.Parameters.AddWithValue("$salt",salt);
+            await q.ExecuteNonQueryAsync();
+        }
+        var svc=new UserAccountManagementService(_db);
+        var adminCreated=await svc.CreateAsync(new JsonObject {
+            ["username"]="roster-admin",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
+        },_general,default);
+        Assert.True(adminCreated.Success,adminCreated.UserMessage);
+        var adminId=Assert.IsType<JsonObject>(adminCreated.Data)["userId"]!.GetValue<string>();
+        var rosterActor=new BridgePrincipal(adminId,"roster-admin",
+            UserRole.OrdinaryAdministration,"0123456789abcdef0123456789abcdef");
+        var created=await svc.CreateAsync(new JsonObject {
+            ["username"]="created-supervisor",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
+        },rosterActor,default);
+        Assert.True(created.Success,created.UserMessage);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='created-supervisor';";
+            Assert.Equal("roster-admin - مستخدم اختباري",q.ExecuteScalar());
+            // Current name changes must never rewrite creator's historical snapshot.
+            q.CommandText="UPDATE Persons SET CurrentVisibleName='اسم جديد' WHERE PersonId='TST-ACTIVE-1';";
+            q.ExecuteNonQuery();
+            q.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='created-supervisor';";
+            Assert.Equal("roster-admin - مستخدم اختباري",q.ExecuteScalar());
+        }
+        var found=await svc.ListAsync(new JsonObject{
+            ["term"]="created-supervisor",["page"]=1,["pageSize"]=20
+        },_general,default);
+        Assert.True(found.Success,found.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(found.Data)["items"]);
+        Assert.Single(items);
+        Assert.Equal(1L,items[0]!["index"]!.GetValue<long>());
+        Assert.Equal("roster-admin - مستخدم اختباري",items[0]!["createdBy"]!.GetValue<string>());
+        Assert.Equal("970002",items[0]!["serviceNumberA"]!.GetValue<string>());
+        using(var creatorCheck=_db.CreateOpenConnection())
+        using(var queryCreator=creatorCheck.CreateCommand())
+        {
+            queryCreator.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='roster-admin';";
+            Assert.Equal("الإدارة العامة - ga-test",queryCreator.ExecuteScalar());
+            queryCreator.CommandText="SELECT LinkedPersonId FROM Users WHERE Role=1;";
+            Assert.Equal(DBNull.Value,queryCreator.ExecuteScalar());
+        }
+        var secondPage=await svc.ListAsync(new JsonObject{["page"]=2,["pageSize"]=1},
+            _general,default);
+        Assert.True(secondPage.Success,secondPage.UserMessage);
+        var secondItems=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(secondPage.Data)["items"]);
+        Assert.Single(secondItems);
+        Assert.Equal(2L,secondItems[0]!["index"]!.GetValue<long>());
+    }
+
+    [Fact]
+    public async Task ExplicitReactivationRequiresActiveRoster_AuthorizedRoleAndAudit()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="reactivate-supervisor",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
+        },_ordinary,default);
+        Assert.True(created.Success,created.UserMessage);
+        string id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        var disabled=await svc.DeactivateAsync(new JsonObject{
+            ["userId"]=id,["expectedRevision"]=1L
+        },_ordinary,default);
+        Assert.True(disabled.Success,disabled.UserMessage);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="UPDATE Persons SET ActiveFlag=0,OrganizationalStatus=3 WHERE PersonId='TST-ACTIVE-2';";
+            q.ExecuteNonQuery();
+        }
+        var intent=new JsonObject{["userId"]=id,["expectedRevision"]=2L,
+            ["reason"]="عاد الفرد إلى القوة رسمياً"};
+        Assert.False((await svc.ReactivateAsync(intent,_ordinary,default)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="UPDATE Persons SET ActiveFlag=1,OrganizationalStatus=1 WHERE PersonId='TST-ACTIVE-2';";
+            q.ExecuteNonQuery();
+        }
+        // Re-enrolling the person MUST NOT silently activate their old account.
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+            q.Parameters.AddWithValue("$id",id);
+            Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+        var supervisor=new BridgePrincipal(id,"reactivate-supervisor",UserRole.Supervisor,
+            "00112233445566778899aabbccddeeff");
+        Assert.False((await svc.ReactivateAsync(intent,supervisor,default)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-REACTIVE-ASSIGN','TST-ACTIVE-2','SITE-UNSPECIFIED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T10:00:00Z');
+                """;
+            q.ExecuteNonQuery();
+        }
+        var reactivated=await svc.ReactivateAsync(intent,_ordinary,default);
+        Assert.True(reactivated.Success,reactivated.UserMessage);
+        Assert.Equal(3L,Assert.IsType<JsonObject>(reactivated.Data)["rowVersion"]!.GetValue<long>());
+        Assert.False((await svc.ReactivateAsync(intent,_ordinary,default)).Success);
+        using var check=_db.CreateOpenConnection();
+        using var query=check.CreateCommand();
+        query.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_REACTIVATE';";
+        Assert.Equal(1L,Convert.ToInt64(query.ExecuteScalar()));
+        query.CommandText="SELECT Username FROM Users WHERE UserId=$id;";
+        query.Parameters.AddWithValue("$id",id);
+        Assert.Equal("reactivate-supervisor",query.ExecuteScalar());
+    }
+
+    [Fact]
+    public async Task PasswordEditRejectsRoleUsernameAndPersonMutationAttempts()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="immutable-account",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        },_general,default);
+        Assert.True(created.Success,created.UserMessage);
+        string id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        foreach(var extra in new[]{"role","username","personId","linkedPersonId","active"})
+        {
+            var attempt=new JsonObject{
+                ["userId"]=id,["expectedRevision"]=1L,["password"]="New123!secure"
+            };
+            attempt[extra]=extra=="active"?JsonValue.Create(true):JsonValue.Create("tamper");
+            var denied=await svc.ChangePasswordAsync(attempt,_general,default);
+            Assert.False(denied.Success);
+        }
+        using var c=_db.CreateOpenConnection();using var q=c.CreateCommand();
+        q.CommandText="SELECT Role,Username,LinkedPersonId,RowVersion FROM Users WHERE UserId=$id;";
+        q.Parameters.AddWithValue("$id",id);
+        using var reader=q.ExecuteReader();
+        Assert.True(reader.Read());
+        Assert.Equal((int)UserRole.Supervisor,reader.GetInt32(0));
+        Assert.Equal("immutable-account",reader.GetString(1));
+        Assert.Equal("TST-ACTIVE-1",reader.GetString(2));
+        Assert.Equal(1L,reader.GetInt64(3));
+    }
+
+    [Fact]
+    public async Task PasswordRotationAndDisabling_ExactRetryMustNotDuplicateAuditOrAlterCredential()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="supervisor-retry",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        },_ordinary,default);
+        Assert.True(created.Success,created.UserMessage);
+        var id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        var rotation=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=1L,["password"]="Rot123!valid",
+            ["operationId"]="password-retry-20261025"
+        };
+        var first=await svc.ChangePasswordAsync(rotation,_ordinary,default);
+        Assert.True(first.Success,first.UserMessage);
+        using var connection=_db.CreateOpenConnection();
+        using var q=connection.CreateCommand();
+        q.CommandText="SELECT CredentialHash FROM Users WHERE UserId=$id;";
+        q.Parameters.AddWithValue("$id",id);
+        string firstHash=Convert.ToString(q.ExecuteScalar())!;
+        Assert.True(PasswordSecurity.VerifyPassword("Rot123!valid",firstHash,
+            GetSalt(connection,id)));
+        var replay=await svc.ChangePasswordAsync((JsonObject)rotation.DeepClone(),_ordinary,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        Assert.Equal(firstHash,Convert.ToString(q.ExecuteScalar()));
+        Assert.Equal(1L,Count(connection,"USER_PASSWORD_CHANGE"));
+        var tamper=(JsonObject)rotation.DeepClone();
+        tamper["password"]="Alt123!valid";
+        Assert.False((await svc.ChangePasswordAsync(tamper,_ordinary,default)).Success);
+        Assert.Equal(1L,Count(connection,"USER_PASSWORD_CHANGE"));
+
+        var disable=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["operationId"]="disable-retry-20261025"
+        };
+        var done=await svc.DeactivateAsync(disable,_ordinary,default);
+        Assert.True(done.Success,done.UserMessage);
+        var again=await svc.DeactivateAsync((JsonObject)disable.DeepClone(),_ordinary,default);
+        Assert.True(again.Success,again.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(done.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(again.Data).ToJsonString());
+        Assert.Equal(1L,Count(connection,"USER_DEACTIVATE"));
+        Assert.False((await svc.DeactivateAsync(new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["operationId"]="disable-retry-20261025",["role"]="GeneralAdministration"
+        },_ordinary,default)).Success);
+        q.CommandText="SELECT RowVersion FROM Users WHERE UserId=$id;";
+        Assert.Equal(3L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task ExplicitReactivation_ExactRetryCannotBypassRoleAndProducesOneAuditEvent()
+    {
+        using(var setupConnection=_db.CreateOpenConnection())
+        using(var assign=setupConnection.CreateCommand())
+        {
+            assign.CommandText="""
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-RETRY-ASSIGN','TST-ACTIVE-2','SITE-UNSPECIFIED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T10:00:00Z');
+                """;
+            await assign.ExecuteNonQueryAsync();
+        }
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="reactivation-retry",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
+            ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
+        },_ordinary,default);
+        Assert.True(created.Success,created.UserMessage);
+        var id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        Assert.True((await svc.DeactivateAsync(new JsonObject{
+            ["userId"]=id,["expectedRevision"]=1L
+        },_ordinary,default)).Success);
+        var request=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["reason"]="إعادة اعتماد الشخص في كشف القوة بعد التحقق",
+            ["operationId"]="reactivation-retry-20261025"
+        };
+        var first=await svc.ReactivateAsync(request,_ordinary,default);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await svc.ReactivateAsync((JsonObject)request.DeepClone(),_ordinary,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        using var c=_db.CreateOpenConnection();
+        Assert.Equal(1L,Count(c,"USER_REACTIVATE"));
+        Assert.False((await svc.ReactivateAsync(request,new BridgePrincipal(
+            "fake-supervisor","supervisor",UserRole.Supervisor,"00000000000000000000000000000000"),
+            default)).Success);
+        var tampered=(JsonObject)request.DeepClone();
+        tampered["reason"]="سبب جديد لا يطابق السبب المعتمد سابقاً";
+        Assert.False((await svc.ReactivateAsync(tampered,_ordinary,default)).Success);
+        Assert.Equal(1L,Count(c,"USER_REACTIVATE"));
+    }
+
+    private static long Count(Microsoft.Data.Sqlite.SqliteConnection c,string operation)
+    {
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode=$code;";
+        cmd.Parameters.AddWithValue("$code",operation);
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+    private static string GetSalt(Microsoft.Data.Sqlite.SqliteConnection c,string id)
+    {
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT PasswordSalt FROM Users WHERE UserId=$id;";
+        cmd.Parameters.AddWithValue("$id",id);
+        return (string)cmd.ExecuteScalar()!;
+    }
+
+    public Task DisposeAsync()=>Task.CompletedTask;
+    public void Dispose() {
+        _db?.Dispose();
+        SyntheticFixtures.DeleteTempDatabase(_path);
+    }
+}

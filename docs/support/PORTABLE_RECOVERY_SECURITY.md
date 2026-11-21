@@ -1,0 +1,44 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** Portable recovery key export now has a real **trusted WPF File-menu** dialog restricted to a freshly reauthenticated GeneralAdministration session (R12). The **pre-login import UI does not exist**, despite the protected import infrastructure (R14/R15); approval and real cross-device acceptance remain open. The historical paragraph below saying export dialogs are missing describes the original Phase 12.07 batch, not today's code. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
+# Phase 12.07 — Portable encrypted recovery material
+
+The project uses a random 256-bit SQLCipher database key protected for ordinary
+local use by Windows user-scoped DPAPI. DPAPI key files **do not work on a
+different Windows user profile or computer**.
+
+The infrastructure layer now provides `PortableRecoveryKeyPackage` (v1) and
+`WindowsDatabaseKeyStore.ExportPortableRecoveryKey` /
+`RecoverExistingDatabaseKey`. The v1 package is a separate
+`.altrecovery` file containing a 256-bit key encrypted with AES-256-GCM,
+a random 256-bit salt, a random 96-bit nonce, authenticated format metadata
+and PBKDF2-HMAC-SHA256 with 600,000 iterations. It does not contain the
+recovery password or any plain database key.
+
+The recovery file must be held **separately** from the encrypted SQLCipher
+backup, together with its separately safeguarded passphrase. Losing both the
+DPAPI file and the recovery password/material makes that database impossible
+to decrypt using the available information; the program must not silently
+create a replacement key.
+
+The recovery import API fails closed when a destination DPAPI key already exists,
+requires an existing encrypted database, verifies actual SQLCipher integrity
+*before* writing any new protected key, and never edits, moves or deletes the
+database. It protects the validated original key under the destination
+Windows user's own DPAPI scope using an atomic new-file move.
+
+**Integration status:** Cryptographic core and Windows tests only. The native
+GeneralAdmin-only passphrase/file dialogs, explicit owner confirmation,
+staged database restoration and crash-recoverable atomic activation remain
+mandatory and are **not implemented** in this batch. No recovery secret is
+passed to JavaScript or an action response. This code is intentionally not
+exposed to end users until native secure dialogs and authentication gates pass.
+
+
+**Distribution vs recovery clarification (owner decision 2026-10-28):**
+`PortableRecoveryKeyPackage` describes an encrypted *key-recovery file*, not the
+Portable ZIP application's data directory. Both the directly launched Portable
+EXE and the installed EXE keep the original encrypted database and DPAPI key
+under the same `%LOCALAPPDATA%\\AlTamam` folder for the current Windows user.
+No database or key relocation or automatic migration is permitted.

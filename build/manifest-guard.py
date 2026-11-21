@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Phase 15 CI gate (15.01): validate action-manifest.json invariants BEFORE packaging.
+
+Fails the release pipeline (exit 1) on any violation:
+  * exactly 105 actions, unique names
+  * every allowedRoles value is one of the 4 declared principal roles
+  * manifest == compiled ActionManifest.cs table (name/service/roles/mutating)
+    byte-for-byte after normalization — CI refuses drift before packaging
+  * dangerous mutating actions (CommitFullReset, RestoreDatabaseAtomically)
+    are GA-authorized; Preview* twins MUST be non-mutating read-only previews
+  * mutating actions declare idempotentByRequestId == true
+  * CSP contains no unsafe-inline / unsafe-eval and connect-src 'none'
+  * virtual origin is the exact pinned https origin, external network denied
+Role-restriction decisions (restore GA+OA vs reset GA-only) follow the frozen
+contract §2.9 matrix recorded in IMPLEMENTATION_LEDGER.md; this guard ENFORCES
+the frozen contract, it does not silently relax or extend it.
+Exit codes: 0 = pass, 1 = manifest violation, 2 = file/schema unreadable.
+"""
+import json, re, sys
+
+PATH = "src/AlTamam.WebUI/action-manifest.json"
+CODE_PATH = "src/AlTamam.Application/Bridge/ActionManifest.cs"
+ROLES = {"Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor"}
+GA_ONLY_RESET = {"PreviewFullReset", "CommitFullReset"}
+FORBIDDEN_FOUNDER_BINDING = {"LinkFoundingAdministrator"}
+ADMIN_CORRECTION = {"SetClosedDayCorrectionPolicy","PreviewClosedDayCorrection","CommitClosedDayCorrection",
+                    "PreviewAdministrativeAttendanceCatchUp","CommitAdministrativeAttendanceCatchUp"}
+MUTATING_DANGEROUS = {"CommitFullReset", "RestoreDatabaseAtomically"}
+
+def main() -> int:
+    try:
+        with open(PATH, encoding="utf-8") as f:
+            m = json.load(f)
+    except Exception as e:
+        print(f"MANIFEST-GUARD: cannot read {PATH}: {e}")
+        return 2
+
+    errors = []
+    actions = m.get("actions", [])
+    names = [a["action"] for a in actions]
+    if len(actions) != 105:
+        errors.append(f"expected 105 actions, found {len(actions)}")
+    dupes = {n for n in names if names.count(n) > 1}
+    if dupes:
+        errors.append(f"duplicate action names: {sorted(dupes)}")
+
+    for a in actions:
+        bad = set(a.get("allowedRoles", [])) - ROLES
+        if bad:
+            errors.append(f"{a['action']}: unknown roles {sorted(bad)}")
+        if not a.get("allowedRoles"):
+            errors.append(f"{a['action']}: empty allowedRoles")
+        name = a["action"]
+        if name in GA_ONLY_RESET and set(a["allowedRoles"]) != {"GeneralAdministration"}:
+            errors.append(f"{name}: full-reset family must be GeneralAdministration-only")
+        if name in FORBIDDEN_FOUNDER_BINDING:
+            errors.append(f"{name}: founder must remain independent of personnel roster")
+        if name in ADMIN_CORRECTION and set(a["allowedRoles"]) != {"GeneralAdministration", "OrdinaryAdministration"}:
+            errors.append(f"{name}: closed-day correction must allow both administrations and forbid supervisors")
+        if name in MUTATING_DANGEROUS and "GeneralAdministration" not in a["allowedRoles"]:
+            errors.append(f"{name}: dangerous mutating action lost GA authorization")
+        if a.get("isMutating") and not a.get("idempotentByRequestId"):
+            errors.append(f"{name}: mutating action must be idempotentByRequestId")
+
+    # manifest vs compiled table drift check
+    try:
+        cs = open(CODE_PATH, encoding="utf-8").read()
+        rows = re.findall(
+            r'new\("(?P<name>[^"]+)",\s*"(?P<svc>[^"]+)",\s*new\[\]\s*\{(?P<roles>[^}]*)\},\s*(?P<mut>true|false)\)',
+            cs)
+        code = {n: (s, frozenset(r.strip().strip('"') for r in rs.split(",")), m == "true")
+                for n, s, rs, m in rows}
+        if len(code) != len(actions):
+            errors.append(f"ActionManifest.cs has {len(code)} rows, manifest has {len(actions)} actions")
+        for a in actions:
+            n = a["action"]
+            if n not in code:
+                errors.append(f"{n}: present in manifest, ABSENT from compiled ActionManifest.cs")
+                continue
+            svc, roles, mut = code[n]
+            if svc != a["owningService"]:
+                errors.append(f"{n}: service drift manifest={a['owningService']} code={svc}")
+            if roles != frozenset(a["allowedRoles"]):
+                errors.append(f"{n}: role drift manifest={sorted(a['allowedRoles'])} code={sorted(roles)}")
+            if mut != a["isMutating"]:
+                errors.append(f"{n}: isMutating drift manifest={a['isMutating']} code={mut}")
+    except FileNotFoundError:
+        errors.append(f"compiled table {CODE_PATH} not found — cannot verify drift")
+
+    # Every manifest mutation except Logout must be assigned an intent ID by
+    # the packaged bridge client; reject any future manifest/UI drift in CI.
+    try:
+        from pathlib import Path
+        ui_bridge = Path("src/AlTamam.WebUI/assets/js/bridge-client.js").read_text(encoding="utf-8")
+        match = re.search(r"const MUTATING_ACTIONS = new Set\(\[(.*?)\]\);", ui_bridge, re.S)
+        if not match:
+            errors.append("bridge-client.js does not define MUTATING_ACTIONS")
+        else:
+            ui_mutations = re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', match.group(1))
+            expected = {a["action"] for a in actions if a["isMutating"] and a["action"] != "Logout"}
+            if len(ui_mutations) != len(set(ui_mutations)) or set(ui_mutations) != expected:
+                errors.append(f"bridge mutation intent actions out of sync: missing {sorted(expected-set(ui_mutations))}, extra {sorted(set(ui_mutations)-expected)}")
+        dispatcher = Path("src/AlTamam.Application/Bridge/WebView2BridgeDispatcher.cs").read_text(encoding="utf-8")
+        if 'registration.IsMutating && request.Action != "Logout"' not in dispatcher:
+            errors.append("C# dispatcher is missing the mandatory mutation operationId gate")
+    except (OSError, UnicodeError) as e:
+        errors.append(f"operationId policy source unavailable: {e}")
+
+    # The UI may only call actions with a real dispatcher implementation.
+    # The fallback switch arm returns an error, not an implementation.
+    try:
+        from pathlib import Path
+        catalog = Path("src/AlTamam.Application/Bridge/BridgeHandlerCatalog.cs").read_text(encoding="utf-8")
+        arms = re.findall(
+            r'((?:"[A-Za-z][A-Za-z0-9]*"\s*(?:or\s*)?)+)\s*=>',
+            catalog)
+        wired = set()
+        for arm in arms:
+            wired.update(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', arm))
+        ui_calls = {}
+        for source in Path("src/AlTamam.WebUI").rglob("*.js"):
+            js = source.read_text(encoding="utf-8")
+            # Support ordinary calls, optional chaining, and bracket-method access.
+            # Keep the pattern deliberately literal: dynamic action names need a
+            # separate review because they cannot be proved wired statically.
+            pattern = (
+                r'\b(?:invoke|invokeWithRetry|request)\s*\??\.\s*'
+                r'\(\s*["\x27]([A-Z][A-Za-z0-9]*)["\x27]'
+                r'|\b(?:invoke|invokeWithRetry|request)\s*\(\s*'
+                r'["\x27]([A-Z][A-Za-z0-9]*)["\x27]'
+            )
+            for match in re.finditer(pattern, js):
+                action = match.group(1) or match.group(2)
+                ui_calls.setdefault(action, set()).add(str(source))
+        for action, sources in sorted(ui_calls.items()):
+            if action not in names:
+                errors.append(f"UI calls action absent from manifest: {action} in {sorted(sources)}")
+            elif action not in wired:
+                errors.append(f"UI calls unwired backend action: {action} in {sorted(sources)}")
+    except (OSError, UnicodeError) as e:
+        errors.append(f"UI bridge coverage cannot be verified: {e}")
+
+    csp = m.get("contentSecurityPolicy", "")
+    if "unsafe-inline" in csp or "unsafe-eval" in csp:
+        errors.append("CSP contains unsafe-inline/unsafe-eval")
+    if "connect-src 'none'" not in csp:
+        errors.append("CSP missing connect-src 'none'")
+    if m.get("virtualHostOrigin") != "https://manger.adwas.example":
+        errors.append(f"virtualHostOrigin not pinned: {m.get('virtualHostOrigin')}")
+    if m.get("allowExternalNetwork") is not False or m.get("offlineModeEnforced") is not True:
+        errors.append("offline/external-network flags wrong")
+
+    if errors:
+        print("MANIFEST-GUARD FAIL:")
+        for e in errors:
+            print("  -", e)
+        return 1
+    print(f"MANIFEST-GUARD PASS: {len(actions)} actions, CSP strict, origin pinned.")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

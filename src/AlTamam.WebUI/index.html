@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self';" />
+  <title>التمام اليومي — إدارة القوة والتحضير والتنقلات والتقارير</title>
+  <link rel="stylesheet" href="assets/css/altamam.css" />
+  <link rel="stylesheet" href="assets/css/presentation.css" />
+  <link rel="stylesheet" href="assets/css/reminders.css" />
+</head>
+<body>
+  <header class="app-topbar">
+    <div class="brand-cluster">
+      <div class="brand-logo">ت</div>
+      <div>
+        <div class="brand-title">التمام اليومي</div>
+        <div class="brand-subtitle">برنامج التمام اليومي — إدارة القوة والتحضير</div>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <span class="badge-pill">تطبيق محلي — بدون خدمات سحابية</span>
+      <span id="headerRoleBadge" class="badge-pill">لم يتم تسجيل الدخول</span>
+      <button id="logoutAction" class="btn btn-outline" type="button" hidden>تسجيل الخروج</button>
+      <button class="btn btn-outline presentf2f1452a6" data-action="toggleTheme">🌓 المظهر</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <aside class="app-sidebar" aria-label="الأقسام الأربعة الرئيسية" hidden>
+      <div class="nav-section-label">الأقسام الرئيسية</div>
+      <button id="navBtn-dashboard" class="nav-btn active" data-action="navigateTop" data-section="dashboard">
+        <span>الرئيسية</span>
+        <span>📊</span>
+      </button>
+      <button id="navBtn-monthly" class="nav-btn" data-action="navigateTop" data-section="monthly">
+        <span>التمام الشهري</span>
+        <span>📅</span>
+      </button>
+      <button id="navBtn-admin" class="nav-btn" data-action="navigateTop" data-section="admin">
+        <span>الإدارة</span>
+        <span>⚙️</span>
+      </button>
+      <button id="navBtn-settings" class="nav-btn" data-action="navigateTop" data-section="settings">
+        <span>الإعدادات</span>
+        <span>🛡️</span>
+      </button>
+
+
+    </aside>
+
+    <main class="app-main" id="mainContent">
+      <div id="appViewport" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <div id="appModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="card-header">
+        <h2 id="appModalTitle" class="page-title presentbe8ffda67">تأكيد العملية</h2>
+        <button class="btn btn-outline" data-action="closeModal">✕</button>
+      </div>
+      <div id="appModalBody"></div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <script src="assets/js/altamam-app.js"></script>
+    <script src="./assets/js/bridge-client.js"></script>
+  <script src="assets/js/roster-columns.js"></script>
+  <script src="assets/js/session-idle.js"></script>
+  <script src="assets/js/functional-screens.js"></script>
+  <script src="assets/js/operation-dialogs.js"></script>
+  <script src="assets/js/admin-settings.js"></script>
+  <script src="assets/js/attendance-ui.js"></script>
+  <script src="assets/js/personnel-movements.js"></script>
+  <script src="assets/js/personnel-separation.js"></script>
+  <script src="assets/js/personnel-report.js"></script>
+  <script src="assets/js/table-experience.js"></script>
+  <script src="assets/js/reminders.js"></script>
+</body>
+</html>
