@@ -8,7 +8,7 @@ namespace AlTamam.NativeDesktop;
 /// experimental native WPF login against a live production SQLCipher writer.
 /// Never starts an extra database, scheduler, WebView2, or browser profile.
 /// </summary>
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     private Mutex? _singleInstance;
     private bool _ownsSingleInstance;
