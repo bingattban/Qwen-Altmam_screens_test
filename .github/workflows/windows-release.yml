@@ -231,7 +231,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        shard: [r01, bridge-heavy, bridge-light, performance, security, other]
+        shard: [r01-config, r01-excel, r01-ops, r01-other, bridge-heavy, bridge-light, performance, security, other]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -243,7 +243,7 @@ jobs:
         run: |
           dotnet restore AlTamam.slnx
           dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
-      # Test-first: exact exclusive FQN predicates across six independent Windows
+      # Test-first: exact exclusive FQN predicates across nine independent Windows
       # runners. A post-shard verifier requires all 1,162 baseline cases, no overlap,
       # nonzero TRX and Phase02/Phase03/R01/Phase15/E2E on the tested exact SHA.
       - name: Phase 02 SQLCipher and temporal-history integration suite (mandatory before packaging)
@@ -256,13 +256,16 @@ jobs:
         run: >
           dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
-      - name: Full deterministic test suite (all authored tests across six exact disjoint shards)
+      - name: Full deterministic test suite (all authored tests across nine exact disjoint shards)
         shell: pwsh
         env:
           ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: |
           $filter = switch ('${{ matrix.shard }}') {
-            'r01' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01' }
+            'r01-config' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01NativeConfigurationLifecycleTests' }
+            'r01-excel' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01NativeExcelLifecycleTests' }
+            'r01-ops' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01NativeOperationalLifecycleTests' }
+            'r01-other' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01&FullyQualifiedName!~R01NativeConfigurationLifecycleTests&FullyQualifiedName!~R01NativeExcelLifecycleTests&FullyQualifiedName!~R01NativeOperationalLifecycleTests' }
             # The measured top four slow Bridge classes move to their own worker;
             # their complement includes the 496 Bridge RBAC theory cases.
             'bridge-heavy' { 'FullyQualifiedName~AlTamam.Tests.Bridge.NativeRestoreActivationCoordinatorTests|FullyQualifiedName~AlTamam.Tests.Bridge.BackupRetentionIntegrationTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FirstRunBridgeTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FullResetTests' }
@@ -292,14 +295,6 @@ jobs:
             if ($file -like '*phase02*' -and $count -lt 18) { throw 'Phase 02 suite incomplete' }
             if ($file -like '*phase03*' -and $count -lt 18) { throw 'Phase 03 suite incomplete' }
           }
-      - name: R01 real native lifecycle response and execution evidence
-        if: matrix.shard == 'r01'
-        shell: pwsh
-        run: |
-          python build/test-r01-native-contract-evidence.py
-          if ($LASTEXITCODE -ne 0) { throw 'R01 evidence validator regression failed' }
-          python build/check-r01-native-contract-evidence.py TestResults/full-suite.trx
-          if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
       - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
         if: matrix.shard == 'performance'
         shell: pwsh
@@ -376,7 +371,7 @@ jobs:
           retention-days: 14
 
   verify-full-test-shards:
-    name: Verify all 1,162+ distinct Release tests across six shards
+    name: Verify all 1,162+ distinct Release tests across nine shards
     needs: build-test
     runs-on: ubuntu-latest
     steps:
@@ -386,8 +381,15 @@ jobs:
           pattern: test-results-windows-*
           path: ShardedResults
           merge-multiple: false
-      - name: Independently verify four real xUnit TRX partitions
+      - name: Independently verify nine real xUnit TRX partitions
         run: python3 build/verify-release-test-shards.py ShardedResults
+      - name: Strictly verify all 22 native R01 lifecycle cases and 103 response shapes
+        run: |
+          python3 build/test-r01-native-contract-evidence.py
+          python3 build/check-r01-native-contract-evidence.py ShardedResults/test-results-windows-r01-config/full-suite.trx \
+            ShardedResults/test-results-windows-r01-excel/full-suite.trx \
+            ShardedResults/test-results-windows-r01-ops/full-suite.trx \
+            ShardedResults/test-results-windows-r01-other/full-suite.trx
   package:
     # HARD DEPENDENCY: no test success => no Portable/Installer output.
     name: Publish and package (${{ matrix.arch }}) after tests
