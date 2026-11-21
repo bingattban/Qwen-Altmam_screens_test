@@ -96,14 +96,17 @@
                                    AutomationProperties.LiveSetting="Polite" Margin="0,0,0,12"/>
                         <Button x:Name="SubmitButton" Height="45" Cursor="Hand"
                                 Click="OnSubmitClick" IsDefault="True"
-                                IsEnabled="{Binding IsReady}"
                                 BorderThickness="0" Foreground="#FFFFFF"
                                 FontWeight="Bold" FontSize="16"
-                                Background="#0D9488" Content="دخول">
+                                Background="#0D9488">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Content" Value="دخول"/>
+                                    <Setter Property="IsEnabled" Value="True"/>
                                     <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsReady}" Value="False">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding IsFirstRun}" Value="True">
                                             <Setter Property="Content" Value="إنشاء الإدارة العامة والدخول"/>
                                         </DataTrigger>
