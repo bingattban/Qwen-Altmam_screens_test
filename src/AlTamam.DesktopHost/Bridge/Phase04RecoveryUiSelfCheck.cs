@@ -214,10 +214,18 @@ internal static class Phase04RecoveryUiSelfCheck
                   (viewport().querySelector(".daily-roster-panel")||
                    viewport().querySelector(".settings-heading")),"real founder login");
                 setStage("founder-session-check");
-                const authenticated=await api.invoke("GetCurrentSession",{});
+                // The real Windows runner may be contending with concurrent
+                // restore/SQLCipher suites. The shipped bridge retains its
+                // strict 15s default; this test-only *read* gets 45s so that
+                // slow scheduling cannot be mistaken for missing authority.
+                // Never accept a DOM-only login: require the real server's
+                // founder identity AND live nonce, or fail closed.
+                const sessionStarted=performance.now();
+                const authenticated=await api.invoke("GetCurrentSession",{}, {timeoutMs: 45000});
                 if(authenticated.data?.username!=="phase04-owner"||
                    !authenticated.data?.sessionNonce)
                   throw Error("real founder session not active before settings navigation");
+                setStage("founder-session-verified-"+Math.round(performance.now()-sessionStarted)+"ms");
                 setStage("configure-recovery-output");
                 await api.invoke("SetOutputDirectory",{directory:__OUTPUT__});
                 setStage("settings-navigation");
