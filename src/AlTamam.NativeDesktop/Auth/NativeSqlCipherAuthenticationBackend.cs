@@ -1,3 +1,4 @@
+using System.IO;
 using AlTamam.Application.Bridge;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
