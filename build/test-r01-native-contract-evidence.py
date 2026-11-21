@@ -72,6 +72,35 @@ class NativeEvidenceGuard(unittest.TestCase):
     def test_complete_passed_execution_is_accepted(self):
         self.assertEqual(self.check(), {"QuerySites", "CreateSite"})
 
+    def test_disjoint_r01_class_reports_reassemble_real_native_shape_evidence(self):
+        # A validator that merely looks at one subshard silently loses the
+        # other 15 native lifecycle cases and most response-shape evidence.
+        with tempfile.TemporaryDirectory() as folder:
+            source = self.fixture().getroot()
+            original = source.find("{" + gate.NS["t"] + "}Results")
+            groups = {
+                "config": "ConfigurationLifecycleTests.",
+                "excel": "ExcelLifecycleTests.",
+                "ops": "OperationalLifecycleTests.",
+                "recovery": "RecoveryLifecycleTests."
+            }
+            reports = []
+            for group, suffix in groups.items():
+                root = ET.Element("{" + gate.NS["t"] + "}TestRun")
+                output = ET.SubElement(root, "{" + gate.NS["t"] + "}Results")
+                for result in original:
+                    if result.get("testName", "").startswith(gate.PREFIX + suffix):
+                        output.append(copy.deepcopy(result))
+                report = Path(folder) / (group + ".trx")
+                ET.ElementTree(root).write(report, encoding="utf-8")
+                reports.append(report)
+            snapshots = {"QuerySites": ["array<object>"], "CreateSite": ["object<siteId>"]}
+            self.assertEqual(gate.validate(reports, snapshots), set(snapshots))
+            with self.assertRaisesRegex(ValueError, "not executed"):
+                gate.validate(reports[:3], snapshots)
+            with self.assertRaisesRegex(ValueError, "Duplicate"):
+                gate.validate(reports + [reports[-1]], snapshots)
+
     def test_missing_test_cannot_be_replaced_by_other_output(self):
         with self.assertRaisesRegex(ValueError, "not executed"):
             self.check(missing_case=True)
