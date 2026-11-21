@@ -88,6 +88,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Fast Core / exhaustive Release gate regression' }
           python build/test-ci-sharding-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Release shards / packaging gate mismatch' }
+          python build/test-parallel-package-acceptance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Four real package acceptance gates must remain mandatory' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Release TRX shard negative-path regression' }
           python build/test-release-artifact-provenance.py
