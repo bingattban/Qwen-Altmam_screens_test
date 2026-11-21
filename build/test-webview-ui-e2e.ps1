@@ -120,6 +120,32 @@ try {
     }
     Write-Host "UI-E2E PASS: real Windows WPF/WebView2 + synthetic SQLCipher bridge roundtrip and all three roles"
 }
+catch {
+    # Preserve the *failure* transcript as diagnostics, never as verified
+    # Phase13 evidence. The thrown original exception still fails the job.
+    try {
+        $diagnosticFolder = Join-Path $repository "Phase13Diagnostics"
+        New-Item -ItemType Directory -Path $diagnosticFolder -Force | Out-Null
+        $index = 0
+        foreach ($tracePath in $traces) {
+            $index++
+            if (Test-Path -LiteralPath $tracePath -PathType Leaf) {
+                Copy-Item -LiteralPath $tracePath -Destination (
+                    Join-Path $diagnosticFolder ("failed-windows-phase-{0}.log" -f $index)
+                ) -Force
+            }
+        }
+        [IO.File]::WriteAllText(
+            (Join-Path $diagnosticFolder "failure-summary.txt"),
+            "UI-E2E failed and did not produce Phase13 success evidence." +
+            [Environment]::NewLine + $_.Exception.Message
+        )
+    }
+    catch {
+        Write-Warning "Unable to retain separate failed-E2E diagnostics: $($_.Exception.Message)"
+    }
+    throw
+}
 finally {
     [Environment]::SetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE", $previousTrace)
     if ($process -and -not $process.HasExited) {

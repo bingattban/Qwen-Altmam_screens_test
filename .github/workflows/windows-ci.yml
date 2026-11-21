@@ -92,8 +92,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Four real package acceptance gates must remain mandatory' }
           python build/test-parallel-release-webview-gate.py
           if ($LASTEXITCODE -ne 0) { throw 'Parallel real Windows WebView2 acceptance cannot be bypassed' }
+          python build/test-recovery-session-readiness-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Real recovery session and failure evidence guard regressed' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Release TRX shard negative-path regression' }
+          python build/test-nine-shard-coverage-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Measured nine-way full test baseline is incomplete' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py

@@ -53,8 +53,8 @@ def validate(workflow: str) -> list[str]:
         problems.append("Four real packaged customer binaries must still be checked")
     if "needs: [package, package-acceptance]" not in workflow:
         problems.append("SHA256 audit must wait for all real acceptance jobs")
-    if "shard: [r01, bridge, performance, other]" not in full:
-        problems.append("All four exhaustive xUnit test shards mandatory")
+    if "shard: [r01-config, r01-excel, r01-ops, r01-other, bridge-heavy, bridge-light, performance, security, other]" not in full:
+        problems.append("All nine exhaustive xUnit test shards mandatory")
     return problems
 
 
