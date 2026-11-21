@@ -52,7 +52,8 @@ public sealed class NativeAutoPreparedRegisterPhase3Tests
         var fake = new Reader();
         var page = new DashboardPageViewModel();
         page.AttachReader(fake, () => Founder);
-        await page.OpenAutoRegisterAsync();
+        await page.RefreshAsync();
+        await page.SelectStatusAsync("__AUTO_PREPARED__");
         Assert.True(page.AutoRegister.IsOpen);
         Assert.Single(fake.RegisterCalls);
         Assert.Equal("__AUTO_PREPARED__", fake.RegisterCalls[0].StatusId);
