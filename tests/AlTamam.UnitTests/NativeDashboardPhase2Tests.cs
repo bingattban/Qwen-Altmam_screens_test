@@ -22,7 +22,7 @@ public sealed class NativeDashboardPhase2Tests
         var page = new DashboardPageViewModel();
         page.AttachReader(reader, () => null);
         await page.RefreshAsync();
-        Assert.Equal(0, reader.Calls.Count);
+        Assert.Empty(reader.Calls);
         Assert.False(page.IsDataConnected);
         Assert.Empty(page.Rows);
         Assert.Empty(page.Counters);
@@ -44,7 +44,7 @@ public sealed class NativeDashboardPhase2Tests
         Assert.DoesNotContain(page.Counters, x => x.Label == "غير المحضرين");
         Assert.Equal("رقم خاص", page.CustomColumns.Single().Caption);
         Assert.Equal("A", page.Rows.Single().CustomCells[0]);
-        Assert.Equal(1, reader.Calls.Count);
+        Assert.Single(reader.Calls);
         Assert.Equal(100, reader.Calls.Single().PageSize);
         Assert.Equal(DateOnly.FromDateTime(DateTime.Now), reader.Calls.Single().BusinessDate);
     }
@@ -134,7 +134,7 @@ public sealed class NativeDashboardPhase2Tests
         var page = new DashboardPageViewModel();
         page.AttachReader(reader, () => Founder);
         await page.SearchAsync(new string('x', 101));
-        Assert.Equal(0, reader.Calls.Count);
+        Assert.Empty(reader.Calls);
         Assert.False(page.IsDataConnected);
         Assert.NotEmpty(page.LoadError);
     }
