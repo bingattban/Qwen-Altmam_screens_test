@@ -31,8 +31,10 @@ def write_report(root: Path, shard: str, names: list[str], outcome="Passed",
 
 def baseline(root):
     write_report(root, "r01", ["AlTamam.Tests.Bridge.R01NativeRecoveryLifecycleTests.Real"])
-    write_report(root, "bridge", ["AlTamam.Tests.Bridge.AttendanceCommitIntegrationTests.Commit"])
+    write_report(root, "bridge-heavy", ["AlTamam.Tests.Bridge.NativeRestoreActivationCoordinatorTests.Restore"])
+    write_report(root, "bridge-light", ["AlTamam.Tests.Bridge.AttendanceCommitIntegrationTests.Commit"])
     write_report(root, "performance", ["AlTamam.Tests.Performance.Phase15TenThousandMultiYearDiagnostics.Measured"])
+    write_report(root, "security", ["AlTamam.Tests.Security.BridgeFuzzPayloadTests.Fuzz"])
     write_report(root, "other", ["AlTamam.Tests.Persistence.OfflineRestoreSwitchTests.Safe"])
     write_report(root, "other", ["Phase02.Cipher"], filename="phase02-integration.trx")
     write_report(root, "other", ["Phase03.Roles"], filename="phase03-unit.trx")
@@ -52,11 +54,11 @@ class ShardContract(unittest.TestCase):
             if mutate:
                 mutate(root)
             return self.mod.validate(
-                root, minimums={"r01": 1, "bridge": 1, "performance": 1, "other": 1},
+                root, minimums={"r01": 1, "bridge-heavy": 1, "bridge-light": 1, "performance": 1, "security": 1, "other": 1},
                 phase_minimums={"phase02-integration.trx": 1, "phase03-unit.trx": 1}
             )
 
-    def test_all_four_disjoint_shards_and_independent_suites_pass(self):
+    def test_all_six_disjoint_shards_and_independent_suites_pass(self):
         self.assertEqual([], self.run_fixture())
 
     def test_missing_shard_is_fatal(self):
@@ -78,7 +80,20 @@ class ShardContract(unittest.TestCase):
 
     def test_fake_counters_are_fatal(self):
         self.assertTrue(self.run_fixture(lambda root: write_report(
-            root, "bridge", ["AlTamam.Tests.Bridge.AttendanceCommitIntegrationTests.Commit"], summary=2)))
+            root, "bridge-light", ["AlTamam.Tests.Bridge.AttendanceCommitIntegrationTests.Commit"], summary=2)))
+
+    def test_missing_new_security_shard_is_fatal(self):
+        self.assertTrue(self.run_fixture(lambda root: (
+            root / "test-results-windows-security" / "full-suite.trx").unlink()))
+
+    def test_heavy_bridge_case_cannot_run_in_light_shard(self):
+        self.assertTrue(self.run_fixture(lambda root: write_report(
+            root, "bridge-light",
+            ["AlTamam.Tests.Bridge.NativeRestoreActivationCoordinatorTests.Restore"])))
+
+    def test_security_case_cannot_run_in_other_shard(self):
+        self.assertTrue(self.run_fixture(lambda root: write_report(
+            root, "other", ["AlTamam.Tests.Security.BridgeFuzzPayloadTests.Fuzz"])))
 
     def test_missing_phase02_safety_suite_is_fatal(self):
         self.assertTrue(self.run_fixture(lambda root: (
@@ -96,7 +111,7 @@ class ShardContract(unittest.TestCase):
             root = Path(path)
             baseline(root)
             self.assertTrue(self.mod.validate(
-                root, minimums={"r01": 2, "bridge": 1, "performance": 1, "other": 1},
+                root, minimums={"r01": 2, "bridge-heavy": 1, "bridge-light": 1, "performance": 1, "security": 1, "other": 1},
                 phase_minimums={"phase02-integration.trx": 1, "phase03-unit.trx": 1}
             ))
 
