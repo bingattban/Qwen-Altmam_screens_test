@@ -23,7 +23,7 @@ def validate(workflow: str) -> list[str]:
     package=workflow.split("  package:\n",1)[1].split("  package-acceptance:\n",1)[0]
     if "pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1" in full:
         problems.append("Expensive real UI suite duplicated in full xUnit shard")
-    if "    needs:" in ui or "    if: always()" in ui:
+    if any(line.startswith("    needs:") or line.startswith("    if: always()") for line in ui.splitlines()):
         problems.append("Windows UI acceptance must start independently, and never bypass failures")
     for needed in (
         "runs-on: windows-latest",
