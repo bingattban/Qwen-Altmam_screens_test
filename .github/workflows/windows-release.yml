@@ -121,8 +121,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Real recovery session and failure evidence guard regressed' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
-          python build/test-six-shard-coverage-contract.py
-          if ($LASTEXITCODE -ne 0) { throw 'Measured six-way full test baseline is incomplete' }
+          python build/test-nine-shard-coverage-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Measured nine-way full test baseline is incomplete' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
