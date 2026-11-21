@@ -227,7 +227,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        shard: [r01, bridge, performance, other]
+        shard: [r01, bridge-heavy, bridge-light, performance, security, other]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -239,7 +239,7 @@ jobs:
         run: |
           dotnet restore AlTamam.slnx
           dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
-      # Test-first: exact exclusive FQN predicates across four independent Windows
+      # Test-first: exact exclusive FQN predicates across six independent Windows
       # runners. A post-shard verifier requires all 1,162 baseline cases, no overlap,
       # nonzero TRX and Phase02/Phase03/R01/Phase15/E2E on the tested exact SHA.
       - name: Phase 02 SQLCipher and temporal-history integration suite (mandatory before packaging)
@@ -252,16 +252,20 @@ jobs:
         run: >
           dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
-      - name: Full deterministic test suite (all authored tests across four exact disjoint shards)
+      - name: Full deterministic test suite (all authored tests across six exact disjoint shards)
         shell: pwsh
         env:
           ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: |
           $filter = switch ('${{ matrix.shard }}') {
             'r01' { 'FullyQualifiedName~AlTamam.Tests.Bridge.R01' }
-            'bridge' { 'FullyQualifiedName~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Bridge.R01' }
+            # The measured top four slow Bridge classes move to their own worker;
+            # their complement includes the 496 Bridge RBAC theory cases.
+            'bridge-heavy' { 'FullyQualifiedName~AlTamam.Tests.Bridge.NativeRestoreActivationCoordinatorTests|FullyQualifiedName~AlTamam.Tests.Bridge.BackupRetentionIntegrationTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FirstRunBridgeTests|FullyQualifiedName~AlTamam.Tests.Bridge.Section03FullResetTests' }
+            'bridge-light' { 'FullyQualifiedName~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Bridge.R01&FullyQualifiedName!~NativeRestoreActivationCoordinatorTests&FullyQualifiedName!~BackupRetentionIntegrationTests&FullyQualifiedName!~Section03FirstRunBridgeTests&FullyQualifiedName!~Section03FullResetTests' }
             'performance' { 'FullyQualifiedName~AlTamam.Tests.Performance' }
-            'other' { 'FullyQualifiedName!~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Performance' }
+            'security' { 'FullyQualifiedName~AlTamam.Tests.Security' }
+            'other' { 'FullyQualifiedName!~AlTamam.Tests.Bridge&FullyQualifiedName!~AlTamam.Tests.Performance&FullyQualifiedName!~AlTamam.Tests.Security' }
             default { throw 'Unknown test shard: ${{ matrix.shard }}' }
           }
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore --filter "$filter" `
@@ -360,7 +364,7 @@ jobs:
           if-no-files-found: error
 
   verify-full-test-shards:
-    name: Verify all 1,162+ distinct Release tests before packaging
+    name: Verify all 1,162+ distinct Release tests across six shards
     needs: build-test
     runs-on: ubuntu-latest
     steps:
