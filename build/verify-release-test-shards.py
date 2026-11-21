@@ -11,8 +11,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 NS = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
-SHARDS = ("r01", "bridge-heavy", "bridge-light", "performance", "security", "other")
-MINIMUMS = {"r01": 35, "bridge-heavy": 24, "bridge-light": 876,
+SHARDS = ("r01-config", "r01-excel", "r01-ops", "r01-other",
+          "bridge-heavy", "bridge-light", "performance", "security", "other")
+# Empirical per-class test inventory from the real Windows R01 TRX. Each of
+# 1,162 original cases is mandatory; all four native R01 subsets are attested.
+MINIMUMS = {"r01-config": 7, "r01-excel": 6, "r01-ops": 5, "r01-other": 17,
+            "bridge-heavy": 24, "bridge-light": 876,
             "performance": 17, "security": 123, "other": 87}
 # Four measured Bridge integration classes consume most of the original 900-test
 # worker time (verified from the actual 2026-11-21 Windows TRX).
@@ -30,12 +34,18 @@ def belongs(name: str, shard: str) -> bool:
         return False
     bridge = name.startswith("AlTamam.Tests.Bridge.")
     r01 = name.startswith("AlTamam.Tests.Bridge.R01")
+    r01_config = name.startswith("AlTamam.Tests.Bridge.R01NativeConfigurationLifecycleTests.")
+    r01_excel = name.startswith("AlTamam.Tests.Bridge.R01NativeExcelLifecycleTests.")
+    r01_ops = name.startswith("AlTamam.Tests.Bridge.R01NativeOperationalLifecycleTests.")
     perf = name.startswith("AlTamam.Tests.Performance.")
     security = name.startswith("AlTamam.Tests.Security.")
     heavy = any(name.startswith("AlTamam.Tests.Bridge." + cls + ".")
                 for cls in HEAVY_BRIDGE_CLASSES)
     return {
-        "r01": r01,
+        "r01-config": r01_config,
+        "r01-excel": r01_excel,
+        "r01-ops": r01_ops,
+        "r01-other": r01 and not (r01_config or r01_excel or r01_ops),
         "bridge-heavy": heavy,
         "bridge-light": bridge and not r01 and not heavy,
         "performance": perf,
