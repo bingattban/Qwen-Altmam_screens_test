@@ -14,6 +14,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
 {
     private INativeDashboardReader? _reader;
     private Func<NativeIdentity?>? _currentPrincipal;
+    private NativeIdentity? _boundPrincipal;
     private int _requestVersion;
     private CancellationTokenSource? _activeRead;
     private bool _isLoading;
@@ -99,6 +100,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         ++_requestVersion;
         _activeRead?.Cancel();
         _activeRead = null;
+        _boundPrincipal = null;
         _selectedSiteId = "";
         _selectedStatusId = "";
         _committedSearch = "";
@@ -129,9 +131,18 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         NativeIdentity? principal = _currentPrincipal?.Invoke();
         if (principal is null || _reader is null)
         {
-            ClearSensitivePresentation("");
+            Clear();
             return;
         }
+        // Never carry data across a silently substituted session. A fresh
+        // account requires an explicit shell logout/login and Clear().
+        if (_boundPrincipal is not null && _boundPrincipal != principal)
+        {
+            Clear();
+            ClearSensitivePresentation("تغيرت هوية الجلسة؛ يرجى تسجيل الدخول من جديد.");
+            return;
+        }
+        _boundPrincipal ??= principal;
 
         ++_requestVersion;
         int version = _requestVersion;
@@ -182,12 +193,20 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         }
     }
 
+    private void InvalidateWithError(string message)
+    {
+        ++_requestVersion;
+        _activeRead?.Cancel();
+        _activeRead = null;
+        ClearSensitivePresentation(message);
+    }
+
     public async Task SelectSiteAsync(string siteId, CancellationToken ct = default)
     {
         siteId ??= "";
         if (siteId != "" && !_siteOptions.Any(x => x.SiteId == siteId))
         {
-            ClearSensitivePresentation("الموقع المحدد غير موجود في قائمة المواقع المعتمدة.");
+            InvalidateWithError("الموقع المحدد غير موجود في قائمة المواقع المعتمدة.");
             return;
         }
         if (_selectedSiteId == siteId) return;
@@ -202,7 +221,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         statusId ??= "";
         if (statusId != "" && !_counters.Any(x => x.StatusId == statusId))
         {
-            ClearSensitivePresentation("الحالة المحددة غير موجودة ضمن الحالات الفعلية.");
+            InvalidateWithError("الحالة المحددة غير موجودة ضمن الحالات الفعلية.");
             return;
         }
         if (_selectedStatusId == statusId) return;
@@ -217,7 +236,7 @@ public sealed class DashboardPageViewModel : NativePageViewModel, INotifyPropert
         string term = (searchTerm ?? "").Trim();
         if (term.Length > 100 || term.Any(char.IsControl))
         {
-            ClearSensitivePresentation("نص البحث لا يتجاوز 100 حرف ولا يقبل أحرف التحكم.");
+            InvalidateWithError("نص البحث لا يتجاوز 100 حرف ولا يقبل أحرف التحكم.");
             return;
         }
         _searchDraft = term;
