@@ -110,3 +110,59 @@ Next: add native attendance policy/countdown and the distinct automatic
 prepared register with identical permissions and cancellation behavior;
 then perform authenticated/unauthenticated desktop UI parity tests before
 claiming Dashboard route migration.
+
+
+## Phase 3 — Dashboard auto-attendance clock and native register (read-only)
+
+The main Dashboard now displays a native WPF countdown based on the real
+AutoAttendancePolicyService.GetAsync persisted dueTimeLocal setting in SQLCipher.
+It supports administrator-configured HH:mm (rather than hardcoding 08:00).
+If the canonical clock is invalid or unavailable, a fake time is NOT shown.
+
+A once-per-second WPF DispatcherTimer updates DISPLAY ONLY. Exactly as in the
+old WebUI, the UI may re-read committed Dashboard counters for ten minutes
+after due time at most once per 30 seconds. It does NOT trigger a scheduler,
+commit or replay attendance and does NOT extend the 5-minute idle deadline.
+
+The separate المحضّرون تلقائياً counter now opens a genuine native WPF
+modal rather than silently applying a primary-roster filter. This modal
+uses the original DailyMonthlyReadService.DailyRosterAsync with the
+__AUTO_PREPARED__ filter, exact business date, current site, a 100-row
+page and normalized name/service-number search. It shows the original
+saved business date, source, UTC commit receipt, status and every visible
+custom column. Neither a fake row nor a saved-status change is generated.
+
+Both policy and register reads revalidate the actual server-issued
+SQLCipher nonce and role before and after each canonical query. Closing
+the modal, logout, route change, date change and account replacement
+invalidate any in-flight reads and erase the personnel display.
+
+### Important limitations
+
+- The experimental NativeDesktop pilot does NOT start the durable scheduler.
+  The authoritative EightPmSchedulerService still runs in the original
+  DesktopHost, which cannot coexist with the pilot because of the shared
+  database single-instance mutex. The native countdown is informational;
+  it is NOT evidence that a scheduled job will run while the pilot is open.
+- The new modal is READ-ONLY. The original HTML workflow supports selection
+  of up to 100 people, separate status choice, server preview, human review,
+  idempotent audited commit and recovery after a lost response. Those edits
+  have NOT been migrated. The native pilot intentionally does not pretend
+  those actions work or expose mutation buttons.
+- The daily, monthly, administration and remaining screens are still not
+  functionally migrated. The 69-route migration matrix remains not_migrated.
+  Customer x86/x64 Portable/Installer packages continue publishing the
+  original complete DesktopHost/WebView2 application.
+- Real native visual and accessibility review at 100%, 125%, 150% DPI and
+  clean-machine Windows acceptance remain mandatory before any release switch.
+
+Phase 3 tests-first cover policy clock fidelity, zero scheduler writes,
+separate register, paging, search, cancelled/late reads, logout,
+session replacement, invalid clock, and input validation. Core and Release
+must run the new negative-path contract alongside native xUnit, canonical
+SQLCipher tests, actual Windows WPF/WebView2 E2E and all four package
+acceptance jobs with independent SHA256 audit.
+
+Next: reuse the original durable scheduler safely from the native host
+without a duplicate writer; then migrate full preview/review/confirm
+workflows and verify full 69-route parity before changing customer builds.
