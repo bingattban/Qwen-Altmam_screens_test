@@ -119,6 +119,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Parallel real Windows WebView2 acceptance cannot be bypassed' }
           python build/test-release-test-shards.py
           if ($LASTEXITCODE -ne 0) { throw 'Sharded TRX verifier negative-path tests failed' }
+          python build/test-six-shard-coverage-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Measured six-way full test baseline is incomplete' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
