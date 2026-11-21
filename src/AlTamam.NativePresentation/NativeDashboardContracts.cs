@@ -26,7 +26,10 @@ public sealed record NativeDashboardColumn(string ColumnId, string Caption);
 
 public sealed record NativeDashboardRow(
     string PersonId, string ServiceNumberA, string Name, string SiteName,
-    string StatusName, string? StatusColor, IReadOnlyList<string> CustomCells);
+    string StatusName, string? StatusColor, IReadOnlyList<string> CustomCells)
+{
+    public int RowNumber { get; init; }
+}
 
 /// <summary>
 /// Values are taken verbatim from GetDashboardSummary and QueryDailyRoster
