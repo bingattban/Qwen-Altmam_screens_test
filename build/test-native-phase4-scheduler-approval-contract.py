@@ -12,6 +12,7 @@ ROOT=Path(__file__).resolve().parents[1]
 FILES={
  "project":"src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj",
  "canonical":"src/AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs",
+ "attendance":"src/AlTamam.Application/Scheduling/AutoAttendanceService.cs",
  "host":"src/AlTamam.NativeDesktop/MainWindow.xaml.cs",
  "backend":"src/AlTamam.NativeDesktop/Auth/NativeSqlCipherAuthenticationBackend.cs",
  "scheduler":"src/AlTamam.NativeDesktop/Scheduling/NativeDurableAttendanceScheduler.cs",
@@ -42,9 +43,10 @@ def problems(contents):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
     need("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"')
-    for token in ("RunPendingAsync(ct)", "GetDueTimeAsync(ct)", "IsCatchUpRun",
+    for token in ("RunPendingAsync(ct)", "GetDueTimeAsync(ct)",
                   "await _attendance.RunPendingAsync(ct)", "public async ValueTask DisposeAsync()"):
         need("canonical",token)
+    need("attendance", "IsCatchUpRun")
     for token in ("new EightPmSchedulerService(",
                   "new AutoAttendanceService(database)",
                   "new PreviewTokenRetentionService(database)",
