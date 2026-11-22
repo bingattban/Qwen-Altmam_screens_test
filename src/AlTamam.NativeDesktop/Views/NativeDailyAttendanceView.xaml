@@ -71,10 +71,23 @@
                         Command="{Binding ReviewPersonCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=DailyGrid}"
                         AutomationProperties.Name="معاينة تغيير حالة فرد من الكشف اليومي"/>
+                <Button Content="تحديد كل الصفحة" Style="{StaticResource DailyButton}"
+                        VerticalAlignment="Bottom" Click="OnSelectVisiblePage"
+                        AutomationProperties.Name="تحديد جميع الأفراد المعروضين بحد أقصى مئة فرد"/>
+                <Button Content="مسح التحديد" Style="{StaticResource DailyButton}"
+                        VerticalAlignment="Bottom" Click="OnClearVisibleSelection"
+                        AutomationProperties.Name="إلغاء تحديد أفراد التمام اليومي"/>
+                <Button Content="معاينة تغيير حالة المحددين"
+                        Style="{StaticResource DailyButton}" VerticalAlignment="Bottom"
+                        Command="{Binding ReviewSelectedCommand}"
+                        AutomationProperties.Name="معاينة تغيير الحالة الجماعي بعد اختيار الأفراد"/>
             </WrapPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="4,2,4,8">
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+            <TextBlock Text="{Binding SelectedLabel}" FontWeight="SemiBold" Foreground="#0F2942"/>
+            <TextBlock Text="{Binding SelectionError}" TextWrapping="Wrap" Foreground="#BE123C"
+                       AutomationProperties.LiveSetting="Polite"/>
             <TextBlock Text="{Binding LoadError}" TextWrapping="Wrap" Foreground="#BE123C"
                        FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite"/>
             <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
@@ -83,7 +96,8 @@
         <DataGrid x:Name="DailyGrid" Grid.Row="3" ItemsSource="{Binding Rows}"
                   IsReadOnly="True" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False"
-                  CanUserSortColumns="False" SelectionMode="Single"
+                  CanUserSortColumns="False" SelectionMode="Extended"
+                  SelectionUnit="FullRow" SelectionChanged="OnDailySelectionChanged"
                   HeadersVisibility="Column" RowHeight="35" ColumnHeaderHeight="38"
                   GridLinesVisibility="Horizontal" AlternatingRowBackground="#F8FAFC"
                   BorderBrush="#CBD5E1" BorderThickness="1" MinHeight="190">

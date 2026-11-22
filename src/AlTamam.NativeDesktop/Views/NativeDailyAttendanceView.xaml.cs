@@ -11,6 +11,7 @@ public partial class NativeDailyAttendanceView : UserControl
 {
     private const int FixedColumns = 6;
     private DailyAttendancePageViewModel? _viewModel;
+    private bool _clearingInvalidSelection;
 
     public NativeDailyAttendanceView()
     {
@@ -50,6 +51,33 @@ public partial class NativeDailyAttendanceView : UserControl
                 IsReadOnly = true
             });
         }
+    }
+
+    // The grid owns only visual selection; the model rejects forged/stale
+    // objects and commits exclusively through the shared confirmation flow.
+    private void OnDailySelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_clearingInvalidSelection || _viewModel is null) return;
+        var currentRows = DailyGrid.SelectedItems
+            .OfType<NativeDailyAttendanceRow>().ToArray();
+        if (_viewModel.SetSelectedRows(currentRows) || _viewModel.Review.IsOpen)
+            return;
+        _clearingInvalidSelection = true;
+        try { DailyGrid.UnselectAll(); }
+        finally { _clearingInvalidSelection = false; }
+    }
+
+    private void OnSelectVisiblePage(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel is { IsDataConnected: true } &&
+            !_viewModel.Review.IsOpen && !_viewModel.IsLoading)
+            DailyGrid.SelectAll();
+    }
+
+    private void OnClearVisibleSelection(object sender, RoutedEventArgs args)
+    {
+        if (_viewModel is not null && !_viewModel.Review.IsOpen)
+            DailyGrid.UnselectAll();
     }
 
     private async void OnSiteChanged(object sender, SelectionChangedEventArgs args)
