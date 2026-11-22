@@ -132,7 +132,7 @@ public sealed class NativeDailyAttendancePhase6Tests
         await loading;
         Assert.False(vm.IsDataConnected);
         Assert.Empty(vm.Rows);
-        Assert.Empty(vm.SiteOptions.Where(x => x.SiteId.Length > 0));
+        Assert.DoesNotContain(vm.SiteOptions, x => x.SiteId.Length > 0);
         Assert.Equal(0, vm.TotalRows);
 
         reader.Pending = null;
