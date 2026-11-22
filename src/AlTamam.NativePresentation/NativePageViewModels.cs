@@ -14,7 +14,6 @@ public abstract class NativePageViewModel(NativeScreen screen, string title)
         "تم تفعيل تسجيل الدخول الأصلي والتحقق من الجلسة. لم يتم بعد ربط هذه الشاشة بالخدمات التشغيلية؛ هذه معاينة XAML للمرحلة التالية.";
 }
 
-public sealed class DailyAttendancePageViewModel() : NativePageViewModel(NativeScreen.DailyAttendance, "التمام اليومي");
 public sealed class MonthlyAttendancePageViewModel() : NativePageViewModel(NativeScreen.MonthlyAttendance, "التمام الشهري");
 public sealed class AdministrationPageViewModel() : NativePageViewModel(NativeScreen.Administration, "الإدارة");
 public sealed class ReportsPageViewModel() : NativePageViewModel(NativeScreen.Reports, "التقارير");
