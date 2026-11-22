@@ -27,6 +27,34 @@ public sealed class NativeAttendanceDateRangePhase5Tests
     }
 
     [Fact]
+    public async Task Form_controls_lock_while_preview_is_pending_without_modifying_selected_range()
+    {
+        var (vm, backend) = Create();
+        await vm.OpenAsync(Today, "", [Person]);
+        vm.ChooseStatus("STS-LEAVE");
+        vm.RangeEndDate = Today.AddDays(2).ToDateTime(TimeOnly.MinValue);
+        Assert.True(vm.CanEditSelection);
+        var hold = new TaskCompletionSource<NativeAttendanceRevisionPreview>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        backend.HoldPreview = hold;
+        var previewTask = vm.PreviewAsync();
+        Assert.True(vm.IsBusy);
+        Assert.False(vm.CanEditSelection);
+        vm.RangeEndDate = Today.AddDays(3).ToDateTime(TimeOnly.MinValue);
+        Assert.Equal(Today.AddDays(2).ToDateTime(TimeOnly.MinValue), vm.RangeEndDate);
+        hold.SetResult(new NativeAttendanceRevisionPreview(
+            "VERIFIED-PREVIEW-TOKEN-AT-LEAST-32-CHARS",
+            Today, "STS-LEAVE", "إجازة",
+            [new NativeAttendancePreviewPerson("P-1", "أحمد", "123",
+                "المركز", "موجود", "STS-PRESENT")],
+            new NativeAttendanceDateRange(Today, Today.AddDays(2))));
+        await previewTask;
+        Assert.True(vm.CanEditSelection);
+        Assert.True(vm.HasPreview);
+        Assert.Empty(backend.Commits);
+    }
+
+    [Fact]
     public async Task Range_statuses_are_available_but_no_dates_means_no_server_preview()
     {
         var (vm, backend) = Create();
@@ -142,6 +170,7 @@ public sealed class NativeAttendanceDateRangePhase5Tests
     {
         public bool AlterEcho;
         public bool LoseFirstCommit;
+        public TaskCompletionSource<NativeAttendanceRevisionPreview>? HoldPreview;
         public List<(string Status, NativeAttendanceDateRange? Range)> Previews = [];
         public List<(string Token, string OperationId)> Commits = [];
 
@@ -158,6 +187,7 @@ public sealed class NativeAttendanceDateRangePhase5Tests
             NativeAttendanceDateRange? range = null)
         {
             Previews.Add((statusId, range));
+            if (HoldPreview is not null) return HoldPreview.Task;
             NativeAttendanceDateRange? echoed = AlterEcho && range is { } r
                 ? r with { End = r.End.AddDays(1) } : range;
             return Task.FromResult(new NativeAttendanceRevisionPreview(
