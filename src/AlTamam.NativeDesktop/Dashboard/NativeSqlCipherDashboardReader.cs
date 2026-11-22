@@ -15,7 +15,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// </summary>
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
-    : INativeDashboardReader
+    : INativeDashboardReader, INativeDashboardContinuationReader
 {
     public async Task<NativeDashboardSnapshot> ReadAsync(
         NativeIdentity identity, NativeDashboardFilter filters, CancellationToken ct = default)
@@ -116,6 +116,99 @@ public sealed class NativeSqlCipherDashboardReader(
             statuses, sites, rows, columns,
             RequiredNumber(roster, "total"), filters.Page,
             RequiredBoolean(roster, "hasNext"));
+    }
+
+
+    /// <summary>
+    /// Read only the canonical persisted attendance due time. No RunPendingAsync,
+    /// timer writes, policy updates or client-supplied role/permission.
+    /// </summary>
+    public async Task<NativeAutoAttendancePolicy> ReadPolicyAsync(
+        NativeIdentity identity, CancellationToken ct = default)
+    {
+        await VerifyContinuationIdentityAsync(identity, ct).ConfigureAwait(false);
+        BridgeResponse response = await new AutoAttendancePolicyService(database)
+            .GetAsync(ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(identity, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "GetAutoAttendancePolicy");
+        string due = RequiredText(data, "dueTimeLocal");
+        if (!AutoAttendancePolicyService.IsValidClock(due))
+            throw new InvalidDataException("Canonical SQLCipher due time invalid.");
+        return new NativeAutoAttendancePolicy(due, RequiredBoolean(data, "configured"));
+    }
+
+    /// <summary>
+    /// Same QueryDailyRoster(" __AUTO_PREPARED__ ") as the shipped HTML dialog.
+    /// Always 100-row server pages, active-site filtered, exact-date-scoped,
+    /// with saved auto-source UTC receipt and all visible custom fields.
+    /// </summary>
+    public async Task<NativeAutoRegisterPage> ReadAutoRegisterAsync(
+        NativeIdentity identity, NativeAutoRegisterFilter filter,
+        CancellationToken ct = default)
+    {
+        if (filter.Page < 1 || filter.PageSize != 100 ||
+            filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl))
+            throw new InvalidDataException("Invalid auto-prepared register filter.");
+        await VerifyContinuationIdentityAsync(identity, ct).ConfigureAwait(false);
+        BridgeResponse response = await new DailyMonthlyReadService(database)
+            .DailyRosterAsync(new JsonObject
+            {
+                ["businessDate"] = filter.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                ["siteId"] = filter.SiteId,
+                ["statusId"] = "__AUTO_PREPARED__",
+                ["term"] = filter.SearchTerm,
+                ["page"] = filter.Page,
+                ["pageSize"] = filter.PageSize
+            }, ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(identity, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "QueryDailyRoster(__AUTO_PREPARED__)");
+        if (RequiredNumber(data, "page") != filter.Page ||
+            RequiredNumber(data, "pageSize") != filter.PageSize)
+            throw new InvalidDataException("Canonical auto-prepared register page mismatch.");
+
+        var customColumns = RequiredArray(data, "customColumns").Select(node =>
+        {
+            var item = RequireObject(node);
+            return new NativeDashboardColumn(
+                RequiredText(item, "columnId"), RequiredText(item, "caption"));
+        }).ToArray();
+
+        var rows = RequiredArray(data, "items").Select((node, index) =>
+        {
+            JsonObject item = RequireObject(node);
+            JsonObject custom = RequireObject(item["customFields"]);
+            string date = RequiredText(item, "savedBusinessDate");
+            if (date != filter.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+                throw new InvalidDataException("Auto-prepared register contains a different business date.");
+            return new NativeAutoRegisterRow(
+                RequiredText(item, "personId"),
+                RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "name"),
+                RequiredText(item, "siteName"),
+                date,
+                RequiredText(item, "autoSource"),
+                RequiredText(item, "committedAtUtc"),
+                RequiredText(item, "statusName"),
+                customColumns.Select(col => custom[col.ColumnId]?.GetValue<string>() ?? "").ToArray())
+            {
+                RowNumber = checked((filter.Page - 1) * filter.PageSize + index + 1)
+            };
+        }).ToArray();
+        return new NativeAutoRegisterPage(filter.BusinessDate, filter.SiteId,
+            RequiredNumber(data, "total"), filter.Page, RequiredBoolean(data, "hasNext"),
+            customColumns, rows);
+    }
+
+    private async Task VerifyContinuationIdentityAsync(NativeIdentity identity, CancellationToken ct)
+    {
+        if (!RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role))
+            throw new UnauthorizedAccessException("The role cannot access native attendance.");
+        var session = await services.ResolveSessionAsync(identity.SessionNonce, ct)
+            .ConfigureAwait(false);
+        if (session is null || session.UserId != identity.UserId ||
+            session.Username != identity.Username || session.Role != identity.Role ||
+            session.SessionNonce != identity.SessionNonce)
+            throw new UnauthorizedAccessException("SQLCipher session changed or expired.");
     }
 
     private static JsonObject RequiredObject(BridgeResponse response, string action) =>

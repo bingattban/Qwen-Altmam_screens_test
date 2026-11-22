@@ -43,7 +43,11 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             parameter =>
             {
                 if (parameter is NativeScreen screen && CanNavigate(screen))
+                {
+                    if (screen != NativeScreen.Dashboard)
+                        Dashboard.AutoRegister.Close();
                     CurrentPage = _pages[screen];
+                }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         _logoutCommand = new NativeCommand(
