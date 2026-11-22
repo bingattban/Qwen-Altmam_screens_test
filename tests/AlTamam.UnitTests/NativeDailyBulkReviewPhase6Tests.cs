@@ -61,6 +61,12 @@ public sealed class NativeDailyBulkReviewPhase6Tests
         await vm.OpenSelectedReviewAsync();
         Assert.Equal(0, backend.ChoicesCalls);
 
+        // A valid empty selection must never create a preview or a write.
+        Assert.True(vm.SetSelectedRows([]));
+        await vm.OpenSelectedReviewAsync();
+        Assert.Equal(0, backend.ChoicesCalls);
+        Assert.Equal(0, backend.CommitCalls);
+
         Assert.True(vm.SetSelectedRows([original, vm.Rows[1]]));
         await vm.SearchAsync("nobody");
         Assert.Empty(vm.Rows);
