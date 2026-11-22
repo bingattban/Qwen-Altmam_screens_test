@@ -47,7 +47,7 @@ def problems(content):
                   "ArchivePeriodsAsync(ct)", "MonthlyGridAsync(new JsonObject",
                   '["archiveMode"] = historical', '["pageSize"] = 100',
                   "DateOnly.TryParseExact(saved.Key", "savedDays",
-                  "movementNote", "PersonId", "RequiredArray(data, \"customColumns\")",
+                  "movementNote", "RequiredText(row, \"personId\")", "RequiredArray(data, \"customColumns\")",
                   "new NativeMonthlySnapshot("):
         require("backend", token)
     for token in ("ArchivePeriodsAsync(", "MonthlyGridAsync(",
