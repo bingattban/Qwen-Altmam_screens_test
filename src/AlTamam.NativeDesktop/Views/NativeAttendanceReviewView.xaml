@@ -14,6 +14,7 @@
         </Style>
     </UserControl.Style>
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
         <Style x:Key="NativeApprove" TargetType="Button">
             <Setter Property="MinHeight" Value="40"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -74,7 +75,29 @@
                             <Button Content="متابعة إلى المعاينة" Command="{Binding PreviewCommand}"
                                     Style="{StaticResource NativeApprove}"/>
                         </WrapPanel>
-                        <TextBlock Text="الإجازة والإذن تتطلبان تاريخ بداية ونهاية وتبقيان متاحتين في البرنامج التشغيلي إلى حين نقل محرر المدد."
+                        <!-- Dates never cause a write; changing either revokes the prior signed preview. -->
+                        <StackPanel Visibility="{Binding RequiresDateRange, Converter={StaticResource VisibleWhenTrue}}"
+                                    Margin="0,9,0,0">
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,0,6">
+                                    <TextBlock Text="تاريخ بداية الإجازة أو الإذن" FontWeight="SemiBold"
+                                               Foreground="#0F2942" Margin="0,0,0,4"/>
+                                    <DatePicker Width="205" Height="38"
+                                                SelectedDate="{Binding RangeStartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                AutomationProperties.Name="تاريخ بداية المدة"/>
+                                </StackPanel>
+                                <StackPanel Margin="14,0,0,6">
+                                    <TextBlock Text="تاريخ نهاية الإجازة أو الإذن" FontWeight="SemiBold"
+                                               Foreground="#0F2942" Margin="0,0,0,4"/>
+                                    <DatePicker Width="205" Height="38"
+                                                SelectedDate="{Binding RangeEndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                AutomationProperties.Name="تاريخ نهاية المدة"/>
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Text="تبدأ المدة من يوم التمام الحالي، ويجب تحديد تاريخ النهاية (بحد أقصى 366 يوما). راجع التاريخين في المعاينة قبل التأكيد."
+                                       Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <TextBlock Text="لا يُحفظ أي تعديل قبل المعاينة والموافقة الصريحة. تبقى صلاحيات الإغلاق وسجل العمليات من الخدمة الأصلية."
                                    Foreground="#64748B" FontSize="12" TextWrapping="Wrap"
                                    Margin="0,8,0,0"/>
                     </StackPanel>

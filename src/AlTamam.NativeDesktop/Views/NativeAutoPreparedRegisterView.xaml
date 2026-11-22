@@ -74,7 +74,7 @@
                 </DockPanel>
                 <Border Grid.Row="1" Background="#F1F5F9" BorderBrush="#CBD5E1"
                         BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,0,0,13">
-                    <TextBlock Text="هذا السجل للعرض والبحث فقط. تغيير حالات الأفراد يتطلب نافذة اختيار ومعاينة وتأكيد منفصلة؛ لم تُفعّل هذه الوظيفة في WPF التجريبي بعد."
+                    <TextBlock Text="اختر من فرد واحد إلى 100 فرد لمراجعة تغيير حالتهم. يتطلب الإذن والإجازة تحديد بداية المدة ونهايتها؛ لا يتم الحفظ إلا بعد معاينة الأسماء والتواريخ ثم التأكيد."
                                Foreground="#0F2942" TextWrapping="Wrap" FontSize="13"/>
                 </Border>
                 <StackPanel Grid.Row="2" Margin="0,0,0,10">
