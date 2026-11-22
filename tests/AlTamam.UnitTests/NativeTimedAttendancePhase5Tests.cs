@@ -135,6 +135,27 @@ public sealed class NativeTimedAttendancePhase5Tests
         Assert.True(vm.IsCompleted);
     }
 
+    [Fact]
+    public async Task Ambiguous_commit_cannot_be_replaced_by_opening_a_new_review()
+    {
+        var fake = new Fake { LoseFirstCommit = true };
+        var vm = New(fake);
+        await vm.OpenAsync(Today, "", [Person]);
+        vm.ChooseStatus("STS-LEAVE");
+        vm.RangeStartDate = Today.ToDateTime(TimeOnly.MinValue);
+        vm.RangeEndDate = Today.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        await vm.PreviewAsync();
+        await vm.ConfirmAsync();
+        Assert.True(vm.HasUnverifiedCommit);
+        await vm.OpenAsync(Today, "", [Person]);
+        Assert.Equal(1, fake.StatusCalls);
+        Assert.True(vm.HasUnverifiedCommit);
+        Assert.True(vm.HasPreview);
+        await vm.ConfirmAsync();
+        Assert.Equal(2, fake.CommitCalls.Count);
+        Assert.Equal(fake.CommitCalls[0], fake.CommitCalls[1]);
+    }
+
     private static NativeAttendanceReviewViewModel New(Fake fake)
     {
         var vm = new NativeAttendanceReviewViewModel();
@@ -144,16 +165,20 @@ public sealed class NativeTimedAttendancePhase5Tests
 
     private sealed class Fake : INativeAttendanceReviewBackend
     {
+        public int StatusCalls;
         public bool ReturnWrongRange;
         public bool LoseFirstCommit;
         public List<NativeAttendanceDateRange?> PreviewRanges = [];
         public List<(string Token, string Id)> CommitCalls = [];
 
         public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
-            NativeIdentity actor, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>(
+            NativeIdentity actor, CancellationToken ct = default)
+        {
+            StatusCalls++;
+            return Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>(
                 [new("STS-LEAVE", "إجازة"), new("STS-PERMISSION", "إذن"),
                  new("STS-ABSENT", "غائب")]);
+        }
 
         public Task<NativeAttendanceRevisionPreview> PreviewAsync(
             NativeIdentity actor, DateOnly date, string site,
