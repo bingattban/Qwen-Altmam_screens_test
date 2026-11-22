@@ -44,3 +44,31 @@ public sealed record NativeMonthlyDisplayRow(
     int RowNumber, string PersonId, string ServiceNumberA, string Rank,
     string Name, string SiteName, IReadOnlyList<string> CustomCells,
     IReadOnlyList<NativeMonthlyCellDisplay> Days);
+
+ 
+/// <summary>
+/// Read-only authenticated daily snapshot drill-down. Implementations MUST
+/// reuse the canonical MonthlyCellDetailsAsync service and validate the live
+/// SQLCipher user/role/nonce before and after fetching the historical record.
+/// </summary>
+public interface INativeMonthlyCellDetailsReader
+{
+    Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
+        NativeIdentity actor, NativeMonthlyCellRequest request,
+        CancellationToken ct = default);
+}
+
+public sealed record NativeMonthlyCellRequest(
+    string PersonId, DateOnly BusinessDate, string SiteId);
+
+public sealed record NativeMonthlyRevisionDetail(
+    string BeforeStatus, string AfterStatus, string Reason,
+    string ActorUserId, string ExecutedAtUtc, string AuthorizationMethod);
+
+public sealed record NativeMonthlyCellDetails(
+    string PersonId, DateOnly BusinessDate, string PersonName,
+    string ServiceNumberA, string SiteName,
+    string AttendanceStatus, string AttendanceSymbol, string AttendanceSiteName,
+    string AttendanceSource, string AttendanceCommittedAtUtc,
+    string MovementSummary, string MovementReason,
+    IReadOnlyList<NativeMonthlyRevisionDetail> Revisions);
