@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     "vm": "src/AlTamam.NativePresentation/DailyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeDailyAttendancePhase6Tests.cs",
+    "review_tests": "tests/AlTamam.UnitTests/NativeDailyReviewedStatusPhase6Tests.cs",
+    "review": "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
     "shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
     "pages": "src/AlTamam.NativePresentation/NativePageViewModels.cs",
     "templates": "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
@@ -50,6 +52,19 @@ def check(content):
                   "snapshot.CustomColumns[i].Caption.Trim() is \"الرتبة\" or \"رتبة\"",
                   "CustomCells.Where((_, i) => i != rankIndex)"):
         needs("vm", token)
+    for token in ("CanReviewPerson(", "ReferenceEquals(item, row)",
+                  "Review.OpenPersonsAsync(", "Review.ForceCancel();",
+                  "person.PersonId, person.RowNumber", "_loadedDate = snapshot.BusinessDate"):
+        needs("vm", token)
+    for token in ("OpenPersonsAsync(", "CommitAsync(",
+                  "ReadChoicesAsync(", "PreviewAsync("):
+        needs("review", token)
+    for token in ("Live_daily_row_reuses_server_review_and_writes_only_after_confirmation",
+                  "Forged_or_expired_daily_selection_cannot_open_review",
+                  "Selection_from_previous_page_or_filter_is_not_authorized"):
+        needs("review_tests", token)
+    if content["review_tests"].count("[Fact]") < 3:
+        issues.append("Missing daily-review positive and negative path xUnit coverage.")
     for token in ("DailyAttendance = new DailyAttendancePageViewModel()",
                   "DailyAttendance.AttachReader(reader, () => _active)",
                   "_ = DailyAttendance.RefreshAsync()",
@@ -62,7 +77,9 @@ def check(content):
                   'Header="الرتبة"', 'Header="الاسم"',
                   'Header="الموقع"', 'Header="الحالة"',
                   'IsReadOnly="True"', "SearchCommand",
-                  "SelectedSiteId", "SelectedStatusId", "DailyGrid"):
+                  "SelectedSiteId", "SelectedStatusId", "DailyGrid",
+                  "NativeAttendanceReviewView", "ReviewPersonCommand",
+                  'CommandParameter="{Binding SelectedItem, ElementName=DailyGrid}"'):
         needs("xaml", token)
     for token in ("IsDataConnected", "CustomColumns",
                   "DailyGrid.Columns.Add(", "OnSiteChanged(",
@@ -100,6 +117,10 @@ if __name__ == "__main__":
         ("shell", "DailyAttendance.Clear();"),
         ("shell", "DailyAttendance.AttachReader(reader, () => _active)"),
         ("xaml", 'Header="الرتبة"'),
+        ("xaml", "NativeAttendanceReviewView"),
+        ("vm", "ReferenceEquals(item, row)"),
+        ("review", "OpenPersonsAsync("),
+        ("review_tests", "Forged_or_expired_daily_selection_cannot_open_review"),
         ("reader", "DailyRosterAsync(rosterQuery, ct)"),
         ("core", "python build/test-native-phase6-daily-roster-contract.py"),
         ("release", "python build/test-native-phase6-daily-roster-contract.py"),
@@ -108,4 +129,4 @@ if __name__ == "__main__":
         altered[key] = altered[key].replace(text, "REMOVED_BY_NEGATIVE_TEST")
         if not check(altered):
             raise SystemExit(f"Unsafe change incorrectly passed: {key}: {text}")
-    print("NATIVE PHASE 6 DAILY PASS: SQLCipher, daily filters, rank, nonce, Core/Release")
+    print("NATIVE PHASE 6 DAILY PASS: SQLCipher, daily filters, rank, nonce, reviewed status, Core/Release")
