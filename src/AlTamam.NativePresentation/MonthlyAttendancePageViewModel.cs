@@ -46,7 +46,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         ? "جار قراءة كشف التمام الشهري المعتمد من قاعدة البيانات المشفرة..."
         : IsDataConnected
             ? "عرض أرشيف الشهر الفعلي: خلايا الحضور والتنقلات من سجلاتها التاريخية. الرتبة والحقول الإضافية تعرض القيم الحالية فقط."
-            : "شاشة الأرشيف الشهري للقراءة فقط؛ لا يمكن إنشاء أو تغيير الحضور من هذا الجدول.";
+            : "لم يتم تحميل أرشيف الشهر بعد؛ الشاشة للقراءة فقط ولا تنشئ أو تغير الحضور من هذا الجدول.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
     public string RankColumnLabel => "الرتبة";
