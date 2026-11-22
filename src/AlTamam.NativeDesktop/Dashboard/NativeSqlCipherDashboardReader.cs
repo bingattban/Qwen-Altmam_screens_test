@@ -15,8 +15,25 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// </summary>
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
-    : INativeDashboardReader, INativeDashboardContinuationReader
+    : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend
 {
+    private readonly NativeSqlCipherAttendanceReviewBackend _review =
+        new(services, database);
+
+    public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
+        NativeIdentity actor, CancellationToken ct = default) =>
+        _review.ReadChoicesAsync(actor, ct);
+
+    public Task<NativeAttendanceRevisionPreview> PreviewAsync(
+        NativeIdentity actor, DateOnly date, string site,
+        IReadOnlyList<string> people, string statusId, CancellationToken ct = default) =>
+        _review.PreviewAsync(actor, date, site, people, statusId, ct);
+
+    public Task<NativeAttendanceCommitReceipt> CommitAsync(
+        NativeIdentity actor, string previewToken, string operationId,
+        CancellationToken ct = default) =>
+        _review.CommitAsync(actor, previewToken, operationId, ct);
+
     public async Task<NativeDashboardSnapshot> ReadAsync(
         NativeIdentity identity, NativeDashboardFilter filters, CancellationToken ct = default)
     {
@@ -191,7 +208,8 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(item, "statusName"),
                 customColumns.Select(col => custom[col.ColumnId]?.GetValue<string>() ?? "").ToArray())
             {
-                RowNumber = checked((filter.Page - 1) * filter.PageSize + index + 1)
+                RowNumber = checked((filter.Page - 1) * filter.PageSize + index + 1),
+                SavedStatusId = RequiredText(item, "statusId")
             };
         }).ToArray();
         return new NativeAutoRegisterPage(filter.BusinessDate, filter.SiteId,
