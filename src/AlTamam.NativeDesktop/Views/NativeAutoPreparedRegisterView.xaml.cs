@@ -14,7 +14,7 @@ namespace AlTamam.NativeDesktop.Views;
 /// </summary>
 public partial class NativeAutoPreparedRegisterView : UserControl
 {
-    private const int StandardColumns = 8;
+    private const int StandardColumns = 9;
     private NativeAutoPreparedRegisterViewModel? _model;
 
     public NativeAutoPreparedRegisterView()
@@ -57,6 +57,16 @@ public partial class NativeAutoPreparedRegisterView : UserControl
         if (e.PropertyName is nameof(NativeAutoPreparedRegisterViewModel.CustomColumns)
             or nameof(NativeAutoPreparedRegisterViewModel.IsOpen))
             RebuildColumns();
+    }
+
+    private void OnRegisterCheckboxChanged(object sender, RoutedEventArgs e)
+    {
+        if (_model is null || sender is not CheckBox check ||
+            check.DataContext is not NativeAutoRegisterRow person)
+            return;
+        // The VM enforces server-bound selection, maximum 100 and forbids
+        // mutating an in-flight confirmed operation. UI only reflects choice.
+        _model.SetRowSelected(person, check.IsChecked == true);
     }
 
     private void RebuildColumns()
