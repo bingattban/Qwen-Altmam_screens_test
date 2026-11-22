@@ -15,10 +15,134 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// </summary>
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
-    : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend
+    : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
+      INativeMonthlyAttendanceReader
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
+
+    /// <summary>
+    /// Monthly WPF catalogue: original archive periods and ALL canonical sites,
+    /// including inactive sites needed by historical site filtering.
+    /// </summary>
+    public async Task<NativeMonthlyCatalogue> ReadCatalogueAsync(
+        NativeIdentity actor, CancellationToken ct = default)
+    {
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        var canonical = new DailyMonthlyReadService(database);
+        BridgeResponse periodsResponse = await canonical.ArchivePeriodsAsync(ct)
+            .ConfigureAwait(false);
+        BridgeResponse sitesResponse = await services.ListSitesAsync(
+            includeInactive: true, ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+
+        var periodArray = RequiredArray(periodsResponse, "GetMonthlyArchivePeriods");
+        if (periodArray.Count > 5000)
+            throw new InvalidDataException("Canonical monthly archive is too large.");
+        var periods = periodArray.Select(x => x?.GetValue<string>() ??
+            throw new InvalidDataException("Invalid month in archive index.")).ToArray();
+
+        var sites = RequiredArray(sitesResponse, "QuerySites(historical)")
+            .Select(x =>
+            {
+                var site = RequireObject(x);
+                return new NativeDashboardSite(
+                    RequiredText(site, "siteId"), RequiredText(site, "name"));
+            }).ToArray();
+        return new NativeMonthlyCatalogue(periods, sites);
+    }
+
+    /// <summary>
+    /// Read-only canonical historical month including *dated* attendance
+    /// snapshot symbols and movement annotations; never infer prior statuses
+    /// from the current mutable person record or status catalogue.
+    /// </summary>
+    public async Task<NativeMonthlySnapshot> ReadMonthAsync(
+        NativeIdentity actor, NativeMonthlyFilter filter,
+        CancellationToken ct = default)
+    {
+        if (filter.Period is not { Length: 7 } ||
+            !DateOnly.TryParseExact(filter.Period + "-01", "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly monthStart) ||
+            monthStart.Year is < 1900 or > 2200 ||
+            monthStart > new DateOnly(DateTime.Now.Year, DateTime.Now.Month, 1) ||
+            filter.Page is < 1 or > 100000 || filter.PageSize != 100 ||
+            filter.SiteId is null || filter.SearchTerm is null ||
+            filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl))
+            throw new InvalidDataException("Invalid native monthly archive request.");
+
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        bool historical = monthStart.Year != DateTime.Now.Year ||
+                          monthStart.Month != DateTime.Now.Month;
+        BridgeResponse response = await new DailyMonthlyReadService(database)
+            .MonthlyGridAsync(new JsonObject
+            {
+                ["year"] = monthStart.Year,
+                ["month"] = monthStart.Month,
+                ["siteId"] = filter.SiteId,
+                ["term"] = filter.SearchTerm,
+                ["page"] = filter.Page,
+                ["pageSize"] = 100,
+                ["archiveMode"] = historical,
+                ["dayFrom"] = 1,
+                ["dayTo"] = DateTime.DaysInMonth(monthStart.Year, monthStart.Month)
+            }, ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+
+        JsonObject data = RequiredObject(response, "QueryMonthlyGrid");
+        int days = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
+        if (RequiredNumber(data, "year") != monthStart.Year ||
+            RequiredNumber(data, "month") != monthStart.Month ||
+            RequiredNumber(data, "daysInMonth") != days ||
+            RequiredNumber(data, "dayFrom") != 1 ||
+            RequiredNumber(data, "dayTo") != days ||
+            RequiredNumber(data, "page") != filter.Page)
+            throw new InvalidDataException("Canonical monthly archive response mismatch.");
+
+        var columns = RequiredArray(data, "customColumns").Select(column =>
+        {
+            var field = RequireObject(column);
+            return new NativeDashboardColumn(
+                RequiredText(field, "columnId"), RequiredText(field, "caption"));
+        }).ToArray();
+        var rows = RequiredArray(data, "items").Select((node, index) =>
+        {
+            var row = RequireObject(node);
+            var fields = RequireObject(row["customFields"]);
+            var savedDays = RequireObject(row["days"]);
+            var monthly = new NativeMonthlyCell?[days];
+            foreach (var saved in savedDays)
+            {
+                if (!DateOnly.TryParseExact(saved.Key, "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+                    date.Year != monthStart.Year || date.Month != monthStart.Month)
+                    throw new InvalidDataException("Invalid historical attendance date.");
+                var info = RequireObject(saved.Value);
+                string description = RequiredText(info, "name");
+                string movement = info["movementNote"]?.GetValue<string>() ?? "";
+                if (movement.Length > 0) description += " — " + movement;
+                monthly[date.Day - 1] = new NativeMonthlyCell(
+                    RequiredText(info, "symbol"), description,
+                    info["color"]?.GetValue<string>(), movement);
+            }
+            return new NativeMonthlyRow(
+                RequiredText(row, "personId"),
+                RequiredText(row, "serviceNumberA"),
+                RequiredText(row, "name"),
+                RequiredText(row, "siteName"),
+                columns.Select(col => fields[col.ColumnId]?.GetValue<string>() ?? "").ToArray(),
+                monthly)
+            {
+                RowNumber = checked((filter.Page - 1) * filter.PageSize + index + 1)
+            };
+        }).ToArray();
+        if (rows.Length > filter.PageSize)
+            throw new InvalidDataException("Monthly page exceeds server browse limit.");
+        return new NativeMonthlySnapshot(
+            filter.Period, filter.SiteId, filter.Page, days,
+            RequiredNumber(data, "total"), RequiredBoolean(data, "hasNext"),
+            columns, rows);
+    }
 
     public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity actor, CancellationToken ct = default) =>

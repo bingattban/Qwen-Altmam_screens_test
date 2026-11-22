@@ -29,11 +29,12 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         Dashboard = new DashboardPageViewModel();
         DailyAttendance = new DailyAttendancePageViewModel();
+        MonthlyAttendance = new MonthlyAttendancePageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
             DailyAttendance,
-            new MonthlyAttendancePageViewModel(),
+            MonthlyAttendance,
             new AdministrationPageViewModel(),
             new ReportsPageViewModel(),
             new SettingsPageViewModel()
@@ -52,6 +53,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();
+                    if (screen == NativeScreen.MonthlyAttendance)
+                        _ = MonthlyAttendance.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
@@ -62,6 +65,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
 
     public DashboardPageViewModel Dashboard { get; }
     public DailyAttendancePageViewModel DailyAttendance { get; }
+    public MonthlyAttendancePageViewModel MonthlyAttendance { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -70,6 +74,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         Dashboard.AttachReader(reader, () => _active);
         DailyAttendance.AttachReader(reader, () => _active);
+        if (reader is INativeMonthlyAttendanceReader archiveReader)
+            MonthlyAttendance.AttachReader(archiveReader, () => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
@@ -256,6 +262,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         // revokes or expires the session, even if a SQL read is still running.
         Dashboard.Clear();
         DailyAttendance.Clear();
+        MonthlyAttendance.Clear();
         _active = null;
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
         _loginError = message;

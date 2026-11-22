@@ -1,0 +1,106 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeMonthlyAttendanceView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" FontFamily="Segoe UI" Background="#FFFFFF">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibilityIfTrue"/>
+        <Style x:Key="MonthlyButton" TargetType="Button">
+            <Setter Property="Background" Value="#0D9488"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="MinHeight" Value="37"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0"
+                BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="التمام الشهري"
+                           Foreground="#0F2942" FontSize="22" FontWeight="Bold"/>
+                <TextBlock HorizontalAlignment="Left" FlowDirection="LeftToRight"
+                           Foreground="#475569" Text="{Binding SelectedPeriod}"/>
+            </DockPanel>
+        </Border>
+        <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0"
+                BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+            <WrapPanel>
+                <StackPanel Margin="4" MinWidth="140">
+                    <TextBlock Text="شهر الأرشيف" Foreground="#0F2942" FontWeight="SemiBold"/>
+                    <ComboBox Width="145" Height="34" Margin="0,4,0,0"
+                              ItemsSource="{Binding Periods}"
+                              DisplayMemberPath="Label" SelectedValuePath="Period"
+                              SelectedValue="{Binding SelectedPeriod, Mode=OneWay}"
+                              SelectionChanged="OnPeriodChanged"
+                              AutomationProperties.Name="اختيار شهر التمام من الأرشيف المعتمد"/>
+                </StackPanel>
+                <StackPanel Margin="4" MinWidth="140">
+                    <TextBlock Text="الموقع" Foreground="#0F2942" FontWeight="SemiBold"/>
+                    <ComboBox Width="155" Height="34" Margin="0,4,0,0"
+                              ItemsSource="{Binding SiteOptions}"
+                              DisplayMemberPath="Name" SelectedValuePath="SiteId"
+                              SelectedValue="{Binding SelectedSiteId, Mode=OneWay}"
+                              SelectionChanged="OnSiteChanged"
+                              AutomationProperties.Name="تصفية كشف الشهر حسب الموقع"/>
+                </StackPanel>
+                <StackPanel Margin="4">
+                    <TextBlock Text="الاسم أو الرقم (ع) في الشهر المختار"
+                               Foreground="#0F2942" FontWeight="SemiBold"/>
+                    <TextBox Width="190" Height="34" Margin="0,4,0,0" Padding="8,4"
+                             Text="{Binding SearchDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="بحث تاريخي في كشف الشهر"/>
+                </StackPanel>
+                <Button Style="{StaticResource MonthlyButton}" Content="بحث"
+                        VerticalAlignment="Bottom" Command="{Binding SearchCommand}"/>
+                <Button Style="{StaticResource MonthlyButton}" Content="مسح"
+                        VerticalAlignment="Bottom" Command="{Binding ClearSearchCommand}"/>
+                <Button Style="{StaticResource MonthlyButton}" Content="تحديث"
+                        VerticalAlignment="Bottom" Command="{Binding RefreshCommand}"/>
+            </WrapPanel>
+        </Border>
+        <StackPanel Grid.Row="2" Margin="4,2,4,8">
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+            <TextBlock Text="{Binding LoadError}" TextWrapping="Wrap"
+                       Foreground="#BE123C" FontWeight="SemiBold"
+                       AutomationProperties.LiveSetting="Polite"/>
+            <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
+                         Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+        </StackPanel>
+        <DataGrid x:Name="MonthlyGrid" Grid.Row="3" ItemsSource="{Binding Rows}"
+                  IsReadOnly="True" AutoGenerateColumns="False"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserSortColumns="False" HeadersVisibility="Column"
+                  SelectionMode="Single" RowHeight="35" ColumnHeaderHeight="38"
+                  AlternatingRowBackground="#F8FAFC" GridLinesVisibility="Horizontal"
+                  BorderThickness="1" BorderBrush="#CBD5E1" MinHeight="190"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="62"/>
+                <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="95"/>
+                <DataGridTextColumn Header="الرتبة" Binding="{Binding Rank}" Width="95"/>
+                <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="2*"/>
+                <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <DockPanel Grid.Row="4" Margin="0,8,0,0">
+            <TextBlock Text="{Binding PageLabel}" DockPanel.Dock="Right"
+                       Foreground="#475569" VerticalAlignment="Center"
+                       FontWeight="SemiBold"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button Content="السابق" Style="{StaticResource MonthlyButton}"
+                        Command="{Binding PreviousPageCommand}"/>
+                <Button Content="التالي" Style="{StaticResource MonthlyButton}"
+                        Command="{Binding NextPageCommand}"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</UserControl>
