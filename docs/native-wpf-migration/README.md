@@ -191,10 +191,10 @@ The native automatic-register modal now supports **selecting individual
 people and selecting up to 100 on the visible page**, retaining selections
 across pages, and a separate native WPF review dialog. A canonical
 GetActiveAttendanceStatuses read supplies actual active status IDs.
-To avoid invalid indefinite leave/permission in this migration slice,
-date-range statuses are deliberately unavailable in the pilot until their
-bounded start/end-date editor is migrated; they remain in the original
-shipped user interface.
+The bounded native start/end date editor now enables active leave and permission
+statuses. The authoritative attendance policy still rejects missing, reversed,
+future-started, or overlong date ranges before any SQLCipher preview. The
+original shipped user interface continues to work unchanged.
 
 For normal same-day revisions the native review backend calls **the existing**
 AttendanceCommitService.PreviewAsync with the real SQLCipher user/role/nonce,
@@ -219,8 +219,8 @@ remains the shipped customer UI and is untouched.
 
 ### Still required before native production replacement
 
-- Native WPF date-range editor (leave/permission start/end) and full
-  approved human-selection discard interaction/focus acceptance
+- Complete native daily-attendance grid and manual keyboard/focus acceptance
+  for the bounded leave/permission editor and review dialogs
 - 100%, 125% and 150% DPI visual and keyboard audit on real Windows
 - Full functional migration of all 69 routes; the manifest remains
   not_migrated until proven parity
@@ -239,3 +239,4 @@ Both Windows Core and Release execute an additional negative-path Phase 4
 source/XAML contract before compiling and running all existing tests,
 real Windows WebView2 E2E, four original customer package acceptances and
 independent SHA-256 checks.
+\n## Phase 5 — reconciliation of overlapping PR #12 and PR #13\n\nPR #13 was merged first after both Windows Core and Windows Release passed on\nits exact source SHA, including all four original DesktopHost packages and\nindependent SHA-256 audit. PR #12 independently passed the same gates but\nproposed overlapping native date-picker implementation and duplicate preview\ncontracts. The safe reconciliation keeps the tested PR #13 UI and backend as\nthe **single** implementation, without duplicating the date policy or any\nSQLCipher writer. The additional PR #12 guarantees are retained as targeted\nregression tests, an explicit Phase 5 fail-closed source/XAML contract in\n**both** Windows workflows, updated native register guidance, and this\ndocumentation. PR #13's protection against reopening an unresolved approved\noperation remains in force. The original Windows customer packages are still\nWebView2/DesktopHost until native production parity and real-machine UAT.\n
