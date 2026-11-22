@@ -150,9 +150,7 @@ def problems(content):
                   "ExportExcelAsync(actor, filter, linked.Token)",
                   "ValidatePreview(result, filter)", "ValidateReceipt(result, filter)",
                   "_currentFilter?.Invoke() != filter",
-                  "_liveActor?.Invoke() != actor", "No user-supplied"):
-        if token == "No user-supplied":
-            continue
+                  "_liveActor?.Invoke() != actor"):
         require("excel_vm", token)
     for token in ("Preview_does_not_write_and_confirm_uses_the_same_month_site",
                   "All_sites_export_uses_canonical_consolidated_and_per_site_files",
