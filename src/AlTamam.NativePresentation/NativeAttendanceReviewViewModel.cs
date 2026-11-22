@@ -43,6 +43,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public bool IsOpen => _open;
     public bool IsBusy => _busy;
+    public bool CanEditSelection => _open && !_busy && !_committing && !_unverifiedCommit && !_completed;
     public bool IsCommitting => _committing;
     public bool IsCompleted => _completed;
     public bool HasUnverifiedCommit => _unverifiedCommit;
@@ -372,7 +373,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     private void Update()
     {
         foreach (string name in new[] {
-            nameof(IsOpen), nameof(IsBusy), nameof(IsCommitting),
+            nameof(IsOpen), nameof(IsBusy), nameof(CanEditSelection), nameof(IsCommitting),
             nameof(IsCompleted), nameof(HasUnverifiedCommit),
             nameof(HasPreview), nameof(ErrorMessage),
             nameof(AuditEventId), nameof(CommittedCount), nameof(SelectedCount),

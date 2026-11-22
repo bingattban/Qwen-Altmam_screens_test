@@ -37,7 +37,8 @@ def check(d):
                   "NativeAttendanceDateRange? range = null",
                   "NativeAttendanceDateRange? DateRange = null"):
         need("contracts", token)
-    for token in ("public bool RequiresDateRange", "public DateTime? RangeStartDate",
+    for token in ("public bool RequiresDateRange", "public bool CanEditSelection",
+                  "nameof(CanEditSelection)", "public DateTime? RangeStartDate",
                   "public DateTime? RangeEndDate", "ChangeRangeDate(",
                   "InvalidatePreview();", "_unverifiedCommit || _completed",
                   "start != _businessDate", "end < start",
@@ -57,7 +58,7 @@ def check(d):
     if "if (AttendanceDateRangePolicy.RequiresRange(id)) continue;" in d["backend"]:
         faults.append("Timed statuses are still hidden.")
     need("reader", "ct, range")
-    for token in ("RequiresDateRange", "RangeStartDate", "RangeEndDate",
+    for token in ("RequiresDateRange", "CanEditSelection", "RangeStartDate", "RangeEndDate",
                   "<DatePicker", "PreviewCommand", "ConfirmCommand",
                   'KeyboardNavigation.TabNavigation="Cycle"'):
         need("xaml", token)
@@ -66,8 +67,8 @@ def check(d):
         need("canonical", token)
     need("policy", "start!=today")
     need("policy", "to.DayNumber-from.DayNumber>365")
-    if d["tests"].count("[Fact]") < 6:
-        faults.append("Fewer than 6 phase 5 unit tests.")
+    if d["tests"].count("[Fact]") < 7:
+        faults.append("Fewer than 7 phase 5 unit tests.")
     need("oldtests", "NativeAttendanceDateRange? range = null")
     for key in ("core", "release"):
         need(key, "python build/test-native-phase5-bounded-ranges-contract.py")
@@ -88,6 +89,7 @@ if __name__ == "__main__":
         ("backend", "AttendanceDateRangePolicy.TryParse(payload, statusId, today,"),
         ("backend", 'RequiredText(data, "rangeEndDate") != expectedEnd'),
         ("xaml", "RangeEndDate"),
+        ("xaml", "CanEditSelection"),
         ("core", "python build/test-native-phase5-bounded-ranges-contract.py"),
         ("release", "python build/test-native-phase5-bounded-ranges-contract.py")
     ):
