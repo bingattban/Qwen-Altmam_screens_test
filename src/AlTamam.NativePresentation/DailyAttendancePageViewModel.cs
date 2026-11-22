@@ -17,12 +17,15 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     private NativeIdentity? _boundPrincipal;
     private CancellationTokenSource? _activeRead;
     private int _version;
+    private DateOnly? _loadedDate;
+    private bool _reviewAttached;
     private bool _loading, _connected, _hasNext;
     private string _error = "", _selectedSite = "", _selectedStatus = "";
     private string _searchDraft = "", _searchCommitted = "", _day = "";
     private int _page = 1;
     private long _total;
     private IReadOnlyList<NativeDailyAttendanceRow> _rows = [];
+    public NativeAttendanceReviewViewModel Review { get; } = new();
     private IReadOnlyList<NativeDashboardColumn> _customColumns = [];
     private IReadOnlyList<NativeDashboardSite> _sites = [new("", "جميع المواقع")];
     private IReadOnlyList<NativeDailyStatusOption> _statuses = [new("", "جميع الحالات")];
@@ -37,6 +40,16 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             _ => CanRead && !IsLoading && Page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
             _ => CanRead && !IsLoading && HasNext);
+        ReviewPersonCommand = new NativeCommand(
+            parameter =>
+            {
+                if (parameter is NativeDailyAttendanceRow row)
+                    _ = OpenReviewAsync(row);
+            },
+            parameter => parameter is NativeDailyAttendanceRow row && CanReviewPerson(row));
+        Review.Committed += receipt => { _ = RefreshAsync(); };
+        Review.PropertyChanged += (_, _) =>
+            ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
     }
 
     private bool CanRead => _currentPrincipal?.Invoke() is not null && _reader is not null;
@@ -44,7 +57,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public override string StatusMessage => IsLoading
         ? "جار قراءة كشف التمام اليومي من قاعدة البيانات المشفرة..."
         : IsDataConnected
-            ? "كشف التمام اليومي الفعلي — عرض وبحث فقط. التحضير والتعديل يستكملان في المرحلة التالية."
+            ? "كشف التمام اليومي الفعلي — اختر فردا لمعاينة تغيير حالته قبل الاعتماد؛ لا يوجد حفظ تلقائي."
             : "لم يتم تحميل كشف التمام اليومي المعتمد بعد؛ افتح الصفحة أو اضغط تحديث البيانات.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
@@ -76,12 +89,36 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public ICommand ClearSearchCommand { get; }
     public ICommand NextPageCommand { get; }
     public ICommand PreviousPageCommand { get; }
+    public ICommand ReviewPersonCommand { get; }
 
     public void AttachReader(INativeDashboardReader reader, Func<NativeIdentity?> principal)
     {
         if (_reader is not null) throw new InvalidOperationException("Native daily roster reader already attached.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _currentPrincipal = principal ?? throw new ArgumentNullException(nameof(principal));
+        if (reader is INativeAttendanceReviewBackend backend)
+        {
+            Review.AttachBackend(backend, principal);
+            _reviewAttached = true;
+        }
+    }
+
+    private bool CanReviewPerson(NativeDailyAttendanceRow? row)
+    {
+        var live = _currentPrincipal?.Invoke();
+        return row is not null && _reviewAttached && _connected && !_loading &&
+            !Review.IsOpen && _loadedDate == DateOnly.FromDateTime(DateTime.Now) &&
+            live is not null && live == _boundPrincipal &&
+            _rows.Any(item => ReferenceEquals(item, row)) &&
+            !string.IsNullOrWhiteSpace(row.PersonId);
+    }
+
+    // The original audited SQLCipher preview/commit implementation is the
+    // ONLY writer. Never trust a row supplied outside the current live page.
+    public Task OpenReviewAsync(NativeDailyAttendanceRow row, CancellationToken ct = default)
+    {
+        if (!CanReviewPerson(row)) return Task.CompletedTask;
+        return Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite, [row.PersonId], ct);
     }
 
     /// <summary>Immediately remove personnel and revoke late responses on logout.</summary>
@@ -90,6 +127,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         ++_version;
         _activeRead?.Cancel();
         _activeRead = null;
+        Review.ForceCancel();
         _boundPrincipal = null;
         _selectedSite = "";
         _selectedStatus = "";
@@ -109,6 +147,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         _connected = false;
         _error = error;
         _day = "";
+        _loadedDate = null;
         _total = 0;
         _hasNext = false;
         _rows = [];
@@ -158,7 +197,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
             _rows = snapshot.Rows.Select(person =>
                 new NativeDailyAttendanceRow(
-                    person.RowNumber, person.ServiceNumberA,
+                    person.PersonId, person.RowNumber, person.ServiceNumberA,
                     rankIndex < 0 ? "" : person.CustomCells[rankIndex],
                     person.Name, person.SiteName, person.StatusName,
                     person.CustomCells.Where((_, i) => i != rankIndex).ToArray())).ToArray();
@@ -176,6 +215,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             _total = snapshot.TotalRows;
             _hasNext = snapshot.HasNext;
             _day = snapshot.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            _loadedDate = snapshot.BusinessDate;
             _connected = true;
             _error = "";
             _loading = false;
@@ -278,6 +318,8 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             snapshot.HasNext != ((long)filter.Page * filter.PageSize < snapshot.TotalRows) ||
             snapshot.Rows.Any(row => row.CustomCells.Count != snapshot.CustomColumns.Count ||
                                      string.IsNullOrWhiteSpace(row.PersonId)) ||
+            snapshot.Rows.Select(row => row.PersonId)
+                .Distinct(StringComparer.Ordinal).Count() != snapshot.Rows.Count ||
             snapshot.Sites.Any(site => string.IsNullOrWhiteSpace(site.SiteId)) ||
             snapshot.CustomColumns.Any(col => string.IsNullOrWhiteSpace(col.ColumnId)) ||
             snapshot.StatusCounts.Any(status => status.Count < 0))
@@ -291,6 +333,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         ((NativeCommand)ClearSearchCommand).NotifyAvailabilityChanged();
         ((NativeCommand)PreviousPageCommand).NotifyAvailabilityChanged();
         ((NativeCommand)NextPageCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)
@@ -305,5 +348,5 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 public sealed record NativeDailyStatusOption(string StatusId, string DisplayName);
 
 public sealed record NativeDailyAttendanceRow(
-    int RowNumber, string ServiceNumberA, string Rank, string Name,
+    string PersonId, int RowNumber, string ServiceNumberA, string Rank, string Name,
     string SiteName, string StatusName, IReadOnlyList<string> CustomCells);
