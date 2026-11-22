@@ -13,6 +13,7 @@ FILES = {
     "vm": "src/AlTamam.NativePresentation/DailyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeDailyAttendancePhase6Tests.cs",
     "review_tests": "tests/AlTamam.UnitTests/NativeDailyReviewedStatusPhase6Tests.cs",
+    "bulk_tests": "tests/AlTamam.UnitTests/NativeDailyBulkReviewPhase6Tests.cs",
     "review": "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
     "shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
     "pages": "src/AlTamam.NativePresentation/NativePageViewModels.cs",
@@ -65,6 +66,17 @@ def check(content):
         needs("review_tests", token)
     if content["review_tests"].count("[Fact]") < 3:
         issues.append("Missing daily-review positive and negative path xUnit coverage.")
+    for token in ("SetSelectedRows(", "CanReviewSelected()", "OpenSelectedReviewAsync(",
+                  "_selected.All(row => CanReviewPerson(row))",
+                  "selection.Any(row => row is null", "ResetSelection(\"\");",
+                  "ReviewSelectedCommand", "SelectedCount =>"):
+        needs("vm", token)
+    for token in ("Two_selected_persons_are_previewed_together_and_never_committed_implicitly",
+                  "Duplicate_forged_and_expired_group_members_fail_closed",
+                  "Selection_is_frozen_during_approved_preview_and_cleared_on_session_logout"):
+        needs("bulk_tests", token)
+    if content["bulk_tests"].count("[Fact]") < 3:
+        issues.append("Missing bulk-selection xUnit positive/negative coverage.")
     for token in ("DailyAttendance = new DailyAttendancePageViewModel()",
                   "DailyAttendance.AttachReader(reader, () => _active)",
                   "_ = DailyAttendance.RefreshAsync()",
@@ -79,11 +91,16 @@ def check(content):
                   'IsReadOnly="True"', "SearchCommand",
                   "SelectedSiteId", "SelectedStatusId", "DailyGrid",
                   "NativeAttendanceReviewView", "ReviewPersonCommand",
+                  "ReviewSelectedCommand", 'SelectionMode="Extended"',
+                  'SelectionChanged="OnDailySelectionChanged"',
+                  "SelectedLabel", "SelectionError",
                   'CommandParameter="{Binding SelectedItem, ElementName=DailyGrid}"'):
         needs("xaml", token)
     for token in ("IsDataConnected", "CustomColumns",
                   "DailyGrid.Columns.Add(", "OnSiteChanged(",
-                  "OnStatusChanged(", "IsKeyboardFocusWithin"):
+                  "OnStatusChanged(", "IsKeyboardFocusWithin",
+                  "OnDailySelectionChanged(", "DailyGrid.SelectedItems",
+                  "DailyGrid.SelectAll();", "DailyGrid.UnselectAll();"):
         needs("view", token)
     for token in ("ResolveSessionAsync(identity.SessionNonce",
                   "DailyRosterAsync(rosterQuery, ct)",
@@ -121,6 +138,11 @@ if __name__ == "__main__":
         ("vm", "ReferenceEquals(item, row)"),
         ("review", "OpenPersonsAsync("),
         ("review_tests", "Forged_or_expired_daily_selection_cannot_open_review"),
+        ("bulk_tests", "Duplicate_forged_and_expired_group_members_fail_closed"),
+        ("vm", "SetSelectedRows("),
+        ("vm", "_selected.All(row => CanReviewPerson(row))"),
+        ("xaml", 'SelectionMode="Extended"'),
+        ("view", "OnDailySelectionChanged("),
         ("reader", "DailyRosterAsync(rosterQuery, ct)"),
         ("core", "python build/test-native-phase6-daily-roster-contract.py"),
         ("release", "python build/test-native-phase6-daily-roster-contract.py"),
@@ -129,4 +151,4 @@ if __name__ == "__main__":
         altered[key] = altered[key].replace(text, "REMOVED_BY_NEGATIVE_TEST")
         if not check(altered):
             raise SystemExit(f"Unsafe change incorrectly passed: {key}: {text}")
-    print("NATIVE PHASE 6 DAILY PASS: SQLCipher, daily filters, rank, nonce, reviewed status, Core/Release")
+    print("NATIVE PHASE 6 DAILY PASS: SQLCipher, rank, nonce, single+bulk reviewed status, Core/Release")
