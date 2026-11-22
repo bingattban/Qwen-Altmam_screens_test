@@ -28,10 +28,11 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public NativeShellViewModel()
     {
         Dashboard = new DashboardPageViewModel();
+        DailyAttendance = new DailyAttendancePageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
-            new DailyAttendancePageViewModel(),
+            DailyAttendance,
             new MonthlyAttendancePageViewModel(),
             new AdministrationPageViewModel(),
             new ReportsPageViewModel(),
@@ -47,6 +48,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     if (screen != NativeScreen.Dashboard)
                         Dashboard.AutoRegister.Close();
                     CurrentPage = _pages[screen];
+                    if (screen == NativeScreen.DailyAttendance)
+                        _ = DailyAttendance.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
@@ -56,12 +59,16 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     }
 
     public DashboardPageViewModel Dashboard { get; }
+    public DailyAttendancePageViewModel DailyAttendance { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
     // The delegate only yields the current server-verified native principal.
     public void AttachDashboardReader(INativeDashboardReader reader)
-        => Dashboard.AttachReader(reader, () => _active);
+    {
+        Dashboard.AttachReader(reader, () => _active);
+        DailyAttendance.AttachReader(reader, () => _active);
+    }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
     public NativePageViewModel CurrentPage
@@ -243,6 +250,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         // Scrub all native personnel/counters synchronously when the backend
         // revokes or expires the session, even if a SQL read is still running.
         Dashboard.Clear();
+        DailyAttendance.Clear();
         _active = null;
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
         _loginError = message;

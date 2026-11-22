@@ -14,29 +14,13 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="0,0,0,22" />
     </Style>
-    <!-- Phase 2: actual native RTL dashboard, server-authorized SQLCipher reads.
-         The other five section templates below are still nonoperational previews. -->
+    <!-- Native authenticated dashboard + daily roster read-only SQLCipher.
+         Other section templates remain nonoperational preview routes. -->
     <DataTemplate DataType="{x:Type vm:DashboardPageViewModel}">
         <views:NativeDashboardView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:DailyAttendancePageViewModel}">
-        <StackPanel>
-            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <StackPanel Orientation="Horizontal" IsEnabled="False" Margin="0,0,0,14">
-                <TextBlock Text="التاريخ:" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <DatePicker Width="180" />
-                <Button Content="التحضير" Margin="12,0,0,0" Padding="14,5" />
-            </StackPanel>
-            <DataGrid Height="290" IsReadOnly="True" IsEnabled="False" AutoGenerateColumns="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="الرقم" Width="80" />
-                    <DataGridTextColumn Header="الرقم (ع)" Width="110" />
-                    <DataGridTextColumn Header="الاسم" Width="*" />
-                    <DataGridTextColumn Header="الموقع" Width="*" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </StackPanel>
+        <views:NativeDailyAttendanceView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:MonthlyAttendancePageViewModel}">
         <StackPanel>
