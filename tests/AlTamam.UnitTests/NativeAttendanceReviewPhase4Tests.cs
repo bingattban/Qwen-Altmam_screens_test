@@ -219,7 +219,8 @@ public sealed class NativeAttendanceReviewPhase4Tests
 
         public async Task<NativeAttendanceRevisionPreview> PreviewAsync(
             NativeIdentity actor, DateOnly date, string site,
-            IReadOnlyList<string> persons, string statusId, CancellationToken ct = default)
+            IReadOnlyList<string> persons, string statusId, CancellationToken ct = default,
+            NativeAttendanceDateRange? range = null)
         {
             PreviewCalls.Add((persons.ToArray(), site, statusId));
             if (DelayedPreview is { } delayed) return await delayed;

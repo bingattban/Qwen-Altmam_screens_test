@@ -33,25 +33,22 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             string name = RequiredText(item, "displayName");
             if (item["active"]?.GetValue<bool>() != true)
                 continue;
-            // Timed leave and permission need a separate start/end editor.
-            // Do not silently assign indefinite leave in this native slice.
-            if (AttendanceDateRangePolicy.RequiresRange(id)) continue;
-            statuses.Add(new(id, name));
+            statuses.Add(new(id, name, AttendanceDateRangePolicy.RequiresRange(id)));
         }
         return statuses;
     }
 
     public async Task<NativeAttendanceRevisionPreview> PreviewAsync(
         NativeIdentity identity, DateOnly date, string site,
-        IReadOnlyList<string> personIds, string statusId, CancellationToken ct = default)
+        IReadOnlyList<string> personIds, string statusId, CancellationToken ct = default,
+        NativeAttendanceDateRange? range = null)
     {
         string today = DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) != today ||
             personIds.Count is < 1 or > 100 ||
             personIds.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 128) ||
             personIds.Distinct(StringComparer.Ordinal).Count() != personIds.Count ||
-            statusId.Length is < 1 or > 128 ||
-            AttendanceDateRangePolicy.RequiresRange(statusId))
+            statusId.Length is < 1 or > 128)
             throw new InvalidDataException("Invalid native same-day attendance revision.");
 
         BridgePrincipal principal = await ResolveAuthorizedAsync(identity, "PreviewAttendanceChange", ct);
@@ -64,6 +61,16 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             ["mode"] = "revise",
             ["personIds"] = new JsonArray(personIds.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray())
         };
+        if (range is { } dates)
+        {
+            payload["rangeStartDate"] = dates.Start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            payload["rangeEndDate"] = dates.End.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+        // Apply exactly the production attendance policy BEFORE asking the
+        // canonical service to preview. Never silently omit either endpoint.
+        if (!AttendanceDateRangePolicy.TryParse(payload, statusId, today,
+                out var expectedStart, out var expectedEnd, out _))
+            throw new InvalidDataException("Invalid native leave/permission date bounds.");
         BridgeResponse response = await new AttendanceCommitService(database)
             .PreviewAsync(payload, principal, combined.Token);
         await ResolveAuthorizedAsync(identity, "PreviewAttendanceChange", combined.Token);
@@ -77,6 +84,17 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             data["persons"] is not JsonArray selected ||
             selected.Count != personIds.Count)
             throw new InvalidDataException("SQLCipher attendance preview mismatch.");
+        NativeAttendanceDateRange? returnedRange = null;
+        if (AttendanceDateRangePolicy.RequiresRange(statusId))
+        {
+            if (RequiredText(data, "rangeStartDate") != expectedStart ||
+                RequiredText(data, "rangeEndDate") != expectedEnd ||
+                range is null)
+                throw new InvalidDataException("Server-altered attendance date range.");
+            returnedRange = range;
+        }
+        else if (data["rangeStartDate"] is not null || data["rangeEndDate"] is not null)
+            throw new InvalidDataException("Unexpected attendance date range.");
         var people = selected.Select(node =>
         {
             JsonObject person = RequiredObject(node);
@@ -92,7 +110,7 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
                 .SequenceEqual(personIds.Order(StringComparer.Ordinal), StringComparer.Ordinal))
             throw new InvalidDataException("SQLCipher returned unexpected attendance person IDs.");
         return new NativeAttendanceRevisionPreview(
-            token, date, actual, display, people);
+            token, date, actual, display, people, returnedRange);
     }
 
     public async Task<NativeAttendanceCommitReceipt> CommitAsync(
