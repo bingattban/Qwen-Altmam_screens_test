@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Windows.Input;
 
@@ -21,6 +22,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     private IReadOnlyList<NativeAttendanceStatusChoice> _choices = [];
     private NativeAttendanceRevisionPreview? _preview;
     private string _selectedStatusId = "";
+    private DateTime? _rangeStartDate, _rangeEndDate;
     private string _operationId = "";
     private string _error = "";
     private bool _open, _busy, _committing, _completed, _unverifiedCommit;
@@ -31,7 +33,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     public NativeAttendanceReviewViewModel()
     {
         PreviewCommand = new NativeCommand(_ => _ = PreviewAsync(),
-            _ => IsOpen && !IsBusy && StatusChoices.Any(x => x.StatusId == SelectedStatusId));
+            _ => IsOpen && !IsBusy && !IsCompleted && !HasUnverifiedCommit &&
+                 StatusChoices.Any(x => x.StatusId == SelectedStatusId));
         ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(),
             _ => IsOpen && HasPreview && !IsBusy && !IsCompleted);
         CancelCommand = new NativeCommand(_ => Cancel(),
@@ -53,12 +56,43 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         get => _selectedStatusId;
         set => ChooseStatus(value);
     }
+    public bool RequiresDateRange => NativeAttendanceDateRange.RequiresRange(_selectedStatusId);
+    public bool CanEditSelection => IsOpen && !IsBusy && !_completed && !_unverifiedCommit;
+    public bool CanEditRange => CanEditSelection && RequiresDateRange;
+    public DateTime? RangeStartDate
+    {
+        get => _rangeStartDate;
+        set
+        {
+            if (!CanEditRange || _rangeStartDate == value) return;
+            _rangeStartDate = value;
+            InvalidatePreview();
+            _error = "";
+            Update();
+        }
+    }
+    public DateTime? RangeEndDate
+    {
+        get => _rangeEndDate;
+        set
+        {
+            if (!CanEditRange || _rangeEndDate == value) return;
+            _rangeEndDate = value;
+            InvalidatePreview();
+            _error = "";
+            Update();
+        }
+    }
     public string ConfirmButtonText => _error.Contains("رد الاعتماد", StringComparison.Ordinal) ||
         _error.Contains("انقطع طلب الاعتماد", StringComparison.Ordinal)
         ? "إعادة تأكيد نفس العملية" : "تأكيد واعتماد التغييرات";
     public string TargetStatusName => _preview?.TargetStatusName ?? "";
     public string PreviewMessage => _preview is null ? "" :
-        $"ستُغيّر حالة {_preview.Persons.Count} فرداً إلى {_preview.TargetStatusName}. راجع الأسماء والأرقام والمواقع والحالة السابقة قبل الاعتماد.";
+        $"ستُغيّر حالة {_preview.Persons.Count} فرداً إلى {_preview.TargetStatusName}" +
+        (_preview.RangeStartDate is not null
+            ? $" خلال المدة من {_preview.RangeStartDate} إلى {_preview.RangeEndDate}. "
+            : ". ") +
+        "راجع الأسماء والأرقام والمواقع والحالة السابقة قبل الاعتماد.";
     public IReadOnlyList<NativeAttendanceStatusChoice> StatusChoices => _choices;
     public IReadOnlyList<NativeAttendancePreviewPerson> PreviewPersons =>
         _preview?.Persons ?? [];
@@ -80,7 +114,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     public async Task OpenAsync(DateOnly date, string site,
         IReadOnlyList<NativeAutoRegisterRow> selected, CancellationToken ct = default)
     {
-        if (_committing) return; // do not abandon an in-flight approved write
+        // Never replace an approved intent after a possibly lost commit reply.
+        if (_committing || _unverifiedCommit) { Cancel(); return; }
         Cancel();
         var actor = _liveActor?.Invoke();
         if (actor is null || _backend is null || selected is null ||
@@ -126,10 +161,13 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public void ChooseStatus(string? id)
     {
-        if (!_open || _busy || _committing || _unverifiedCommit) return;
+        if (!_open || _busy || _committing || _unverifiedCommit || _completed) return;
         string selected = id ?? "";
         if (_selectedStatusId == selected) return;
         _selectedStatusId = _choices.Any(x => x.StatusId == selected) ? selected : "";
+        // Date values cannot leak between status choices (even timed statuses).
+        _rangeStartDate = null;
+        _rangeEndDate = null;
         // Choosing a different status revokes the previous server preview.
         InvalidatePreview();
         _error = _selectedStatusId == "" && selected != ""
@@ -143,6 +181,15 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             _actor is not { } actor ||
             !_choices.Any(x => x.StatusId == _selectedStatusId)) return;
         if (!HasValidActor(actor)) { ForceCancel(); return; }
+        if (!NativeAttendanceDateRange.TryCreate(_selectedStatusId, _businessDate,
+                _rangeStartDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                _rangeEndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                out var range, out var rangeError))
+        {
+            _error = rangeError;
+            Update();
+            return;
+        }
         InvalidatePreview();
         int version = ++_generation;
         _pending?.Cancel();
@@ -155,13 +202,15 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         {
             NativeAttendanceRevisionPreview draft = await _backend.PreviewAsync(
                 actor, _businessDate, _site, _personIds, _selectedStatusId,
-                linked.Token);
+                linked.Token, range);
             if (version != _generation || linked.IsCancellationRequested ||
                 !HasValidActor(actor)) return;
             string[] returned = draft.Persons.Select(x => x.PersonId)
                 .Order(StringComparer.Ordinal).ToArray();
             if (draft.BusinessDate != _businessDate ||
                 draft.TargetStatusId != _selectedStatusId ||
+                draft.RangeStartDate != range?.StartDate ||
+                draft.RangeEndDate != range?.EndDate ||
                 draft.PreviewToken.Length < 32 ||
                 draft.Persons.Count != _personIds.Length ||
                 !returned.SequenceEqual(_personIds, StringComparer.Ordinal) ||
@@ -277,6 +326,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         _choices = [];
         _preview = null;
         _selectedStatusId = "";
+        _rangeStartDate = null;
+        _rangeEndDate = null;
         _operationId = "";
         _error = "";
         _committing = false;
@@ -310,6 +361,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             nameof(HasPreview), nameof(ErrorMessage),
             nameof(AuditEventId), nameof(CommittedCount), nameof(SelectedCount),
             nameof(SelectedStatusId), nameof(TargetStatusName),
+            nameof(RequiresDateRange), nameof(CanEditSelection), nameof(CanEditRange),
+            nameof(RangeStartDate), nameof(RangeEndDate),
             nameof(PreviewMessage), nameof(StatusChoices), nameof(PreviewPersons),
             nameof(ConfirmButtonText)
         })

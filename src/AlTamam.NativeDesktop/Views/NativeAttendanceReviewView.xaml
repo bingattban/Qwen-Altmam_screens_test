@@ -70,13 +70,43 @@
                                       ItemsSource="{Binding StatusChoices}"
                                       DisplayMemberPath="DisplayName" SelectedValuePath="StatusId"
                                       SelectedValue="{Binding SelectedStatusId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding CanEditSelection}"
                                       AutomationProperties.Name="اختر الحالة الجديدة"/>
                             <Button Content="متابعة إلى المعاينة" Command="{Binding PreviewCommand}"
                                     Style="{StaticResource NativeApprove}"/>
                         </WrapPanel>
-                        <TextBlock Text="الإجازة والإذن تتطلبان تاريخ بداية ونهاية وتبقيان متاحتين في البرنامج التشغيلي إلى حين نقل محرر المدد."
-                                   Foreground="#64748B" FontSize="12" TextWrapping="Wrap"
-                                   Margin="0,8,0,0"/>
+                        <StackPanel Margin="0,9,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding RequiresDateRange}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,0,6">
+                                    <TextBlock Text="بداية الإجازة أو الإذن" FontWeight="SemiBold"
+                                               Foreground="#0F2942" Margin="0,0,0,4"/>
+                                    <DatePicker Width="190" Height="36" Padding="4"
+                                                SelectedDate="{Binding RangeStartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                IsEnabled="{Binding CanEditRange}"
+                                                AutomationProperties.Name="تاريخ بداية الإجازة أو الإذن"/>
+                                </StackPanel>
+                                <StackPanel Margin="12,0,0,6">
+                                    <TextBlock Text="نهاية الإجازة أو الإذن" FontWeight="SemiBold"
+                                               Foreground="#0F2942" Margin="0,0,0,4"/>
+                                    <DatePicker Width="190" Height="36" Padding="4"
+                                                SelectedDate="{Binding RangeEndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                IsEnabled="{Binding CanEditRange}"
+                                                AutomationProperties.Name="تاريخ نهاية الإجازة أو الإذن"/>
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Text="تبدأ المدة من تاريخ تحضير اليوم، ولا تزيد على 366 يوما. لا يتم الحفظ إلا بعد المعاينة والتأكيد."
+                                       Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" FontSize="14"
