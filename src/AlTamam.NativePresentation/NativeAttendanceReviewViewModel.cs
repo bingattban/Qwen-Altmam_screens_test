@@ -111,24 +111,31 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         _liveActor = currentActor ?? throw new ArgumentNullException(nameof(currentActor));
     }
 
-    public async Task OpenAsync(DateOnly date, string site,
+    // Preserve the auto-register entry point, but share the exact same
+    // immutable, audited preview/commit pipeline with the daily roster.
+    public Task OpenAsync(DateOnly date, string site,
         IReadOnlyList<NativeAutoRegisterRow> selected, CancellationToken ct = default)
+        => OpenPersonsAsync(date, site,
+            selected?.Select(row => row.PersonId).ToArray() ?? [], ct);
+
+    public async Task OpenPersonsAsync(DateOnly date, string site,
+        IReadOnlyList<string> personIds, CancellationToken ct = default)
     {
         // Never replace an approved intent after a possibly lost commit reply.
         if (_committing || _unverifiedCommit) { Cancel(); return; }
         Cancel();
         var actor = _liveActor?.Invoke();
-        if (actor is null || _backend is null || selected is null ||
-            selected.Count is < 1 or > 100 ||
+        if (actor is null || _backend is null || personIds is null ||
+            personIds.Count is < 1 or > 100 ||
             date != DateOnly.FromDateTime(DateTime.Now) ||
-            selected.Any(x => string.IsNullOrWhiteSpace(x.PersonId)) ||
-            selected.Select(x => x.PersonId).Distinct(StringComparer.Ordinal).Count() != selected.Count)
+            personIds.Any(string.IsNullOrWhiteSpace) ||
+            personIds.Distinct(StringComparer.Ordinal).Count() != personIds.Count)
             return;
 
         _businessDate = date;
         _site = site ?? "";
         _actor = actor;
-        _personIds = selected.Select(x => x.PersonId)
+        _personIds = personIds
             .Order(StringComparer.Ordinal).ToArray();
         _open = true;
         int version = ++_generation;
