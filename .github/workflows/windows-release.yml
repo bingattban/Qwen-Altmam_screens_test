@@ -133,6 +133,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native Phase4 durable scheduler and explicit reviewed attendance commit contract failed' }
           python build/test-native-phase5-bounded-ranges-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 5 bounded leave/permission contract failed' }
+          python build/test-native-phase6-daily-roster-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 6 daily SQLCipher roster / session gate failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
