@@ -46,6 +46,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             _ => CanRead && !_loading && _hasNext);
         CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
             _ => IsCellDetailsOpen);
+        Excel = new NativeMonthlyExcelExportViewModel();
     }
 
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
@@ -63,6 +64,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public string SelectedCellDateLabel =>
         _selectedDetail?.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
     public string LoadError => _error;
+    public NativeMonthlyExcelExportViewModel Excel { get; }
     public string RankColumnLabel => "الرتبة";
     public string SelectedPeriod => _period;
     public string SelectedSiteId => _site;
@@ -74,6 +76,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             if (_searchDraft == value) return;
             _searchDraft = value ?? "";
             Changed(nameof(SearchDraft));
+            Excel.NotifyContextChanged();
         }
     }
     public IReadOnlyList<NativeMonthlyPeriodOption> Periods => _periods;
@@ -109,6 +112,18 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _detailsReader = reader as INativeMonthlyCellDetailsReader;
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
+        if (reader is INativeMonthlyExcelExportBackend exportBackend)
+            Excel.Attach(exportBackend, () => _liveActor?.Invoke(), () =>
+            {
+                if (!_connected || _loading || _boundActor is null ||
+                    _liveActor?.Invoke() != _boundActor ||
+                    !string.Equals(_searchDraft.Trim(), _term, StringComparison.Ordinal) ||
+                    !ValidPeriod(_period) ||
+                    !_periods.Any(item => item.Period == _period) ||
+                    (_site.Length > 0 && !_sites.Any(item => item.SiteId == _site)))
+                    return null;
+                return new NativeMonthlyExcelFilter(_period, _site, _term);
+            });
     }
 
     public async Task OpenCellDetailsAsync(NativeMonthlyDisplayRow? row, int day,
@@ -225,6 +240,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     private void HideRows(string message)
     {
         CloseCellDetails();
+        Excel.Close();
         _connected = false;
         _loading = false;
         _error = message;
@@ -436,6 +452,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             PreviousPageCommand, NextPageCommand
         })
             if (command is NativeCommand native) native.NotifyAvailabilityChanged();
+        Excel.NotifyContextChanged();
     }
 
     private void Changed(params string[] properties)
