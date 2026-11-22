@@ -25,6 +25,8 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     private int _page = 1;
     private long _total;
     private IReadOnlyList<NativeDailyAttendanceRow> _rows = [];
+    private IReadOnlyList<NativeDailyAttendanceRow> _selected = [];
+    private string _selectionError = "";
     public NativeAttendanceReviewViewModel Review { get; } = new();
     private IReadOnlyList<NativeDashboardColumn> _customColumns = [];
     private IReadOnlyList<NativeDashboardSite> _sites = [new("", "جميع المواقع")];
@@ -47,9 +49,14 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
                     _ = OpenReviewAsync(row);
             },
             parameter => parameter is NativeDailyAttendanceRow row && CanReviewPerson(row));
+        ReviewSelectedCommand = new NativeCommand(_ => _ = OpenSelectedReviewAsync(),
+            _ => CanReviewSelected());
         Review.Committed += receipt => { _ = RefreshAsync(); };
         Review.PropertyChanged += (_, _) =>
+        {
             ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
+            ((NativeCommand)ReviewSelectedCommand).NotifyAvailabilityChanged();
+        };
     }
 
     private bool CanRead => _currentPrincipal?.Invoke() is not null && _reader is not null;
@@ -80,6 +87,9 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public IReadOnlyList<NativeDashboardColumn> CustomColumns => _customColumns;
     public IReadOnlyList<NativeDailyAttendanceRow> Rows => _rows;
     public long TotalRows => _total;
+    public int SelectedCount => _selected.Count;
+    public string SelectedLabel => $"المحددون في الصفحة: {_selected.Count} من 100";
+    public string SelectionError => _selectionError;
     public int Page => _page;
     public bool HasNext => _hasNext;
     public string PageLabel => $"الصفحة {_page} — إجمالي النتائج {_total}";
@@ -90,6 +100,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public ICommand NextPageCommand { get; }
     public ICommand PreviousPageCommand { get; }
     public ICommand ReviewPersonCommand { get; }
+    public ICommand ReviewSelectedCommand { get; }
 
     public void AttachReader(INativeDashboardReader reader, Func<NativeIdentity?> principal)
     {
@@ -119,6 +130,65 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     {
         if (!CanReviewPerson(row)) return Task.CompletedTask;
         return Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite, [row.PersonId], ct);
+    }
+
+    /// <summary>
+    /// The WPF DataGrid owns only the visual selection. This model accepts
+    /// references from the CURRENT authenticated page, not forged IDs, copies,
+    /// stale pages or duplicate members. Selection never writes to SQLCipher.
+    /// </summary>
+    public bool SetSelectedRows(IReadOnlyList<NativeDailyAttendanceRow>? selection)
+    {
+        // Never replace an already previewed/possibly committed intent.
+        if (Review.IsOpen || Review.IsBusy || Review.IsCommitting ||
+            Review.HasUnverifiedCommit) return false;
+
+        NativeIdentity? live = _currentPrincipal?.Invoke();
+        if (!_connected || _loading || !_reviewAttached || live is null ||
+            live != _boundPrincipal || _loadedDate != DateOnly.FromDateTime(DateTime.Now))
+        {
+            ResetSelection("");
+            return false;
+        }
+
+        if (selection is null || selection.Count > 100 ||
+            selection.Any(row => row is null ||
+                !_rows.Any(item => ReferenceEquals(item, row))) ||
+            selection.Select(row => row.PersonId)
+                .Distinct(StringComparer.Ordinal).Count() != selection.Count)
+        {
+            ResetSelection("التحديد غير صالح أو يتجاوز 100 فرد؛ أعد التحديد من الكشف الحالي.");
+            return false;
+        }
+
+        _selected = selection.ToArray();
+        _selectionError = "";
+        NotifySelection();
+        return true;
+    }
+
+    private bool CanReviewSelected() =>
+        _selected.Count is >= 1 and <= 100 &&
+        _selected.All(row => CanReviewPerson(row));
+
+    public Task OpenSelectedReviewAsync(CancellationToken ct = default)
+    {
+        if (!CanReviewSelected()) return Task.CompletedTask;
+        return Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite,
+            _selected.Select(row => row.PersonId).ToArray(), ct);
+    }
+
+    private void ResetSelection(string error)
+    {
+        _selected = [];
+        _selectionError = error;
+        NotifySelection();
+    }
+
+    private void NotifySelection()
+    {
+        Changed(nameof(SelectedCount), nameof(SelectedLabel), nameof(SelectionError));
+        ((NativeCommand)ReviewSelectedCommand).NotifyAvailabilityChanged();
     }
 
     /// <summary>Immediately remove personnel and revoke late responses on logout.</summary>
@@ -152,6 +222,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         _hasNext = false;
         _rows = [];
         _customColumns = [];
+        ResetSelection("");
         Changed(nameof(IsDataConnected), nameof(IsLoading), nameof(StatusMessage),
             nameof(LoadError), nameof(BusinessDateLabel), nameof(TotalRows),
             nameof(PageLabel), nameof(HasNext), nameof(Rows), nameof(CustomColumns));
@@ -334,6 +405,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         ((NativeCommand)PreviousPageCommand).NotifyAvailabilityChanged();
         ((NativeCommand)NextPageCommand).NotifyAvailabilityChanged();
         ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)ReviewSelectedCommand).NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)
