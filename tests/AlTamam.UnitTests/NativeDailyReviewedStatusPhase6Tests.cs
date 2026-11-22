@@ -92,7 +92,7 @@ public sealed class NativeDailyReviewedStatusPhase6Tests
             var rows = filter.SearchTerm == ""
                 ? new[] { new NativeDashboardRow("P-1", "123", "أحمد",
                     "المركز", "موجود", "#0D9488", ["رقيب"]) { RowNumber = 1 } }
-                : [];
+                : Array.Empty<NativeDashboardRow>();
             return Task.FromResult(new NativeDashboardSnapshot(
                 filter.BusinessDate, filter.SiteId, 1, 0, 0,
                 [new("STS-PRESENT", "موجود", 1, "#0D9488")],
