@@ -300,3 +300,43 @@ This is not equivalent to full monthly Excel/export, close/reopen or
 all 69 original routes. Customer packages are still DesktopHost/WebView2
 until native functional parity, physical keyboard/DPI (100/125/150%)
 and clean-machine x86/x64 portable/installer approval.
+
+ 
+## Phase 7 — slice 3: monthly Excel export with explicit operator review
+
+The native monthly WPF page offers **معاينة تصدير Excel** only for a
+live SQLCipher-authorized session, currently applied search term,
+the selected archived/current month and valid site. Opening the modal
+does not create any files. The authoritative
+`MonthlyExcelExportService.PreviewAsync` returns the actual matching
+historical person count, chosen site, filename and number of days;
+the user separately presses **تأكيد تصدير Excel** to export.
+
+The SAME original `MonthlyExcelExportService.ExportAsync` handles
+file creation, local preconfigured `OutputDirectorySettings` validation,
+non-overwriting file names, authenticated site captions, Arabic RTL XLSX,
+500-row export-only SQLCipher pagination and atomic .part completion.
+If all sites are selected, canonical export creates a consolidated
+workbook plus separate relevant site files, and reports the resulting
+count and primary path. The native UI does **not** accept a filesystem
+path or create a second XLSX implementation.
+
+A monthly search draft must be applied before a preview can open.
+A frozen period/site/search and live nonce are rechecked before
+confirmation and after export. Logout, navigation, page refresh, or
+modified filters revoke the in-flight intent, suppressing stale
+results. A failed or ambiguous export cannot be retried from an old
+preview; inspect the configured reports directory before manually
+starting a new preview. Preview is a point-in-time count, not a promise
+that SQLCipher rows will remain unchanged while a long export runs.
+
+Five test-first xUnit cases cover zero pre-confirm writes, site and
+search propagation, multi-file all-sites behavior, logout/nonce changes
+during awaited operations, and malformed preview/receipt rejection.
+The same Phase 7 negative-path contract runs in BOTH Windows CI gates.
+
+**Production caveat:** Existing x86/x64 Portable/Installer still package
+the original DesktopHost/WebView2 application. Native WPF export relies
+on the currently configured local reports directory; a complete native
+output-directory settings UI, remaining 69-route parity and real
+Windows keyboard/DPI acceptance must precede switching production.
