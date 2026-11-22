@@ -12,6 +12,7 @@ FILES = {
     "contracts": "src/AlTamam.NativePresentation/NativeMonthlyAttendanceContracts.cs",
     "vm": "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
+    "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
     "canonical": "src/AlTamam.Application/Bridge/DailyMonthlyReadService.cs",
     "shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
@@ -41,30 +42,47 @@ def problems(content):
     for token in ("interface INativeMonthlyAttendanceReader",
                   "ReadCatalogueAsync(", "ReadMonthAsync(",
                   "NativeMonthlyFilter(", "NativeMonthlyCell(",
-                  "NativeMonthlySnapshot("):
+                  "NativeMonthlySnapshot(",
+                  "INativeMonthlyCellDetailsReader",
+                  "NativeMonthlyCellDetails", "NativeMonthlyCellRequest("):
+
         require("contracts", token)
     for token in ("VerifyContinuationIdentityAsync(actor, ct)",
                   "ArchivePeriodsAsync(ct)", "MonthlyGridAsync(new JsonObject",
                   '["archiveMode"] = historical', '["pageSize"] = 100',
                   "DateOnly.TryParseExact(saved.Key", "savedDays",
                   "movementNote", "RequiredText(row, \"personId\")", "RequiredArray(data, \"customColumns\")",
-                  "new NativeMonthlySnapshot("):
+                  "new NativeMonthlySnapshot(",
+                  "MonthlyCellDetailsAsync(new JsonObject",
+                  '["personId"] = request.PersonId',
+                  '["businessDate"] = request.BusinessDate.ToString(',
+                  "ReadCellDetailsAsync(", "new NativeMonthlyCellDetails("):
+
         require("backend", token)
     for token in ("ArchivePeriodsAsync(", "MonthlyGridAsync(",
                   "PersonIdentityHistory", "SiteNameHistory",
                   "MonthlyAttendanceCellPolicy.TemporalMembershipSql",
-                  "movementNote", "RosterCustomFieldProjection.AttachAsync"):
+                  "movementNote", "RosterCustomFieldProjection.AttachAsync",
+                  "MonthlyCellDetailsAsync("):
+
         require("canonical", token)
     for token in ("ValidPeriod(", "_boundActor != actor",
                   "_liveActor?.Invoke() != actor", "request != _generation",
                   "_pending?.Cancel()", "HideRows(", "Validate(result, filter)",
                   "result.Rows.Select", "row.DayCells.Select",
                   "SelectPeriodAsync(", "SelectSiteAsync(", "SearchAsync(",
-                  "NextPageAsync(", "PreviousPageAsync(", "CurrentMonth()"):
+                  "NextPageAsync(", "PreviousPageAsync(", "CurrentMonth()",
+                  "OpenCellDetailsAsync(", "CloseCellDetails()",
+                  "_detailsReader.ReadCellDetailsAsync(", "ReferenceEquals(item, row)",
+                  "version != _detailGeneration", "result.PersonId != row.PersonId",
+                  "result.BusinessDate != date"):
+
         require("vm", token)
     for token in ("MonthlyAttendance = new MonthlyAttendancePageViewModel()",
                   "MonthlyAttendance.AttachReader(archiveReader, () => _active)",
-                  "MonthlyAttendance.RefreshAsync()", "MonthlyAttendance.Clear();"):
+                  "MonthlyAttendance.RefreshAsync()", "MonthlyAttendance.Clear();",
+                  "MonthlyAttendance.CloseCellDetails();"):
+
         require("shell", token)
     if "public sealed class MonthlyAttendancePageViewModel()" in content["pages"]:
         errors.append("Disconnected monthly placeholder must be removed.")
@@ -73,12 +91,18 @@ def problems(content):
                   'Header="الرتبة"', 'Header="الاسم"',
                   'Header="الموقع"', 'IsReadOnly="True"',
                   "SelectedPeriod", "SelectedSiteId", "MonthlyGrid",
-                  "SearchCommand"):
+                  "SearchCommand",
+                  "SelectedCellDetails", "IsCellDetailsOpen",
+                  "CellDetailsError", "CloseCellDetailsCommand"):
+
         require("xaml", token)
     for token in ("RenderColumns()", "MonthlyGrid.Columns.Add(",
                   "Days[{i}].Symbol", "Days[{i}].Description",
                   "CustomCells[{i}]", "OnPeriodChanged(",
-                  "OnSiteChanged("):
+                  "OnSiteChanged(",
+                  "OnDayCellClick(", "Button.ClickEvent",
+                  "OpenCellDetailsAsync(row, day)"):
+
         require("view", token)
     for token in ("No_live_session_does_not_read_months_or_people",
                   "Native_monthly_page_uses_real_historical_cells",
@@ -89,6 +113,13 @@ def problems(content):
         require("tests", token)
     if content["tests"].count("[Fact]") < 6:
         errors.append("Missing monthly test-first positive/negative regressions.")
+    for token in ("A_real_day_cell_opens_historical_identity_status_movement_and_revisions",
+                  "Forged_old_or_out_of_range_rows_never_start_detail_reads",
+                  "Logout_and_nonce_change_revoke_in_flight_historical_details",
+                  "Invalid_canonical_detail_echo_cannot_show_old_or_foreign_person"):
+        require("detail_tests", token)
+    if content["detail_tests"].count("[Fact]") < 4:
+        errors.append("Monthly canonical detail security/replay tests are missing.")
     for k in ("core", "release"):
         require(k, "python build/test-native-phase7-monthly-roster-contract.py")
     for token in ("RunPendingAsync(", "ExecuteInWriteTransactionAsync(",
@@ -107,6 +138,11 @@ if __name__ == "__main__":
         ("vm", "_boundActor != actor"),
         ("vm", "request != _generation"),
         ("vm", "row.DayCells.Select"),
+        ("vm", "version != _detailGeneration"),
+        ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("view", "OnDayCellClick("),
+        ("xaml", "SelectedCellDetails"),
+        ("detail_tests", "Forged_old_or_out_of_range_rows_never_start_detail_reads"),
         ("backend", "VerifyContinuationIdentityAsync(actor, ct)"),
         ("backend", "MonthlyGridAsync(new JsonObject"),
         ("backend", "DateOnly.TryParseExact(saved.Key"),
@@ -120,4 +156,4 @@ if __name__ == "__main__":
         changed[key] = changed[key].replace(token, "REMOVED_BY_NEGATIVE_TEST")
         if not problems(changed):
             raise SystemExit(f"Unsafe missing monthly invariant passed: {key}: {token}")
-    print("PHASE 7 NATIVE MONTHLY PASS: archived SQLCipher, snapshot days, session, Core+Release")
+    print("PHASE 7 NATIVE MONTHLY PASS: archived SQLCipher, day details, revisions, nonce, Core+Release")

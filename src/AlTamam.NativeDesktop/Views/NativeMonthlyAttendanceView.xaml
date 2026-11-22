@@ -102,5 +102,99 @@
                         Command="{Binding NextPageCommand}"/>
             </StackPanel>
         </DockPanel>
+        <!-- Authenticated, read-only canonical detail. Closing or navigating
+             away revokes in-flight reads; no write buttons are offered. -->
+        <Border Grid.RowSpan="5" Background="#B80F172A" Panel.ZIndex="110"
+                Visibility="{Binding IsCellDetailsOpen, Converter={StaticResource VisibilityIfTrue}}">
+            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="10" Padding="18" Width="590" MaxHeight="560"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                <DockPanel LastChildFill="True">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <TextBlock Text="تفاصيل يوم التمام الشهري" FontSize="19"
+                                   FontWeight="Bold" Foreground="#0F2942"
+                                   VerticalAlignment="Center" DockPanel.Dock="Right"/>
+                        <Button Content="إغلاق" Command="{Binding CloseCellDetailsCommand}"
+                                Style="{StaticResource MonthlyButton}"
+                                AutomationProperties.Name="إغلاق تفاصيل اليوم"/>
+                    </DockPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <ProgressBar Height="5" IsIndeterminate="True"
+                                         Visibility="{Binding IsCellDetailsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <TextBlock Text="{Binding CellDetailsError}" Foreground="#BE123C"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="{Binding SelectedCellDateLabel}" FontSize="15"
+                                       FontWeight="SemiBold" Foreground="#0D9488"
+                                       FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="اسم الفرد في التاريخ المحدد" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,10,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.PersonName}"
+                                       FontSize="16" FontWeight="SemiBold" Foreground="#0F2942"/>
+                            <TextBlock Text="الرقم (ع) في ذلك التاريخ" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,10,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.ServiceNumberA}" Foreground="#0F2942"/>
+                            <TextBlock Text="الموقع في ذلك التاريخ" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,10,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.SiteName}" Foreground="#0F2942"/>
+                            <Separator Margin="0,12,0,8"/>
+                            <TextBlock Text="حالة الحضور المحفوظة" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,4,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.AttendanceStatus}"
+                                       FontWeight="SemiBold" Foreground="#0F2942"/>
+                            <TextBlock Text="الموقع وقت تسجيل الحضور" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,8,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.AttendanceSiteName}" Foreground="#0F2942"/>
+                            <TextBlock Text="مصدر التسجيل وتوقيته" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,8,0,2"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding SelectedCellDetails.AttendanceSource}"
+                                           Foreground="#0F2942" Margin="0,0,12,0"/>
+                                <TextBlock Text="{Binding SelectedCellDetails.AttendanceCommittedAtUtc}"
+                                           Foreground="#0F2942" FlowDirection="LeftToRight"/>
+                            </StackPanel>
+                            <Separator Margin="0,12,0,8"/>
+                            <TextBlock Text="حركة الفرد" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,4,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.MovementSummary}"
+                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.MovementReason}"
+                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                            <TextBlock Text="سجل التعديلات المسجلة" FontWeight="Bold"
+                                       Foreground="#0F2942" Margin="0,12,0,6"/>
+                            <ItemsControl ItemsSource="{Binding SelectedCellDetails.Revisions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
+                                                BorderThickness="1" CornerRadius="5"
+                                                Margin="0,2" Padding="8">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding BeforeStatus}"
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Text=" ← "/>
+                                                    <TextBlock Text="{Binding AfterStatus}"
+                                                               FontWeight="SemiBold"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding ActorUserId}" Foreground="#475569"/>
+                                                <TextBlock Text="{Binding ExecutedAtUtc}" Foreground="#475569"
+                                                           FlowDirection="LeftToRight"
+                                                           HorizontalAlignment="Right"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,10,0,0" Foreground="#64748B"
+                                       TextWrapping="Wrap"
+                                       Text="عرض تاريخي للقراءة فقط. لا يغير هذا العرض بيانات التحضير أو الصلاحيات."/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

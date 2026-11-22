@@ -50,6 +50,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         Dashboard.AutoRegister.Close();
                     if (screen != NativeScreen.DailyAttendance)
                         DailyAttendance.Review.Cancel();
+                    if (screen != NativeScreen.MonthlyAttendance)
+                        MonthlyAttendance.CloseCellDetails();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();

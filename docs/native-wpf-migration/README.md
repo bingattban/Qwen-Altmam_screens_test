@@ -270,3 +270,33 @@ before the pilot can be considered production-ready.
 interaction, archive-close/reopen and Excel export where permitted by
 the original functional routes. All four existing release packages remain
 DesktopHost/WebView2 until verified native parity.
+
+ 
+## Phase 7 — slice 2: canonical monthly day details (read-only)
+
+Native WPF monthly day columns now use accessible click/keyboard buttons
+to open the **original** `DailyMonthlyReadService.MonthlyCellDetailsAsync`
+through `NativeSqlCipherDashboardReader`. A fresh verified live SQLCipher
+principal is required both before and after every historical detail request.
+The original service enforces historical site perspective. Each response
+must echo the immutable PersonId and exact day selected in the current
+native month/page. Forged rows, old page references, future/out-of-range
+days, session swaps, filter changes, late responses and logout all fail
+closed without displaying another person's data.
+
+The read-only RTL dialog displays dated identity/name/service number/site,
+committed attendance status, original attendance source, movement or
+separation/return, and up to 100 actual historical revisions. If no
+attendance record exists it explicitly says no attendance was recorded:
+**no missing status is inferred**. Close/navigation/refresh invalidates
+pending detail reads; the overlay never mutates attendance or site data.
+
+Four test-first xUnit cases cover canonical snapshots, forgery/stale
+day rejection, nonce/logout cancellation and invalid response echo.
+The existing Phase 7 static negative-path contract now also protects
+this detailed read in BOTH Windows Core and Release.
+
+This is not equivalent to full monthly Excel/export, close/reopen or
+all 69 original routes. Customer packages are still DesktopHost/WebView2
+until native functional parity, physical keyboard/DPI (100/125/150%)
+and clean-machine x86/x64 portable/installer approval.
