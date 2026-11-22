@@ -57,7 +57,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public override string StatusMessage => IsLoading
         ? "جار قراءة كشف التمام اليومي من قاعدة البيانات المشفرة..."
         : IsDataConnected
-            ? "كشف التمام اليومي الفعلي — اختر فردا لمعاينة تغيير حالته قبل الاعتماد؛ لا يوجد حفظ تلقائي."
+            ? "كشف التمام اليومي الفعلي — اختر فردا لمعاينة تغيير حالته؛ لا تعديل دون تأكيد صريح."
             : "لم يتم تحميل كشف التمام اليومي المعتمد بعد؛ افتح الصفحة أو اضغط تحديث البيانات.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
