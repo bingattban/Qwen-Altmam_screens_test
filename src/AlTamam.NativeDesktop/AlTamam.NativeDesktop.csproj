@@ -12,5 +12,9 @@
     <ProjectReference Include="../AlTamam.Application/AlTamam.Application.csproj" />
     <ProjectReference Include="../AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
     <Resource Include="../AlTamam.DesktopHost/Assets/AlTamam.ico" Link="Assets/AlTamam.ico" />
+    <!-- Build the exact original audited scheduler source in the new WPF host.
+         No copy, fork, duplicate scheduling policy, or desktop-host runtime dep. -->
+    <Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"
+             Link="Scheduling/EightPmSchedulerService.cs" />
   </ItemGroup>
 </Project>

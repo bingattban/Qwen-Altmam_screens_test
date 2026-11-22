@@ -27,6 +27,10 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
     private string _error = "";
     private IReadOnlyList<NativeAutoRegisterRow> _rows = [];
     private IReadOnlyList<NativeDashboardColumn> _customColumns = [];
+    private readonly Dictionary<string, NativeAutoRegisterRow> _selection = new(StringComparer.Ordinal);
+    public NativeAttendanceReviewViewModel Review { get; } = new();
+    public int SelectedCount => _selection.Count;
+    public string SelectedLabel => $"المحددون: {_selection.Count} من 100";
 
     public NativeAutoPreparedRegisterViewModel()
     {
@@ -38,7 +42,19 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
             _ => IsOpen && !IsLoading && Page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
             _ => IsOpen && !IsLoading && HasNext);
-        CloseCommand = new NativeCommand(_ => Close(), _ => IsOpen);
+        CloseCommand = new NativeCommand(_ => RequestClose(), _ => IsOpen);
+        SelectVisiblePageCommand = new NativeCommand(_ => SelectVisiblePage(), _ => IsOpen && !IsLoading);
+        ClearSelectionCommand = new NativeCommand(_ => ClearSelection(), _ => IsOpen && SelectedCount > 0);
+        ReviewSelectedCommand = new NativeCommand(_ => _ = OpenReviewAsync(),
+            _ => IsOpen && !IsLoading && SelectedCount is >= 1 and <= 100);
+        Review.Committed += receipt =>
+        {
+            // The event is raised only after a verified SQLCipher receipt.
+            // Do not shadow C#'s discard with the receipt parameter.
+            _selection.Clear();
+            ChangedVisible();
+            _ = RefreshAsync();
+        };
     }
 
     public bool IsOpen => _isOpen;
@@ -68,6 +84,9 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
     public ICommand PreviousPageCommand { get; }
     public ICommand NextPageCommand { get; }
     public ICommand CloseCommand { get; }
+    public ICommand SelectVisiblePageCommand { get; }
+    public ICommand ClearSelectionCommand { get; }
+    public ICommand ReviewSelectedCommand { get; }
 
     public void AttachReader(INativeDashboardContinuationReader reader,
         Func<NativeIdentity?> getPrincipal)
@@ -75,6 +94,8 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
         if (_reader is not null) throw new InvalidOperationException("Auto register reader already attached.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _getPrincipal = getPrincipal ?? throw new ArgumentNullException(nameof(getPrincipal));
+        if (reader is INativeAttendanceReviewBackend reviewBackend)
+            Review.AttachBackend(reviewBackend, getPrincipal);
     }
 
     public async Task OpenAsync(DateOnly businessDate, string siteId, CancellationToken ct = default)
@@ -92,8 +113,27 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
         await RefreshAsync(ct);
     }
 
+    public void RequestClose()
+    {
+        if (Review.IsCommitting)
+        {
+            _error = "اعتماد التغيير قيد التنفيذ؛ انتظر نتيجة العملية.";
+            ChangedVisible();
+            return;
+        }
+        if (_selection.Count > 0)
+        {
+            _error = "لديك أفراد محددون دون اعتماد؛ اضغط إلغاء التحديد قبل إغلاق السجل.";
+            ChangedVisible();
+            return;
+        }
+        Close();
+    }
+
     public void Close()
     {
+        Review.ForceCancel();
+        _selection.Clear();
         ++_generation;
         _pending?.Cancel();
         _pending = null;
@@ -148,6 +188,8 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
                 throw new InvalidDataException("Inconsistent SQLCipher auto-prepared register.");
 
             _rows = data.Rows;
+            foreach (NativeAutoRegisterRow person in _rows)
+                person.IsSelected = _selection.ContainsKey(person.PersonId);
             _customColumns = data.CustomColumns;
             _total = data.Total;
             _hasNext = data.HasNext;
@@ -180,6 +222,63 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
         {
             if (version == _generation) _pending = null;
         }
+    }
+
+    public void SetRowSelected(NativeAutoRegisterRow person, bool selected)
+    {
+        if (!_isOpen || _isLoading || Review.IsCommitting ||
+            !Rows.Any(x => x.PersonId == person.PersonId)) return;
+        if (selected && !_selection.ContainsKey(person.PersonId) && _selection.Count >= 100)
+        {
+            person.IsSelected = false;
+            _error = "الحد الأقصى 100 فرد لكل عملية؛ اختر عدداً أقل.";
+            ChangedVisible();
+            return;
+        }
+        if (selected) _selection[person.PersonId] = person;
+        else _selection.Remove(person.PersonId);
+        person.IsSelected = selected;
+        _error = "";
+        if (Review.IsOpen) Review.Cancel(); // changing selection revokes preview
+        ChangedVisible();
+    }
+
+    public void SelectVisiblePage()
+    {
+        if (!_isOpen || _isLoading || Review.IsCommitting) return;
+        var missing = Rows.Where(x => !_selection.ContainsKey(x.PersonId)).ToArray();
+        if (_selection.Count + missing.Length > 100)
+        {
+            _error = "الحد الأقصى 100 فرد لكل عملية؛ اختر عدداً أقل.";
+            ChangedVisible();
+            return;
+        }
+        foreach (var person in missing)
+        {
+            _selection[person.PersonId] = person;
+            person.IsSelected = true;
+        }
+        if (Review.IsOpen) Review.Cancel();
+        _error = "";
+        ChangedVisible();
+    }
+
+    public void ClearSelection()
+    {
+        if (Review.IsCommitting) return;
+        _selection.Clear();
+        foreach (var person in Rows) person.IsSelected = false;
+        if (Review.IsOpen) Review.Cancel();
+        _error = "";
+        ChangedVisible();
+    }
+
+    public Task OpenReviewAsync(CancellationToken ct = default)
+    {
+        if (!_isOpen || _isLoading || _selection.Count is < 1 or > 100 ||
+            _getPrincipal?.Invoke() != _principal)
+            return Task.CompletedTask;
+        return Review.OpenAsync(_businessDate, _siteId, _selection.Values.ToArray(), ct);
     }
 
     public async Task SearchAsync(string term, CancellationToken ct = default)
@@ -226,9 +325,11 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
     {
         Changed(nameof(IsOpen), nameof(IsLoading), nameof(LoadError), nameof(SearchDraft),
             nameof(Title), nameof(PageLabel), nameof(Total), nameof(Page), nameof(HasNext),
-            nameof(Rows), nameof(CustomColumns));
+            nameof(Rows), nameof(CustomColumns),
+            nameof(SelectedCount), nameof(SelectedLabel));
         foreach (ICommand cmd in new[] {
-            SearchCommand, ClearSearchCommand, PreviousPageCommand, NextPageCommand, CloseCommand
+            SearchCommand, ClearSearchCommand, PreviousPageCommand, NextPageCommand, CloseCommand,
+            SelectVisiblePageCommand, ClearSelectionCommand, ReviewSelectedCommand
         })
             if (cmd is NativeCommand native) native.NotifyAvailabilityChanged();
     }

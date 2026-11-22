@@ -42,6 +42,9 @@ public partial class MainWindow : Window
             if (_closeInProgress) return;
             await _viewModel.InitializeAuthenticationAsync(_backend);
             _viewModel.AttachDashboardReader(_backend.CreateDashboardReader());
+            // Start the SAME durable 08:00/catch-up engine as DesktopHost,
+            // only after SQLCipher recovery and native UI initialization.
+            _backend.StartAutomaticAttendanceScheduler();
             _sessionTimer.Start();
         }
         catch
@@ -106,6 +109,24 @@ public partial class MainWindow : Window
                     "تعذر إلغاء الجلسة الحالية. لا يمكن إغلاق النسخة التجريبية قبل تأمين تسجيل الخروج.",
                     "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
+            }
+            // The canonical scheduler may be writing a catch-up ledger:
+            // finish its cancellation/drain BEFORE disposing SQLCipher,
+            // releasing the existing single-instance OS mutex or exiting.
+            if (_backend is not null)
+            {
+                try
+                {
+                    await _backend.DisposeAsync();
+                    _backend = null;
+                }
+                catch
+                {
+                    MessageBox.Show(
+                        "تعذر إيقاف مجدول التحضير التلقائي بأمان. لم يتم تحرير قاعدة البيانات؛ حاول الإغلاق مجددا.",
+                        "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
             }
             _mayClose = true;
             Close();

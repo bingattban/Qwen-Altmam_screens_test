@@ -1,6 +1,7 @@
 using System.IO;
 using AlTamam.Application.Bridge;
 using AlTamam.NativeDesktop.Dashboard;
+using AlTamam.NativeDesktop.Scheduling;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
 using AlTamam.NativePresentation;
@@ -15,16 +16,20 @@ namespace AlTamam.NativeDesktop.Auth;
 /// write the encrypted database simultaneously. This pilot never simulates
 /// authentication, bypasses founding-account policy or stores a password.
 /// </summary>
-public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthenticationBackend, IDisposable
+public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthenticationBackend, IDisposable, IAsyncDisposable
 {
     private readonly AlTamamDbContext _database;
     private readonly BridgeSharedServices _services;
     private bool _disposed;
+    private readonly NativeAutomaticSchedulerGate _autoAttendance;
+    private Task? _shutdownTask;
 
     private NativeSqlCipherAuthenticationBackend(AlTamamDbContext database)
     {
         _database = database;
         _services = new BridgeSharedServices(database);
+        _autoAttendance = new NativeAutomaticSchedulerGate(
+            new NativeDurableAttendanceScheduler(database));
     }
 
     public static async Task<NativeSqlCipherAuthenticationBackend> OpenAsync(
@@ -58,6 +63,15 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             db.Dispose();
             throw;
         }
+    }
+
+    // Startup is called ONLY by the authenticated native host after it has
+    // initialized the UI; the canonical engine handles bounded catch-up and
+    // actual due-time writes, not the dashboard countdown or a login click.
+    public void StartAutomaticAttendanceScheduler()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+        _autoAttendance.StartOnce();
     }
 
     // Reuse one audited DB instance and session resolver for native dashboard.
@@ -114,10 +128,27 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     public Task RevokeSessionAsync(string nonce, CancellationToken ct = default)
         => _services.RevokeSessionAsync(nonce, ct);
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _database.Dispose();
+        _shutdownTask ??= ShutdownCoreAsync();
+        return new ValueTask(_shutdownTask);
     }
+
+    private async Task ShutdownCoreAsync()
+    {
+        _disposed = true;
+        try
+        {
+            // Wait for original scheduler to cancel and drain all pending
+            // SQLCipher operations while the original OS mutex is still held.
+            await _autoAttendance.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _database.Dispose();
+        }
+    }
+
+    // Safety fallback for exceptional UI teardown: preserve stop-before-DB order.
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 }

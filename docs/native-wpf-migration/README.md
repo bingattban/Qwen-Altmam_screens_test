@@ -166,3 +166,76 @@ acceptance jobs with independent SHA256 audit.
 Next: reuse the original durable scheduler safely from the native host
 without a duplicate writer; then migrate full preview/review/confirm
 workflows and verify full 69-route parity before changing customer builds.
+
+
+## Phase 4 — reuse the exact durable scheduler and native approval workflow
+
+The experimental NativeDesktop WPF pilot now compiles **the very same**
+DesktopHost/Scheduling/EightPmSchedulerService.cs source file through an
+MSBuild Compile Link. It is not a copied, simplified or redesigned scheduler.
+The native host starts that original scheduler **once** after database key
+recovery, migrations, live-session cleanup and successful native UI startup.
+Its existing 30-second/one-minute checks, administrator-configured local
+due time, SQLCipher ledger and bounded missed-day catch-up all remain
+authoritative. The original PreviewTokenRetentionService is likewise reused.
+The same exclusive application mutex prevents DesktopHost and native WPF
+from running their SQLCipher schedulers concurrently.
+
+NativeAutomaticSchedulerGate is an independently xUnit-tested lifecycle
+boundary. Window shutdown MUST first revoke the interactive session, then
+await scheduler termination and its pending SQLCipher transaction, then close
+the encrypted DB and finally release the original OS mutex. If startup
+fails, there is no fake successful scheduler or fallback in-memory database.
+
+The native automatic-register modal now supports **selecting individual
+people and selecting up to 100 on the visible page**, retaining selections
+across pages, and a separate native WPF review dialog. A canonical
+GetActiveAttendanceStatuses read supplies actual active status IDs.
+To avoid invalid indefinite leave/permission in this migration slice,
+date-range statuses are deliberately unavailable in the pilot until their
+bounded start/end-date editor is migrated; they remain in the original
+shipped user interface.
+
+For normal same-day revisions the native review backend calls **the existing**
+AttendanceCommitService.PreviewAsync with the real SQLCipher user/role/nonce,
+exact local business date, site, up to 100 immutable PersonIds and mode
+revise. It validates the preview token, every returned PersonId, previous
+status, name, service number and site against the selection. Operators see
+all old statuses in the **separate** review window and explicitly press
+Confirm before any attendance record is changed.
+
+Only that Confirm command invokes AttendanceCommitService.CommitAsync with
+revise=true, the original one-time token and an immutable user-intent
+operationId. Existing canonical services enforce the 20:00 (configurable)
+daily lock, transfer restrictions, optimistic revision checks, active
+statuses, approval-token ownership/expiry, transactional receipts and
+immutable SQLCipher audit records. A lost response does NOT automatically
+repeat the action or mint another ID: a second explicit confirmation reuses
+the same token and operationId, enabling safe receipt replay or an
+authoritative rejection. Logout, changes to the selected people, account
+replacement, modal cancellation and changed date revoke uncommitted
+previews without unapproved writes. The original WebView2 implementation
+remains the shipped customer UI and is untouched.
+
+### Still required before native production replacement
+
+- Native WPF date-range editor (leave/permission start/end) and full
+  approved human-selection discard interaction/focus acceptance
+- 100%, 125% and 150% DPI visual and keyboard audit on real Windows
+- Full functional migration of all 69 routes; the manifest remains
+  not_migrated until proven parity
+- Native WPF implementation of all other original host responsibilities,
+  including automated backup, monthly Excel, restore and settings
+- Independent clean-machine x86/x64 Portable/Installer acceptance before
+  any decision to redirect customer packaging from DesktopHost to native WPF
+
+Tests-first: NativeAutomaticSchedulerPhase4Tests exercise exactly-once
+start, awaited cancellation/drain, disposal without start, blocked restart
+and startup failure. NativeAttendanceReviewPhase4Tests exercise no
+unauthorized read, nonmutating selection, canonical preview, mismatched
+person rejection, human-approved commit, immutable-ID retry after lost
+reply, session swap, cancellation, 100-person bound and stale late preview.
+Both Windows Core and Release execute an additional negative-path Phase 4
+source/XAML contract before compiling and running all existing tests,
+real Windows WebView2 E2E, four original customer package acceptances and
+independent SHA-256 checks.
