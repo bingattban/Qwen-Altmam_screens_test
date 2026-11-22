@@ -23,22 +23,7 @@
         <views:NativeDailyAttendanceView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:MonthlyAttendancePageViewModel}">
-        <StackPanel>
-            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <StackPanel Orientation="Horizontal" IsEnabled="False" Margin="0,0,0,14">
-                <TextBlock Text="الشهر:" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <ComboBox Width="180"><ComboBoxItem Content="اختر الشهر" /></ComboBox>
-            </StackPanel>
-            <DataGrid Height="300" IsReadOnly="True" IsEnabled="False" AutoGenerateColumns="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="الرقم" Width="80" />
-                    <DataGridTextColumn Header="الرقم (ع)" Width="110" />
-                    <DataGridTextColumn Header="الاسم" Width="*" />
-                    <DataGridTextColumn Header="الموقع" Width="*" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </StackPanel>
+        <views:NativeMonthlyAttendanceView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:AdministrationPageViewModel}">
         <StackPanel>
