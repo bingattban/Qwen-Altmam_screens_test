@@ -239,28 +239,3 @@ Both Windows Core and Release execute an additional negative-path Phase 4
 source/XAML contract before compiling and running all existing tests,
 real Windows WebView2 E2E, four original customer package acceptances and
 independent SHA-256 checks.
-
-## Phase 5 — native bounded leave/permission editor (first slice only)
-
-The experimental WPF review now lists active leave and permission statuses, with
-two native RTL WPF DatePicker controls in the original navy/teal design. Dates
-must start on the live business day and cover at most 366 inclusive days. Empty,
-reversed, backdated, future-started and overlong ranges fail before preview.
-
-Changes to either date invalidate prior approval tokens. Date ranges are frozen
-after a possibly successful but unverified commit response, preserving the same
-one-time preview token and immutable operation ID for explicit operator retry.
-The native UI never writes SQL directly. The original AttendanceDateRangePolicy
-validates requests and the canonical AttendanceCommitService handles SQLCipher,
-optimistic revision, expiry, closed-day cutoff, audit and idempotency. Native
-preview verification additionally checks the exact server-returned start/end,
-person IDs, status and local business date before allowing confirmation.
-
-NativeAttendanceDateRangePhase5Tests were committed first. Both Windows Core
-and Release enforce build/test-native-phase5-bounded-ranges-contract.py before
-expensive Windows tests, and customer x86/x64 Portable and Installer still
-package the original DesktopHost/WebView2 rather than this WPF pilot.
-
-**Remaining:** full daily attendance native grid and filters, broader 69-route
-parity, clean-machine WPF testing at 100%, 125%, 150% DPI, and independent
-hardware acceptance before redirecting any customer builds.

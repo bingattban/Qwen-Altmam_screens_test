@@ -14,7 +14,6 @@
         </Style>
     </UserControl.Style>
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
         <Style x:Key="NativeApprove" TargetType="Button">
             <Setter Property="MinHeight" Value="40"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -70,39 +69,44 @@
                             <ComboBox MinWidth="240" Height="38" VerticalAlignment="Center"
                                       ItemsSource="{Binding StatusChoices}"
                                       DisplayMemberPath="DisplayName" SelectedValuePath="StatusId"
-                                      IsEnabled="{Binding CanEditSelection}"
                                       SelectedValue="{Binding SelectedStatusId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding CanEditSelection}"
                                       AutomationProperties.Name="اختر الحالة الجديدة"/>
                             <Button Content="متابعة إلى المعاينة" Command="{Binding PreviewCommand}"
                                     Style="{StaticResource NativeApprove}"/>
                         </WrapPanel>
-                        <!-- Dates never cause a write; changing either revokes the prior signed preview. -->
-                        <StackPanel Visibility="{Binding RequiresDateRange, Converter={StaticResource VisibleWhenTrue}}"
-                                    Margin="0,9,0,0">
+                        <StackPanel Margin="0,9,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding RequiresDateRange}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
                             <WrapPanel>
                                 <StackPanel Margin="0,0,0,6">
-                                    <TextBlock Text="تاريخ بداية الإجازة أو الإذن" FontWeight="SemiBold"
+                                    <TextBlock Text="بداية الإجازة أو الإذن" FontWeight="SemiBold"
                                                Foreground="#0F2942" Margin="0,0,0,4"/>
-                                    <DatePicker Width="205" Height="38"
-                                                IsEnabled="{Binding CanEditSelection}"
+                                    <DatePicker Width="190" Height="36" Padding="4"
                                                 SelectedDate="{Binding RangeStartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                AutomationProperties.Name="تاريخ بداية المدة"/>
+                                                IsEnabled="{Binding CanEditRange}"
+                                                AutomationProperties.Name="تاريخ بداية الإجازة أو الإذن"/>
                                 </StackPanel>
-                                <StackPanel Margin="14,0,0,6">
-                                    <TextBlock Text="تاريخ نهاية الإجازة أو الإذن" FontWeight="SemiBold"
+                                <StackPanel Margin="12,0,0,6">
+                                    <TextBlock Text="نهاية الإجازة أو الإذن" FontWeight="SemiBold"
                                                Foreground="#0F2942" Margin="0,0,0,4"/>
-                                    <DatePicker Width="205" Height="38"
-                                                IsEnabled="{Binding CanEditSelection}"
+                                    <DatePicker Width="190" Height="36" Padding="4"
                                                 SelectedDate="{Binding RangeEndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                AutomationProperties.Name="تاريخ نهاية المدة"/>
+                                                IsEnabled="{Binding CanEditRange}"
+                                                AutomationProperties.Name="تاريخ نهاية الإجازة أو الإذن"/>
                                 </StackPanel>
                             </WrapPanel>
-                            <TextBlock Text="تبدأ المدة من يوم التمام الحالي، ويجب تحديد تاريخ النهاية (بحد أقصى 366 يوما). راجع التاريخين في المعاينة قبل التأكيد."
+                            <TextBlock Text="تبدأ المدة من تاريخ تحضير اليوم، ولا تزيد على 366 يوما. لا يتم الحفظ إلا بعد المعاينة والتأكيد."
                                        Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <TextBlock Text="لا يُحفظ أي تعديل قبل المعاينة والموافقة الصريحة. تبقى صلاحيات الإغلاق وسجل العمليات من الخدمة الأصلية."
-                                   Foreground="#64748B" FontSize="12" TextWrapping="Wrap"
-                                   Margin="0,8,0,0"/>
                     </StackPanel>
                 </Border>
                 <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" FontSize="14"
