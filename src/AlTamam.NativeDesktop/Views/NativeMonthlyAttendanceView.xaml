@@ -82,7 +82,7 @@
                   SelectionMode="Single" RowHeight="35" ColumnHeaderHeight="38"
                   AlternatingRowBackground="#F8FAFC" GridLinesVisibility="Horizontal"
                   BorderThickness="1" BorderBrush="#CBD5E1" MinHeight="190"
-                  HorizontalScrollBarVisibility="Auto">
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="62"/>
                 <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="95"/>

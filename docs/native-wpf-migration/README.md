@@ -240,3 +240,33 @@ source/XAML contract before compiling and running all existing tests,
 real Windows WebView2 E2E, four original customer package acceptances and
 independent SHA-256 checks.
 \n## Phase 5 — reconciliation of overlapping PR #12 and PR #13\n\nPR #13 was merged first after both Windows Core and Windows Release passed on\nits exact source SHA, including all four original DesktopHost packages and\nindependent SHA-256 audit. PR #12 independently passed the same gates but\nproposed overlapping native date-picker implementation and duplicate preview\ncontracts. The safe reconciliation keeps the tested PR #13 UI and backend as\nthe **single** implementation, without duplicating the date policy or any\nSQLCipher writer. The additional PR #12 guarantees are retained as targeted\nregression tests, an explicit Phase 5 fail-closed source/XAML contract in\n**both** Windows workflows, updated native register guidance, and this\ndocumentation. PR #13's protection against reopening an unresolved approved\noperation remains in force. The original Windows customer packages are still\nWebView2/DesktopHost until native production parity and real-machine UAT.\n\n## Phase 6 — daily attendance, slice 1: native roster read and filters\n\nThe previous disabled daily-attendance placeholder is replaced with a real\nWPF RTL read-only roster connected to the already-verified SQLCipher\nNativeSqlCipherDashboardReader. Its canonical DailyMonthlyReadService\nDailyRosterAsync and DashboardSummaryAsync handle pagination, site and\nattendance-status filters, unprepared/automatic/transfer status filters,\nsearch by name or service number and configured custom columns. The native\nrank column shows **only** a real visible custom field captioned الرتبة/رتبة;\nif the authoritative schema has no such field the cell remains blank rather\nthan inventing personnel ranks. Remaining custom fields are appended once.\n\nSecurity: 100 rows/page, read-only DataGrid; original native nonce and role\nverified before and after SQLCipher reads; changed session and logout wipe\npersonnel immediately; stale/in-flight async results cannot repaint; invalid\nfilters and malformed response echoes fail closed. Daily navigation triggers\na real read, not a scheduler run or hidden write. Six test-first xUnit cases\nand the additional negative-path Phase 6 contract run in both Windows CI\nworkflows. No new SQL, tables, migrations, alternative scheduler or token.\n\n**Still pending for this route:** native explicit initial attendance or\nrevisions for selected people via audited preview/confirm, allowed-status and\nclosed-day controls, operator receipts and full original-route parity. The\ncustomer x86/x64 Portable/Installer remain original DesktopHost/WebView2.\n\n**The 69-route migration matrix remains NOT MIGRATED** until whole route\nbehavior and clean-machine acceptance are independently verified.\n
+
+## Phase 7 — native monthly attendance, read-only archive pilot
+
+The previously disabled monthly preview is replaced with a genuine RTL WPF
+month-by-month **read-only** grid. This view reuses the existing SQLCipher
+`DailyMonthlyReadService.ArchivePeriodsAsync` and `MonthlyGridAsync` services,
+with server-authorized session checks before and after each read. The canonical
+history provides date-indexed attendance symbols, labels, saved identity/site
+snapshots and movement/separation/return notes; missing dates remain empty.
+The grid allows archived periods only (plus the current month), historical
+name/service number search, site filtering and 100-person pages. Native
+columns display الرقم، الرقم (ع)، الرتبة، الاسم، الموقع followed by the
+numbered days and extra configured custom columns. Visible rank and custom
+fields reflect **current custom-field values** because the authoritative
+projection currently does not store dated custom-field snapshots; they must
+not be confused with archived names and attendance.
+
+Three safety boundaries remain unchanged: the native SQLCipher session and
+role policy, immutable PersonId for historical identity, and the original
+audited attendance writer. No new SQL or schema, no synthetic statuses,
+no monthly data mutations, no export route or claiming 69-route parity.
+Six test-first xUnit tests plus a negative-path Phase 7 contract run in
+both Windows Core and Release before packaging. Physical desktop keyboard,
+DPI 100/125/150%, installer and archive acceptance are still required
+before the pilot can be considered production-ready.
+
+**Still to implement in the monthly route:** approved monthly cell details
+interaction, archive-close/reopen and Excel export where permitted by
+the original functional routes. All four existing release packages remain
+DesktopHost/WebView2 until verified native parity.
