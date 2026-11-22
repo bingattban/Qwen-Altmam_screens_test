@@ -13,7 +13,8 @@ public interface INativeAttendanceReviewBackend
     Task<NativeAttendanceRevisionPreview> PreviewAsync(
         NativeIdentity actor, DateOnly date, string site,
         IReadOnlyList<string> personIds, string statusId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        NativeAttendanceDateRange? range = null);
 
     Task<NativeAttendanceCommitReceipt> CommitAsync(
         NativeIdentity actor, string previewToken, string operationId,
@@ -28,6 +29,7 @@ public sealed record NativeAttendancePreviewPerson(
 
 public sealed record NativeAttendanceRevisionPreview(
     string PreviewToken, DateOnly BusinessDate, string TargetStatusId,
-    string TargetStatusName, IReadOnlyList<NativeAttendancePreviewPerson> Persons);
+    string TargetStatusName, IReadOnlyList<NativeAttendancePreviewPerson> Persons,
+    string? RangeStartDate = null, string? RangeEndDate = null);
 
 public sealed record NativeAttendanceCommitReceipt(int Count, string AuditEventId);
