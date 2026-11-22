@@ -51,6 +51,9 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         get => _selectedStatusId;
         set => ChooseStatus(value);
     }
+    public string ConfirmButtonText => _error.Contains("رد الاعتماد", StringComparison.Ordinal) ||
+        _error.Contains("انقطع طلب الاعتماد", StringComparison.Ordinal)
+        ? "إعادة تأكيد نفس العملية" : "تأكيد واعتماد التغييرات";
     public string TargetStatusName => _preview?.TargetStatusName ?? "";
     public string PreviewMessage => _preview is null ? "" :
         $"ستُغيّر حالة {_preview.Persons.Count} فرداً إلى {_preview.TargetStatusName}. راجع الأسماء والأرقام والمواقع والحالة السابقة قبل الاعتماد.";
@@ -289,7 +292,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             nameof(IsCompleted), nameof(HasPreview), nameof(ErrorMessage),
             nameof(AuditEventId), nameof(CommittedCount), nameof(SelectedCount),
             nameof(SelectedStatusId), nameof(TargetStatusName),
-            nameof(PreviewMessage), nameof(StatusChoices), nameof(PreviewPersons)
+            nameof(PreviewMessage), nameof(StatusChoices), nameof(PreviewPersons),
+            nameof(ConfirmButtonText)
         })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         foreach (ICommand cmd in new[] { PreviewCommand, ConfirmCommand, CancelCommand })
