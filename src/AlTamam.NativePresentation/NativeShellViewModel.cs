@@ -47,6 +47,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                 {
                     if (screen != NativeScreen.Dashboard)
                         Dashboard.AutoRegister.Close();
+                    if (screen != NativeScreen.DailyAttendance)
+                        DailyAttendance.Review.Cancel();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();
@@ -95,7 +97,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
 
     private bool CanNavigate(NativeScreen screen)
         => IsAuthenticated && _pages.ContainsKey(screen) &&
-           _active is { } identity && RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role);
+           _active is { } identity && RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role) &&
+           // Never hide a live or ambiguous audited commit by leaving its page.
+           (screen == NativeScreen.DailyAttendance ||
+            (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit));
 
     public async Task InitializeAuthenticationAsync(
         INativeAuthenticationBackend backend, CancellationToken ct = default)
