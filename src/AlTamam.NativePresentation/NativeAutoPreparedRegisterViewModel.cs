@@ -47,10 +47,10 @@ public sealed class NativeAutoPreparedRegisterViewModel : INotifyPropertyChanged
         ClearSelectionCommand = new NativeCommand(_ => ClearSelection(), _ => IsOpen && SelectedCount > 0);
         ReviewSelectedCommand = new NativeCommand(_ => _ = OpenReviewAsync(),
             _ => IsOpen && !IsLoading && SelectedCount is >= 1 and <= 100);
-        Review.Committed += _ =>
+        Review.Committed += receipt =>
         {
-            // On a verified receipt, the original server has already written
-            // one atomic audited change. Refresh only committed SQLCipher rows.
+            // The event is raised only after a verified SQLCipher receipt.
+            // Do not shadow C#'s discard with the receipt parameter.
             _selection.Clear();
             ChangedVisible();
             _ = RefreshAsync();
