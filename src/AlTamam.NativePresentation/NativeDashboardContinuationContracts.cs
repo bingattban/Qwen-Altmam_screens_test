@@ -26,9 +26,23 @@ public sealed record NativeAutoRegisterFilter(
 public sealed record NativeAutoRegisterRow(
     string PersonId, string ServiceNumberA, string Name, string SiteName,
     string SavedBusinessDate, string AutoSource, string CommittedAtUtc,
-    string StatusName, IReadOnlyList<string> CustomCells)
+    string StatusName, IReadOnlyList<string> CustomCells) : System.ComponentModel.INotifyPropertyChanged
 {
     public int RowNumber { get; init; }
+    public string SavedStatusId { get; init; } = "";
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this,
+                new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed record NativeAutoRegisterPage(
