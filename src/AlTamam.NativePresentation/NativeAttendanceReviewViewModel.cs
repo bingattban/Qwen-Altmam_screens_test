@@ -23,7 +23,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     private string _selectedStatusId = "";
     private string _operationId = "";
     private string _error = "";
-    private bool _open, _busy, _committing, _completed;
+    private bool _open, _busy, _committing, _completed, _unverifiedCommit;
     private int _generation, _committedCount;
     private string _auditEventId = "";
     private CancellationTokenSource? _pending;
@@ -34,13 +34,15 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             _ => IsOpen && !IsBusy && StatusChoices.Any(x => x.StatusId == SelectedStatusId));
         ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(),
             _ => IsOpen && HasPreview && !IsBusy && !IsCompleted);
-        CancelCommand = new NativeCommand(_ => Cancel(), _ => IsOpen && !IsCommitting);
+        CancelCommand = new NativeCommand(_ => Cancel(),
+            _ => IsOpen && !IsCommitting && !HasUnverifiedCommit);
     }
 
     public bool IsOpen => _open;
     public bool IsBusy => _busy;
     public bool IsCommitting => _committing;
     public bool IsCompleted => _completed;
+    public bool HasUnverifiedCommit => _unverifiedCommit;
     public bool HasPreview => _preview is not null;
     public string ErrorMessage => _error;
     public string AuditEventId => _auditEventId;
@@ -124,7 +126,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public void ChooseStatus(string? id)
     {
-        if (!_open || _busy || _committing) return;
+        if (!_open || _busy || _committing || _unverifiedCommit) return;
         string selected = id ?? "";
         if (_selectedStatusId == selected) return;
         _selectedStatusId = _choices.Any(x => x.StatusId == selected) ? selected : "";
@@ -137,7 +139,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public async Task PreviewAsync(CancellationToken ct = default)
     {
-        if (!_open || _busy || _backend is null || _actor is not { } actor ||
+        if (!_open || _busy || _unverifiedCommit || _backend is null ||
+            _actor is not { } actor ||
             !_choices.Any(x => x.StatusId == _selectedStatusId)) return;
         if (!HasValidActor(actor)) { ForceCancel(); return; }
         InvalidatePreview();
@@ -211,6 +214,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
                 string.IsNullOrWhiteSpace(receipt.AuditEventId))
                 throw new InvalidDataException("Could not verify complete attendance commit receipt.");
             _completed = true;
+            _unverifiedCommit = false;
             _committedCount = receipt.Count;
             _auditEventId = receipt.AuditEventId;
             _preview = null;
@@ -220,12 +224,18 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             if (version == _generation)
+            {
+                _unverifiedCommit = true;
                 _error = "انقطع طلب الاعتماد، وقد تكون العملية نُفذت؛ راجع السجل. إعادة التأكيد ستستخدم نفس معرف العملية.";
+            }
         }
         catch
         {
             if (version == _generation)
+            {
+                _unverifiedCommit = true;
                 _error = "رد الاعتماد غير مؤكد، وقد تكون العملية حُفظت. لا تبدأ معاينة جديدة؛ أعد تأكيد نفس العملية فقط بعد مراجعة السجل.";
+            }
         }
         finally
         {
@@ -240,6 +250,12 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public void Cancel()
     {
+        if (_unverifiedCommit)
+        {
+            _error = "عملية الاعتماد غير مؤكدة؛ لا يمكن إلغاء المعاينة أو إصدار عملية جديدة. تحقق من السجل أو أعد تأكيد نفس العملية.";
+            Update();
+            return;
+        }
         if (_committing)
         {
             _error = "يوجد اعتماد جار؛ لا يمكن إلغاء نافذة المراجعة حتى تظهر النتيجة.";
@@ -267,6 +283,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         _busy = false;
         _open = false;
         _completed = false;
+        _unverifiedCommit = false;
         _committedCount = 0;
         _auditEventId = "";
         Update();
@@ -289,7 +306,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     {
         foreach (string name in new[] {
             nameof(IsOpen), nameof(IsBusy), nameof(IsCommitting),
-            nameof(IsCompleted), nameof(HasPreview), nameof(ErrorMessage),
+            nameof(IsCompleted), nameof(HasUnverifiedCommit),
+            nameof(HasPreview), nameof(ErrorMessage),
             nameof(AuditEventId), nameof(CommittedCount), nameof(SelectedCount),
             nameof(SelectedStatusId), nameof(TargetStatusName),
             nameof(PreviewMessage), nameof(StatusChoices), nameof(PreviewPersons),
