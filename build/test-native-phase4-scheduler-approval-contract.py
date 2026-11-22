@@ -73,7 +73,10 @@ def problems(contents):
                   "CommitAsync(new JsonObject", '"previewToken"','"operationId"',
                   "revise: true", "MutationIdempotency", "ResolveSessionAsync(expected.SessionNonce",
                   "ActionManifest.All.Single", "principal.SessionRevocation",
-                  "AttendanceDateRangePolicy.RequiresRange"):
+                  "AttendanceDateRangePolicy.TryParse",
+                  "NativeAttendanceDateRange.TryCreate",
+                  "actualStart != validatedRange?.StartDate",
+                  "actualEnd != validatedRange?.EndDate"):
         # The idempotency implementation is in canonical commit service.
         need("commit" if token=="MutationIdempotency" else "review_backend",token)
     for token in ("_operationId = Guid.NewGuid().ToString(\"N\")",
@@ -82,7 +85,9 @@ def problems(contents):
                   "returned.SequenceEqual(_personIds", "ForceCancel()", "IsCommitting"):
         need("review_vm",token)
     for token in ("INativeAttendanceReviewBackend", "ReadChoicesAsync(",
-                  "_review.PreviewAsync(", "_review.CommitAsync(", "SavedStatusId"):
+                  "_review.PreviewAsync(", "_review.CommitAsync(", "SavedStatusId",
+                  "NativeAttendanceDateRange? range = null",
+                  "_review.PreviewAsync(actor, date, site, people, statusId, ct, range)"):
         need("reader",token)
     for token in ("_selection.Count >= 100", "SelectVisiblePage()", "ClearSelection()",
                   "OpenReviewAsync(", "Review.Committed", "Review.ForceCancel()",
@@ -122,6 +127,10 @@ if __name__=="__main__":
         ("host","_backend.StartAutomaticAttendanceScheduler();"),
         ("review_backend","principal.SessionRevocation"),
         ("review_backend",'"operationId"'),
+        ("review_backend","AttendanceDateRangePolicy.TryParse"),
+        ("review_backend","NativeAttendanceDateRange.TryCreate"),
+        ("review_backend","actualStart != validatedRange?.StartDate"),
+        ("reader","_review.PreviewAsync(actor, date, site, people, statusId, ct, range)"),
         ("review_vm","draft.PreviewToken, _operationId"),
         ("register_vm","Review.ForceCancel()"),
         ("review_xaml","ConfirmCommand"),

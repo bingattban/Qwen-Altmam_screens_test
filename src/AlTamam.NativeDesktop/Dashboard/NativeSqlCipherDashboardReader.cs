@@ -26,8 +26,9 @@ public sealed class NativeSqlCipherDashboardReader(
 
     public Task<NativeAttendanceRevisionPreview> PreviewAsync(
         NativeIdentity actor, DateOnly date, string site,
-        IReadOnlyList<string> people, string statusId, CancellationToken ct = default) =>
-        _review.PreviewAsync(actor, date, site, people, statusId, ct);
+        IReadOnlyList<string> people, string statusId, CancellationToken ct = default,
+        NativeAttendanceDateRange? range = null) =>
+        _review.PreviewAsync(actor, date, site, people, statusId, ct, range);
 
     public Task<NativeAttendanceCommitReceipt> CommitAsync(
         NativeIdentity actor, string previewToken, string operationId,
