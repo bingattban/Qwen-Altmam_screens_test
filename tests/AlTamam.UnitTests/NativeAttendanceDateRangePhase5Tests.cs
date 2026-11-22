@@ -18,7 +18,7 @@ public sealed class NativeAttendanceDateRangePhase5Tests
         Assert.False(NativeAttendanceDateRange.TryCreate(status, Today, "2026-11-22", "", out _, out _));
         Assert.False(NativeAttendanceDateRange.TryCreate(status, Today, "2026-11-22", "2026-11-21", out _, out _));
         Assert.False(NativeAttendanceDateRange.TryCreate(status, Today, "2026-11-23", "2026-11-24", out _, out _));
-        Assert.False(NativeAttendanceDateRange.TryCreate(status, Today, "2026-11-22", "2027-11-24", out _, out _));
+        Assert.False(NativeAttendanceDateRange.TryCreate(status, Today, "2026-11-22", "2027-11-23", out _, out _));
     }
 
     [Theory]
@@ -57,7 +57,7 @@ public sealed class NativeAttendanceDateRangePhase5Tests
     public void Max_range_is_366_inclusive_days()
     {
         Assert.True(NativeAttendanceDateRange.TryCreate("STS-LEAVE", Today,
-            "2026-11-22", "2027-11-23", out _, out _));
+            "2026-11-22", "2027-11-22", out _, out _));
         Assert.False(NativeAttendanceDateRange.TryCreate("STS-LEAVE", Today,
             "2026-11-22", "2027-11-24", out _, out _));
     }
