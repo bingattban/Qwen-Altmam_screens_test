@@ -16,7 +16,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
-      INativeMonthlyAttendanceReader
+      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -142,6 +142,89 @@ public sealed class NativeSqlCipherDashboardReader(
             filter.Period, filter.SiteId, filter.Page, days,
             RequiredNumber(data, "total"), RequiredBoolean(data, "hasNext"),
             columns, rows);
+    }
+
+
+    /// <summary>
+    /// Native monthly cell details use the ORIGINAL historical SQLCipher
+    /// service. No independent historical SQL or guessed attendance, and
+    /// every response is bound to the verified session, PersonId and date.
+    /// </summary>
+    public async Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
+        NativeIdentity actor, NativeMonthlyCellRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.PersonId) ||
+            request.PersonId.Length > 128 || request.SiteId is null ||
+            request.BusinessDate.Year is < 1900 or > 2200 ||
+            request.BusinessDate > DateOnly.FromDateTime(DateTime.Now))
+            throw new InvalidDataException("Invalid native monthly cell request.");
+
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new DailyMonthlyReadService(database)
+            .MonthlyCellDetailsAsync(new JsonObject
+            {
+                ["personId"] = request.PersonId,
+                ["businessDate"] = request.BusinessDate.ToString("yyyy-MM-dd",
+                    CultureInfo.InvariantCulture),
+                ["siteId"] = request.SiteId
+            }, ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+
+        JsonObject data = RequiredObject(response, "GetMonthlyCellDetails");
+        if (RequiredText(data, "personId") != request.PersonId ||
+            RequiredText(data, "businessDate") != request.BusinessDate.ToString(
+                "yyyy-MM-dd", CultureInfo.InvariantCulture))
+            throw new InvalidDataException("Canonical historical detail identity/date mismatch.");
+
+        JsonObject? attendance = data["attendance"] is null ? null :
+            RequireObject(data["attendance"]);
+        JsonObject? movement = data["movement"] is null ? null :
+            RequireObject(data["movement"]);
+        JsonArray revisions = RequiredArray(data, "revisions");
+        if (revisions.Count > 100)
+            throw new InvalidDataException("Excessive historical attendance revisions.");
+        string status = attendance is null ? "لا توجد حالة حضور مسجلة" :
+            RequiredText(attendance, "statusName");
+        string symbol = attendance is null ? "" : RequiredText(attendance, "symbol");
+        string source = attendance is null ? "" : RequiredText(attendance, "source");
+        string attendanceSite = attendance is null ? "" : RequiredText(attendance, "siteName");
+        string committed = attendance is null ? "" : RequiredText(attendance, "committedAtUtc");
+        string movementSummary = "لا توجد حركة مسجلة في هذا اليوم";
+        string movementReason = "";
+        if (movement is not null)
+        {
+            int kind = checked((int)RequiredNumber(movement, "type"));
+            string label = kind switch
+            {
+                1 => "نقل داخلي", 2 => "نقل خارجي",
+                3 => "فصل", 4 => "عودة للقوة",
+                _ => throw new InvalidDataException("Unknown canonical movement type.")
+            };
+            string from = RequiredText(movement, "sourceSiteName");
+            string to = movement["destinationSiteName"]?.GetValue<string>() ??
+                        movement["destinationExternalName"]?.GetValue<string>() ?? "";
+            movementSummary = to.Length > 0 ? $"{label} من {from} إلى {to}" :
+                $"{label} من {from}";
+            movementReason = movement["separationReason"]?.GetValue<string>() ?? "";
+        }
+        var history = revisions.Select(node =>
+        {
+            JsonObject revision = RequireObject(node);
+            return new NativeMonthlyRevisionDetail(
+                RequiredText(revision, "beforeStatus"),
+                RequiredText(revision, "afterStatus"),
+                RequiredText(revision, "reason"),
+                RequiredText(revision, "actorUserId"),
+                RequiredText(revision, "executedAtUtc"),
+                RequiredText(revision, "authorizationMethod"));
+        }).ToArray();
+
+        return new NativeMonthlyCellDetails(
+            RequiredText(data, "personId"), request.BusinessDate,
+            RequiredText(data, "personName"), RequiredText(data, "serviceNumberA"),
+            RequiredText(data, "siteName"), status, symbol, attendanceSite,
+            source, committed, movementSummary, movementReason, history);
     }
 
     public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
