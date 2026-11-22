@@ -13,6 +13,12 @@ namespace AlTamam.NativePresentation;
 public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotifyPropertyChanged
 {
     private INativeMonthlyAttendanceReader? _reader;
+    private INativeMonthlyCellDetailsReader? _detailsReader;
+    private CancellationTokenSource? _detailPending;
+    private int _detailGeneration;
+    private bool _detailOpen, _detailLoading;
+    private string _detailError = "";
+    private NativeMonthlyCellDetails? _selectedDetail;
     private Func<NativeIdentity?>? _liveActor;
     private NativeIdentity? _boundActor;
     private CancellationTokenSource? _pending;
@@ -38,6 +44,8 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             _ => CanRead && !_loading && _page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
             _ => CanRead && !_loading && _hasNext);
+        CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
+            _ => IsCellDetailsOpen);
     }
 
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
@@ -48,6 +56,12 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             ? "عرض أرشيف الشهر الفعلي: خلايا الحضور والتنقلات من سجلاتها التاريخية. الرتبة والحقول الإضافية تعرض القيم الحالية فقط."
             : "لم يتم تحميل أرشيف الشهر بعد؛ الشاشة للقراءة فقط ولا تنشئ أو تغير الحضور من هذا الجدول.";
     public bool IsLoading => _loading;
+    public bool IsCellDetailsOpen => _detailOpen;
+    public bool IsCellDetailsLoading => _detailLoading;
+    public string CellDetailsError => _detailError;
+    public NativeMonthlyCellDetails? SelectedCellDetails => _selectedDetail;
+    public string SelectedCellDateLabel =>
+        _selectedDetail?.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
     public string LoadError => _error;
     public string RankColumnLabel => "الرتبة";
     public string SelectedPeriod => _period;
@@ -76,6 +90,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public ICommand ClearSearchCommand { get; }
     public ICommand PreviousPageCommand { get; }
     public ICommand NextPageCommand { get; }
+    public ICommand CloseCellDetailsCommand { get; }
 
     private static string CurrentMonth() =>
         DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM", CultureInfo.InvariantCulture);
@@ -92,7 +107,99 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     {
         if (_reader is not null) throw new InvalidOperationException("Monthly reader already attached.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _detailsReader = reader as INativeMonthlyCellDetailsReader;
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
+    }
+
+    public async Task OpenCellDetailsAsync(NativeMonthlyDisplayRow? row, int day,
+        CancellationToken ct = default)
+    {
+        if (!_connected || _loading || _detailOpen ||
+            _detailsReader is null || row is null ||
+            !_rows.Any(item => ReferenceEquals(item, row)) ||
+            day < 1 || day > _days.Count ||
+            !DateOnly.TryParseExact(_period + "-01", "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var firstDate))
+            return;
+
+        NativeIdentity? actor = _liveActor?.Invoke();
+        if (actor is null || actor != _boundActor)
+        {
+            Clear(); // do not expose stale monthly personnel across accounts
+            return;
+        }
+        DateOnly date = firstDate.AddDays(day - 1);
+        if (date > DateOnly.FromDateTime(DateTime.Now)) return;
+
+        int version = ++_detailGeneration;
+        _detailPending?.Cancel();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _detailPending = linked;
+        _detailOpen = true;
+        _detailLoading = true;
+        _detailError = "";
+        _selectedDetail = null;
+        NotifyDetail();
+        try
+        {
+            NativeMonthlyCellDetails result = await _detailsReader.ReadCellDetailsAsync(
+                actor, new NativeMonthlyCellRequest(row.PersonId, date, _site),
+                linked.Token);
+            if (version != _detailGeneration || linked.IsCancellationRequested) return;
+            if (_liveActor?.Invoke() != actor ||
+                !ReferenceEquals(_boundActor, actor) &&
+                _boundActor != actor)
+            {
+                Clear();
+                return;
+            }
+            if (!_connected || !_rows.Any(x => ReferenceEquals(x, row)) ||
+                result.PersonId != row.PersonId || result.BusinessDate != date ||
+                string.IsNullOrWhiteSpace(result.PersonName) ||
+                string.IsNullOrWhiteSpace(result.ServiceNumberA) ||
+                string.IsNullOrWhiteSpace(result.SiteName) ||
+                result.Revisions.Count > 100)
+                throw new InvalidDataException("Canonical monthly historical detail mismatch.");
+            _selectedDetail = result;
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
+        catch
+        {
+            if (version == _detailGeneration)
+            {
+                _selectedDetail = null;
+                _detailError = "تعذرت قراءة تفاصيل اليوم المعتمدة؛ لم تُعرض بيانات قديمة أو تقديرية.";
+            }
+        }
+        finally
+        {
+            if (version == _detailGeneration)
+            {
+                _detailPending = null;
+                _detailLoading = false;
+                NotifyDetail();
+            }
+        }
+    }
+
+    public void CloseCellDetails()
+    {
+        ++_detailGeneration;
+        _detailPending?.Cancel();
+        _detailPending = null;
+        _selectedDetail = null;
+        _detailError = "";
+        _detailOpen = false;
+        _detailLoading = false;
+        NotifyDetail();
+    }
+
+    private void NotifyDetail()
+    {
+        Changed(nameof(IsCellDetailsOpen), nameof(IsCellDetailsLoading),
+            nameof(CellDetailsError), nameof(SelectedCellDetails),
+            nameof(SelectedCellDateLabel));
+        ((NativeCommand)CloseCellDetailsCommand).NotifyAvailabilityChanged();
     }
 
     public void Clear()
@@ -117,6 +224,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     private void HideRows(string message)
     {
+        CloseCellDetails();
         _connected = false;
         _loading = false;
         _error = message;
