@@ -109,8 +109,16 @@ public sealed class NativeAttendanceReviewPhase4Tests
         await vm.ConfirmAsync();
         Assert.Single(fake.CommitCalls);
         Assert.True(vm.HasPreview);
+        Assert.True(vm.HasUnverifiedCommit);
         Assert.False(vm.IsCompleted);
         Assert.NotEmpty(vm.ErrorMessage);
+        // An ambiguous approved write may already have committed: never
+        // silently mint a new one-time token or new intent identifier.
+        await vm.PreviewAsync();
+        Assert.Single(fake.PreviewCalls);
+        vm.Cancel();
+        Assert.True(vm.IsOpen);
+        Assert.True(vm.HasUnverifiedCommit);
         await vm.ConfirmAsync(); // separate explicit operator action
         Assert.Equal(2, fake.CommitCalls.Count);
         Assert.Equal(fake.CommitCalls[0].OperationId, fake.CommitCalls[1].OperationId);
