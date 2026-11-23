@@ -64,6 +64,8 @@
                     <TextBlock Text="{Binding AppliedDateRangeLabel}" FontWeight="SemiBold"
                                Foreground="#0F2942" Margin="0,0,0,5"
                                AutomationProperties.Name="الفترة المطبقة على النتائج التاريخية"/>
+                    <TextBlock Text="تنبيه: تصفية الفترة تشمل التحضير والتنقلات والتصحيحات وسجل العمليات؛ يبقى تاريخ تغيير هوية الفرد وانتسابه للمواقع كاملا للمراجعة."
+                               TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
                                FontWeight="SemiBold" TextWrapping="Wrap"
                                AutomationProperties.LiveSetting="Polite"/>
