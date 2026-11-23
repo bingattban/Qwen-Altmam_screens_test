@@ -19,13 +19,184 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8 status definitions: original SQLCipher read and audited
+    // AdminConfigurationService create/update/deactivate; never write SQL here.
+    public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(
+        NativeIdentity actor, CancellationToken ct = default)
+    {
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await services.ListActiveStatusesAsync(ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var rows = RequiredArray(response, "GetActiveAttendanceStatuses(native)")
+            .Select(node =>
+            {
+                JsonObject status = RequireObject(node);
+                if (!RequiredBoolean(status, "active"))
+                    throw new InvalidDataException("Inactive status in canonical active list.");
+                var row = new NativeStatusRow(
+                    RequiredText(status, "statusId"),
+                    RequiredText(status, "displayName"),
+                    RequiredText(status, "shortSymbol"),
+                    RequiredText(status, "color"),
+                    RequiredNumber(status, "version"),
+                    RequiredNumber(status, "todayCount"));
+                ValidateStatusRow(row);
+                return row;
+            }).ToArray();
+        if (rows.Length > 10000 ||
+            rows.Select(row => row.StatusId)
+                .Distinct(StringComparer.Ordinal).Count() != rows.Length)
+            throw new InvalidDataException("Duplicated canonical attendance status ID.");
+        return rows;
+    }
+
+    public async Task<NativeStatusMutationReceipt> CreateStatusAsync(
+        NativeIdentity actor, string name, string symbol, string color,
+        string operationId, CancellationToken ct = default)
+    {
+        ValidateStatusEdit(name, symbol, color, operationId);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        BridgeResponse response = await new AdminConfigurationService(database)
+            .CreateStatusAsync(new JsonObject
+            {
+                ["name"] = name, ["symbol"] = symbol, ["color"] = color,
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "CreateAttendanceStatus(native)");
+        string id = RequiredText(data, "statusId");
+        if (id.Length is < 5 or > 128 ||
+            !id.StartsWith("STS-", StringComparison.Ordinal) ||
+            RequiredNumber(data, "rowVersion") != 1 ||
+            string.IsNullOrWhiteSpace(RequiredText(data, "auditEventId")))
+            throw new InvalidDataException("Invalid audited new status receipt.");
+        return new NativeStatusMutationReceipt(id, name, symbol, color,
+            1, true, 0);
+    }
+
+    public async Task<NativeStatusMutationReceipt> UpdateStatusAsync(
+        NativeIdentity actor, string statusId, long revision,
+        string name, string symbol, string color, string operationId,
+        CancellationToken ct = default)
+    {
+        ValidateStatusEdit(name, symbol, color, operationId);
+        ValidateStatusIdentity(statusId, revision);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        BridgeResponse response = await new AdminConfigurationService(database)
+            .UpdateStatusAsync(new JsonObject
+            {
+                ["statusId"] = statusId, ["expectedRevision"] = revision,
+                ["name"] = name, ["symbol"] = symbol, ["color"] = color,
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "UpdateAttendanceStatus(native)");
+        if (RequiredText(data, "statusId") != statusId ||
+            RequiredNumber(data, "rowVersion") != revision + 1 ||
+            string.IsNullOrWhiteSpace(RequiredText(data, "auditEventId")))
+            throw new InvalidDataException("Invalid status update receipt.");
+        return new NativeStatusMutationReceipt(statusId, name, symbol,
+            color, revision + 1, true, 0);
+    }
+
+    public async Task<NativeStatusMutationReceipt> DeactivateStatusAsync(
+        NativeIdentity actor, string statusId, long revision,
+        string operationId, CancellationToken ct = default)
+    {
+        ValidateStatusIdentity(statusId, revision);
+        if (!Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Invalid status deactivation idempotency.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+
+        // The canonical service independently rejects the automatic-attendance
+        // default status and retains all historical AttendanceRecords.
+        // Freeze the input fields before disabling, but do not pretend the
+        // active-status list will include a disabled row afterwards.
+        BridgeResponse current = await services.ListActiveStatusesAsync(ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var entries = RequiredArray(current, "NativeStatusBeforeDeactivation")
+            .Select(RequireObject).ToArray();
+        var found = entries.Where(x =>
+            RequiredText(x, "statusId") == statusId &&
+            RequiredNumber(x, "version") == revision &&
+            RequiredBoolean(x, "active")).ToArray();
+        if (found.Length != 1)
+            throw new InvalidDataException("Status changed before deactivation.");
+        string name = RequiredText(found[0], "displayName");
+        string symbol = RequiredText(found[0], "shortSymbol");
+        string color = RequiredText(found[0], "color");
+        ValidateStatusRow(new NativeStatusRow(statusId, name, symbol, color,
+            revision, RequiredNumber(found[0], "todayCount")));
+
+        BridgeResponse response = await new AdminConfigurationService(database)
+            .DeactivateStatusAsync(new JsonObject
+            {
+                ["statusId"] = statusId, ["expectedRevision"] = revision,
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "DeactivateOrDeleteStatus(native)");
+        if (RequiredText(data, "statusId") != statusId ||
+            RequiredBoolean(data, "active") ||
+            string.IsNullOrWhiteSpace(RequiredText(data, "auditEventId")))
+            throw new InvalidDataException("Invalid canonical status deactivate receipt.");
+        // Original deactivate receipt intentionally contains no rowVersion:
+        // revision+1 follows the original version-checked SQL UPDATE.
+        return new NativeStatusMutationReceipt(statusId, name, symbol,
+            color, checked(revision + 1), false, 0);
+    }
+
+    private static void ValidateStatusIdentity(string statusId, long revision)
+    {
+        if (statusId is not { Length: >= 1 and <= 128 } ||
+            statusId.Any(char.IsControl) || revision < 1 ||
+            revision == long.MaxValue)
+            throw new InvalidDataException("Invalid stable status ID/version.");
+    }
+
+    private static void ValidateStatusEdit(string name, string symbol,
+        string color, string operationId)
+    {
+        if (name is not { Length: >= 2 and <= 75 } ||
+            name != name.Trim() || name.Any(char.IsControl) ||
+            symbol is not { Length: >= 1 and <= 5 } ||
+            symbol != symbol.Trim() || symbol.Any(char.IsControl) ||
+            color is null || !System.Text.RegularExpressions.Regex.IsMatch(
+                color, "^#[0-9a-fA-F]{6}$") ||
+            !Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Invalid status name, symbol or color.");
+    }
+
+    private static void ValidateStatusRow(NativeStatusRow row)
+    {
+        if (row.StatusId is not { Length: >= 1 and <= 128 } ||
+            row.StatusId.Any(char.IsControl) ||
+            row.Name is not { Length: >= 2 and <= 75 } ||
+            row.Name.Any(char.IsControl) ||
+            row.Symbol is not { Length: >= 1 and <= 5 } ||
+            row.Symbol.Any(char.IsControl) ||
+            row.Color is null ||
+            !System.Text.RegularExpressions.Regex.IsMatch(
+                row.Color, "^#[0-9a-fA-F]{6}$") ||
+            row.Revision < 1 || row.TodayCount < 0)
+            throw new InvalidDataException("Malformed canonical active attendance status.");
+    }
 
     // Phase 8 sites: canonical SQLCipher catalogue and original audit writer.
     // No native site SQL, deletion, reassignment or role/nonce shortcuts.
