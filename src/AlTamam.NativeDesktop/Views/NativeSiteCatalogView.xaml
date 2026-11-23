@@ -1,0 +1,115 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeSiteCatalogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" FontFamily="Segoe UI">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="SitesVisible"/>
+        <Style x:Key="SitesButton" TargetType="Button">
+            <Setter Property="Background" Value="#0D9488"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid Background="#C80F172A"
+          Visibility="{Binding IsOpen, Converter={StaticResource SitesVisible}}">
+        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+                CornerRadius="10" Padding="16" Margin="12"
+                Width="840" MaxWidth="960" MaxHeight="720"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="190"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                    <Button DockPanel.Dock="Left" Content="إغلاق المواقع"
+                            Style="{StaticResource SitesButton}"
+                            Command="{Binding CloseCommand}"/>
+                    <TextBlock Text="إدارة المواقع — المعرف والتاريخ محفوظان"
+                               FontSize="19" FontWeight="Bold"
+                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                </DockPanel>
+                <StackPanel Grid.Row="1">
+                    <TextBlock Text="المواقع النشطة والمتوقفة من السجل الأصلي. لا حذف أو نقل للأفراد في هذه النافذة."
+                               TextWrapping="Wrap" Foreground="#475569"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+                        <Button Content="إضافة موقع" Style="{StaticResource SitesButton}"
+                                Command="{Binding CreateCommand}"
+                                AutomationProperties.Name="فتح إنشاء موقع جديد للمراجعة"/>
+                        <Button Content="تعديل اسم الموقع المحدد"
+                                Style="{StaticResource SitesButton}"
+                                Command="{Binding RenameCommand}"
+                                CommandParameter="{Binding SelectedItem, ElementName=SiteGrid}"
+                                AutomationProperties.Name="بدء تعديل اسم موقع نشط محدد"/>
+                        <Button Content="تحديث المواقع" Style="{StaticResource SitesButton}"
+                                Command="{Binding RefreshCommand}"/>
+                    </StackPanel>
+                    <ProgressBar Height="4" IsIndeterminate="True"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource SitesVisible}}"/>
+                    <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                               TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Polite"/>
+                </StackPanel>
+                <DataGrid x:Name="SiteGrid" Grid.Row="2" Margin="0,7,0,8"
+                          ItemsSource="{Binding Sites}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          SelectionMode="Single" SelectionUnit="FullRow"
+                          HeadersVisibility="Column"
+                          AlternatingRowBackground="#F8FAFC" RowHeight="35"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="اسم الموقع" Binding="{Binding Name}" Width="2*"/>
+                        <DataGridTextColumn Header="المعرف الثابت" Binding="{Binding SiteId}" Width="2*"/>
+                        <DataGridCheckBoxColumn Header="نشط" Binding="{Binding Active}" Width="80"/>
+                        <DataGridTextColumn Header="الإصدار" Binding="{Binding Revision}" Width="80"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#CBD5E1"
+                        BorderThickness="1" CornerRadius="7" Padding="12"
+                        Visibility="{Binding HasDraft, Converter={StaticResource SitesVisible}}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Heading}" Foreground="#0F2942"
+                                   FontSize="17" FontWeight="Bold" Margin="0,0,0,7"/>
+                        <TextBlock Text="الاسم الجديد (حرفان إلى 100 حرف)"
+                                   Foreground="#475569" FontWeight="SemiBold"/>
+                        <TextBox Height="36" Padding="8,5" Margin="0,5,0,8"
+                                 Text="{Binding DraftName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding CanEdit}"
+                                 AutomationProperties.Name="اسم الموقع الجديد"/>
+                        <TextBlock Text="تغيير الاسم لا يعيد كتابة الكشوف التاريخية، ويُحفظ معرف الموقع كما هو."
+                                   TextWrapping="Wrap" Foreground="#64748B"/>
+                        <TextBlock Text="{Binding ReviewNote}"
+                                   Visibility="{Binding IsReviewing, Converter={StaticResource SitesVisible}}"
+                                   Foreground="#0F2942" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" Margin="0,8,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <Button Content="مراجعة دون حفظ" Style="{StaticResource SitesButton}"
+                                    Command="{Binding ReviewCommand}"
+                                    AutomationProperties.Name="مراجعة الموقع بدون تعديل قاعدة البيانات"/>
+                            <Button Content="اعتماد التعديل بعد المراجعة"
+                                    Style="{StaticResource SitesButton}"
+                                    Command="{Binding ConfirmCommand}"
+                                    AutomationProperties.Name="تأكيد إنشاء الموقع أو إعادة تسميته مرة واحدة"/>
+                            <Button Content="إلغاء التعديل" Style="{StaticResource SitesButton}"
+                                    Command="{Binding CancelDraftCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <StackPanel Grid.Row="4" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                               TextWrapping="Wrap" FontWeight="Bold"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <TextBlock Text="إذا انقطع الرد عند الاعتماد، تحقق من القائمة وسجل العمليات. لا يُسمح بإعادة إرسال العملية تلقائيا."
+                               Foreground="#64748B" FontSize="12" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
