@@ -26,6 +26,13 @@ public sealed record NativeExcelImportIssue(
 
 public sealed record NativeExcelImportSite(string Name, int PersonCount);
 
+public sealed record NativeExcelImportMatch(
+    string PersonId, string Name, string ServiceNumberA, bool Active);
+
+public sealed record NativeExcelImportCollision(
+    string Worksheet, int Row, string Name, string ServiceNumberA,
+    IReadOnlyList<NativeExcelImportMatch> Matches);
+
 public sealed record NativeExcelImportReview(
     string FileName, string Sha256, string PreviewToken,
     int TotalRows, int NewCount, int RejectedCount, int CustomUpdateCount,
