@@ -10,6 +10,21 @@ public interface INativeExcelPersonnelImportBackend
     Task<NativeExcelImportReview> StageAndPreviewAsync(
         NativeIdentity actor, string fileName, byte[] workbook,
         CancellationToken ct = default);
+    
+    /// <summary>
+    /// Optional explicit all-worksheet mode. Legacy callers preserve first-
+    /// worksheet behavior; providers must explicitly support allSheets=true,
+    /// never silently ignore the operator's choice.
+    /// </summary>
+    Task<NativeExcelImportReview> StageAndPreviewAsync(
+        NativeIdentity actor, string fileName, byte[] workbook,
+        bool allSheets, CancellationToken ct = default)
+    {
+        if (allSheets)
+            throw new NotSupportedException(
+                "Canonical multi-worksheet staging is not supported.");
+        return StageAndPreviewAsync(actor, fileName, workbook, ct);
+    }
 
     Task<NativeExcelImportReceipt> CommitAsync(
         NativeIdentity actor, NativeExcelImportReview reviewed,
