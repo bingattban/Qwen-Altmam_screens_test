@@ -100,12 +100,13 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <CheckBox Content="أؤكد أن الفرد المحدد هو نفس الإنسان صاحب المعرف التاريخي، وأوافق على إعادته إلى الموقع المختار."
-                                          TextBlock.TextWrapping="Wrap"
-                                          Margin="0,10,0,6"
+                                <CheckBox Margin="0,10,0,6"
                                           IsEnabled="{Binding CanEdit}"
                                           IsChecked="{Binding IdentityConfirmed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          AutomationProperties.Name="إقرار صريح بمطابقة هوية الفرد المؤرشف"/>
+                                          AutomationProperties.Name="إقرار صريح بمطابقة هوية الفرد المؤرشف">
+                                    <TextBlock Text="أؤكد أن الفرد المحدد هو نفس الإنسان صاحب المعرف التاريخي، وأوافق على إعادته إلى الموقع المختار."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
                             </StackPanel>
                         </Border>
                         <Button Content="تأكيد عودة نفس الفرد واعتماد الحركة"
