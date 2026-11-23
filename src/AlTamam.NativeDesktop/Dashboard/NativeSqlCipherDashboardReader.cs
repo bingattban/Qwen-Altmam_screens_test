@@ -19,13 +19,153 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8: archived return reuses the SAME stable PersonId.
+    // The original ArchivedReturnService is the only preview/commit writer.
+    public async Task<NativeArchivedReturnPreview> PreviewReturnAsync(
+        NativeIdentity actor, NativeArchivedReturnDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidateArchivedReturnDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Archived identity session expired.");
+        if (principal.UserId != actor.UserId ||
+            principal.Username != actor.Username ||
+            principal.Role != actor.Role ||
+            principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Archived identity actor mismatch.");
+
+        BridgeResponse response = await new ArchivedReturnService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["visibleName"] = draft.OriginalName,
+                ["serviceNumberA"] = draft.ServiceNumberA,
+                ["siteId"] = draft.DestinationSiteId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "ResolveArchivedIdentity(native)");
+        JsonArray matches = RequiredArray(data, "candidates");
+        if (matches.Count is < 1 or > 50 ||
+            !RequiredBoolean(data, "requiresResolution") ||
+            !RequiredBoolean(data, "numberContested"))
+            throw new InvalidDataException("Selected archived identity was not resolved.");
+        string businessDate = RequiredText(data, "businessDate");
+        string token = RequiredText(data, "previewToken");
+        if (businessDate != LocalPersonDay() || token.Length != 64 ||
+            token.Any(ch => !char.IsAsciiHexDigit(ch)))
+            throw new InvalidDataException("Archived identity preview expired or malformed.");
+
+        var candidates = matches.Select(node =>
+        {
+            JsonObject x = RequireObject(node);
+            var result = new NativeArchivedReturnCandidate(
+                RequiredText(x, "personId"),
+                RequiredText(x, "name"),
+                RequiredText(x, "serviceNumberA"),
+                RequiredNumber(x, "revision"),
+                checked((int)RequiredNumber(x, "organizationalStatus")),
+                RequiredText(x, "exitDate"),
+                RequiredText(x, "previousSiteName"),
+                RequiredText(x, "exitType"),
+                RequiredBoolean(x, "numberMatch"),
+                RequiredBoolean(x, "nameMatch"));
+            if (result.Revision < 1 ||
+                result.OrganizationalStatus is not (2 or 3 or 4) ||
+                string.IsNullOrWhiteSpace(result.PersonId) ||
+                string.IsNullOrWhiteSpace(result.Name) ||
+                string.IsNullOrWhiteSpace(result.ServiceNumberA))
+                throw new InvalidDataException("Malformed archived identity candidate.");
+            return result;
+        }).ToArray();
+        if (candidates.Select(x => x.PersonId)
+                .Distinct(StringComparer.Ordinal).Count() != candidates.Length ||
+            !candidates.Any(x =>
+                x.PersonId == draft.PersonId &&
+                x.Name == draft.OriginalName &&
+                x.ServiceNumberA == draft.ServiceNumberA &&
+                x.Revision == draft.Revision &&
+                x.OrganizationalStatus == draft.OrganizationalStatus &&
+                x.NumberMatch && x.NameMatch))
+            throw new InvalidDataException("Original archived person was not in canonical matches.");
+        return new NativeArchivedReturnPreview(draft, businessDate, token, true, candidates);
+    }
+
+    public async Task<NativeArchivedReturnReceipt> CommitReturnAsync(
+        NativeIdentity actor, NativeArchivedReturnPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.BusinessDate != LocalPersonDay() ||
+            preview.PreviewToken is not { Length: 64 } ||
+            preview.PreviewToken.Any(x => !char.IsAsciiHexDigit(x)) ||
+            preview.Candidates is null || preview.Candidates.Count is < 1 or > 50 ||
+            preview.Candidates.Count(x => x.PersonId == preview.Draft.PersonId &&
+                x.Revision == preview.Draft.Revision &&
+                x.Name == preview.Draft.OriginalName &&
+                x.ServiceNumberA == preview.Draft.ServiceNumberA &&
+                x.OrganizationalStatus == preview.Draft.OrganizationalStatus &&
+                x.NumberMatch && x.NameMatch) != 1)
+            throw new InvalidDataException("Invalid archived identity approval.");
+        ValidateArchivedReturnDraft(preview.Draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Archived return session expired.");
+        if (principal.UserId != actor.UserId ||
+            principal.Username != actor.Username ||
+            principal.Role != actor.Role ||
+            principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Archived return principal changed.");
+
+        // Explicit same-human decision; no new person, direct SQL, or silent retry.
+        BridgeResponse response = await new ArchivedReturnService(database)
+            .CommitReturnAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["personId"] = preview.Draft.PersonId,
+                ["decision"] = "same",
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "CommitArchivedReturn(native)");
+        string movement = RequiredText(data, "movementId");
+        if (!RequiredBoolean(data, "returned") ||
+            RequiredText(data, "personId") != preview.Draft.PersonId ||
+            RequiredText(data, "siteId") != preview.Draft.DestinationSiteId ||
+            RequiredText(data, "businessDate") != preview.BusinessDate ||
+            RequiredNumber(data, "revision") != preview.Draft.Revision + 1 ||
+            movement.Length is < 5 or > 128 ||
+            !movement.StartsWith("MOV-", StringComparison.Ordinal))
+            throw new InvalidDataException("Archived return receipt identity mismatch.");
+        return new NativeArchivedReturnReceipt(
+            preview.Draft.PersonId, movement, preview.Draft.DestinationSiteId,
+            preview.BusinessDate, preview.Draft.Revision + 1, true);
+    }
+
+    private static void ValidateArchivedReturnDraft(NativeArchivedReturnDraft draft)
+    {
+        if (draft is null || draft.PersonId is not { Length: >= 1 and <= 128 } ||
+            draft.PersonId.Any(char.IsControl) ||
+            draft.OriginalName is not { Length: >= 3 and <= 200 } ||
+            draft.OriginalName != draft.OriginalName.Trim() ||
+            draft.OriginalName.Any(char.IsControl) ||
+            draft.Revision < 1 || draft.OrganizationalStatus is not (2 or 3 or 4) ||
+            draft.DestinationSiteId is not { Length: >= 1 and <= 128 } ||
+            draft.DestinationSiteId.Any(char.IsControl) ||
+            draft.DestinationSiteName is not { Length: >= 1 and <= 200 } ||
+            draft.DestinationSiteName.Any(char.IsControl) ||
+            draft.ServiceNumberA != CanonicalNumber(draft.ServiceNumberA))
+            throw new InvalidDataException("Archived return identity or destination not valid.");
+    }
 
     // Phase 8: only the original SQLCipher personnel separation archive owns
     // historical separation queries; every read rechecks exact manager nonce.
