@@ -113,14 +113,14 @@ public sealed class NativeSqlCipherDashboardReader(
         JsonArray newSites = RequiredArray(preview, "newSites");
         JsonArray collisions = RequiredArray(preview, "similarNames");
         if (total != sourceRows || total is < 1 or > 500 ||
-            fresh is < 0 or > 100 || customUpdated != 0 ||
+            fresh is < 0 or > 500 || customUpdated != 0 ||
             fresh + issues != total || accepted.Count != fresh ||
-            rejected.Count != issues || newSites.Count > 100 ||
+            rejected.Count != issues || newSites.Count > 500 ||
             similarCount != collisions.Count || collisions.Count > 40 ||
             RequiredArray(preview, "customUpdatesPreview").Count != 0)
             throw new InvalidDataException(
                 "Native pilot requires ALL accepted and same-name rows visible; " +
-                "use original DesktopHost import for >100 additions or >40 similar names.");
+                "split files above 500 rows or when >40 name advisories cannot all be reviewed.");
 
         var people = accepted.Select(n =>
         {
@@ -185,7 +185,7 @@ public sealed class NativeSqlCipherDashboardReader(
                 .Distinct(StringComparer.Ordinal).Count() != sites.Length ||
             people.Any(p => p.Row < 2 || p.Name.Length is < 3 or > 180 ||
                 p.ServiceNumberA.Length is < 4 or > 70) ||
-            sites.Any(s => s.PersonCount is < 1 or > 100))
+            sites.Any(s => s.PersonCount is < 1 or > 500))
             throw new InvalidDataException("Duplicated or malformed canonical import.");
         return new NativeExcelImportReview(
             fileName, sha, token, total, fresh, issues, 0, sites,
@@ -197,7 +197,7 @@ public sealed class NativeSqlCipherDashboardReader(
         string operationId, CancellationToken ct = default)
     {
         if (reviewed is null || reviewed.CustomUpdateCount != 0 ||
-            reviewed.NewCount is < 1 or > 100 ||
+            reviewed.NewCount is < 1 or > 500 ||
             reviewed.TotalRows is < 1 or > 500 ||
             reviewed.NewPeople.Count != reviewed.NewCount ||
             reviewed.Issues.Count != reviewed.RejectedCount ||
