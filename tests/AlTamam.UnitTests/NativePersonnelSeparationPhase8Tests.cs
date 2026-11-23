@@ -58,12 +58,12 @@ public sealed class NativePersonnelSeparationPhase8Tests
         vm.Open(row, "SITE-A", Sites);
         vm.FormReason = "قصير";
         await vm.PreviewAsync();
-        Assert.Equal(1, backend.Previews);
+        Assert.Equal(0, backend.Previews);
         Assert.Equal(0, backend.Writes);
         Assert.False(vm.CanConfirm);
         vm.FormReason = "سبب قانوني واضح ومحدد للفصل";
         await vm.PreviewAsync();
-        Assert.Equal(2, backend.Previews);
+        Assert.Equal(1, backend.Previews);
         Assert.Equal("SITE-A", backend.Drafts[^1].SourceSiteId);
         Assert.Equal("PRN-SEP", backend.Drafts[^1].PersonId);
         Assert.Equal(0, backend.Writes);
@@ -147,14 +147,21 @@ public sealed class NativePersonnelSeparationPhase8Tests
         vm.Open(row, "SITE-A", Sites);
         vm.FormReason = "سبب الفصل الرسمي الموثق";
         await vm.PreviewAsync();
-        // Test the uncertain-write path without waiting by verifying the
-        // strictly private time gate remains unavailable before five seconds.
         await vm.ConfirmAsync();
         Assert.Equal(0, backend.Writes);
+        await Task.Delay(TimeSpan.FromMilliseconds(5200));
+        Assert.True(vm.CanConfirm);
+        await vm.ConfirmAsync();
+        Assert.Equal(1, backend.Writes);
+        Assert.True(vm.HasUnverifiedCommit);
+        Assert.Null(vm.Receipt);
+        await vm.ConfirmAsync();
+        Assert.Equal(1, backend.Writes);
+        Assert.Single(backend.OperationIds);
         vm.ForceCancel();
-        Assert.False(vm.CanConfirm);
         Assert.False(vm.IsOpen);
-        Assert.Empty(backend.OperationIds);
+        vm.Open(row, "SITE-A", Sites);
+        Assert.False(vm.IsOpen); // ambiguous operation locks this same session
     }
 
     private sealed class FakeBackend : INativePersonnelSeparationBackend
