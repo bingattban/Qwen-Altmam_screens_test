@@ -63,6 +63,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         Administration.Movement.ForceCancel();
                         Administration.BulkMovement.ForceCancel();
                         Administration.BulkExternalMovement.ForceCancel();
+                        Administration.ExcelImport.ForceCancel();
                         Administration.Separation.ForceCancel();
                         Administration.SeparationArchive.Close();
                         Administration.Return.ForceCancel();
