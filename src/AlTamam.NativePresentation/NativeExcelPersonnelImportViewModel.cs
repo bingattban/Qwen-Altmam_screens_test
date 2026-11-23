@@ -271,7 +271,10 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             review.NewCount is < 0 or > 100 ||
             review.RejectedCount < 0 || review.CustomUpdateCount != 0 ||
             review.NewCount + review.RejectedCount != review.TotalRows ||
-            review.NewPeople is null || review.Issues is null || review.NewSites is null ||
+            review.NewPeople is null || review.Issues is null ||
+            review.NewSites is null || review.Collisions is null ||
+            review.Collisions.Count != review.SimilarNameCount ||
+            review.Collisions.Count > 40 ||
             review.NewPeople.Count != review.NewCount ||
             review.Issues.Count != review.RejectedCount ||
             review.NewSites.Count > 100 ||
