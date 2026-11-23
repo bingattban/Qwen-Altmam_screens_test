@@ -1495,9 +1495,12 @@ Applying a valid range resets **all** separate individual history
 pagers to page 1, then requests a fresh original canonical
 `PersonnelReportService.ReportAsync` read by immutable `PersonId`.
 The original SQLCipher service applies date bounds (inclusive) to
-attendance, historic monthly/status totals, movements, audit events,
-revision and site-history projections according to their original
-effective-date semantics. WPF never filters only the displayed 100-row
+attendance, historic monthly/status totals, movements, audit events
+and attendance revisions according to their original effective-date
+semantics. The identity-change timeline and effective-dated site
+assignment history intentionally remain FULL lifetime context: the
+original canonical service does not apply the date filters to those
+two record streams, and the native UI states this distinction. WPF never filters only the displayed 100-row
 page or recomputes historical values. The adapter verifies live
 admin/role/session before/after query and exact original
 `dateFrom`/`dateTo` source response echoes, person ID and
