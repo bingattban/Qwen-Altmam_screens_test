@@ -38,6 +38,11 @@ jobs:
         run: |
           pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Verify pinned Cairo/Tajawal HTTP 503 retry, alternate source and checksum (offline mock)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-verified-build-font-fetch.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Arabic offline font retry and pinned checksum regression failed' }
       - name: Package process watchdog native regression before expensive tests
         shell: pwsh
         run: |
