@@ -19,7 +19,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -196,6 +196,102 @@ public sealed class NativeSqlCipherDashboardReader(
                 row.Color, "^#[0-9a-fA-F]{6}$") ||
             row.Revision < 1 || row.TodayCount < 0)
             throw new InvalidDataException("Malformed canonical active attendance status.");
+    }
+
+    // Phase 8 site retirement: no native SQL writer, no alternate destination.
+    // Original service owns the impact preflight and ATOMIC dated reassignment.
+    public async Task<NativeSiteRetirementPreview> PreviewRetirementAsync(
+        NativeIdentity actor, string siteId, long revision,
+        CancellationToken ct = default)
+    {
+        ValidateSiteRetirementIdentity(siteId, revision);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        BridgeResponse result = await new AdminConfigurationService(database)
+            .PreviewSiteRetirementAsync(new JsonObject
+            {
+                ["siteId"] = siteId, ["expectedRevision"] = revision
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(result, "PreviewSiteRetirement(native)");
+        var snapshot = new NativeSiteRetirementPreview(
+            RequiredText(data, "siteId"),
+            RequiredText(data, "siteName"),
+            RequiredNumber(data, "rowVersion"),
+            RequiredNumber(data, "activeCount"),
+            RequiredText(data, "effectiveDate"),
+            RequiredText(data, "destinationSiteId"),
+            RequiredText(data, "destinationSiteName"),
+            RequiredBoolean(data, "eligible"),
+            RequiredText(data, "blockReason"));
+        if (snapshot.SiteId != siteId ||
+            snapshot.Revision != revision ||
+            snapshot.SiteName is not { Length: >= 2 and <= 100 } ||
+            snapshot.ActiveCount < 0 ||
+            snapshot.EffectiveDate !=
+                DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ||
+            snapshot.DestinationSiteId != "SITE-UNSPECIFIED" ||
+            snapshot.DestinationSiteName != "غير محدد" ||
+            (snapshot.Eligible && snapshot.BlockReason.Length != 0) ||
+            (!snapshot.Eligible && string.IsNullOrWhiteSpace(snapshot.BlockReason)))
+            throw new InvalidDataException("Invalid original site impact snapshot.");
+        return snapshot;
+    }
+
+    public async Task<NativeSiteRetirementReceipt> CommitRetirementAsync(
+        NativeIdentity actor, NativeSiteRetirementPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null) throw new InvalidDataException("Missing impact review.");
+        ValidateSiteRetirementIdentity(preview.SiteId, preview.Revision);
+        if (!preview.Eligible || preview.BlockReason != "" ||
+            preview.ActiveCount < 0 || preview.Revision == long.MaxValue ||
+            preview.SiteName is not { Length: >= 2 and <= 100 } ||
+            preview.DestinationSiteId != "SITE-UNSPECIFIED" ||
+            preview.DestinationSiteName != "غير محدد" ||
+            preview.EffectiveDate !=
+                DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ||
+            !Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Stale or unconfirmed site retirement.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        // The original service rechecks exact site revision, current number
+        // of open assignments, day/month closures, same-day attendance and
+        // movement, then executes ALL reassignment/audit/site-retirement in
+        // one SQLCipher transaction. No client can redirect the destination.
+        BridgeResponse result = await new AdminConfigurationService(database)
+            .RemoveSiteAndReassignCurrentPersonsAsync(new JsonObject
+            {
+                ["siteId"] = preview.SiteId,
+                ["expectedRevision"] = preview.Revision,
+                ["expectedActiveCount"] = preview.ActiveCount,
+                ["confirmed"] = true,
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(result, "RemoveSiteAndReassignCurrentPersons(native)");
+        if (RequiredText(data, "siteId") != preview.SiteId ||
+            RequiredText(data, "siteName") != preview.SiteName ||
+            RequiredBoolean(data, "active") ||
+            RequiredNumber(data, "rowVersion") != preview.Revision + 1 ||
+            RequiredNumber(data, "reassignedCount") != preview.ActiveCount ||
+            RequiredText(data, "effectiveDate") != preview.EffectiveDate)
+            throw new InvalidDataException("Site retirement receipt changed.");
+        return new NativeSiteRetirementReceipt(
+            preview.SiteId, preview.SiteName, preview.Revision + 1,
+            preview.ActiveCount, preview.EffectiveDate,
+            "SITE-UNSPECIFIED", false);
+    }
+
+    private static void ValidateSiteRetirementIdentity(string siteId,
+        long revision)
+    {
+        if (siteId is not { Length: >= 3 and <= 128 } ||
+            siteId.Any(char.IsControl) || siteId == "SITE-UNSPECIFIED" ||
+            revision < 1 || revision == long.MaxValue)
+            throw new InvalidDataException("Protected or stale site identity.");
     }
 
     // Phase 8 sites: canonical SQLCipher catalogue and original audit writer.
