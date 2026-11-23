@@ -499,7 +499,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             RefreshCommand, SearchCommand, ClearSearchCommand,
             PreviousPageCommand, NextPageCommand, OpenProfileCommand,
             OpenCreateCommand, OpenEditCommand,
-            OpenInternalTransferCommand, OpenExternalTransferCommand
+            OpenInternalTransferCommand, OpenExternalTransferCommand,
+            OpenMovementArchiveCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
