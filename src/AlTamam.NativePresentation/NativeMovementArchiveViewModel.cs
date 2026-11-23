@@ -54,6 +54,7 @@ public sealed class NativeMovementArchiveViewModel : INotifyPropertyChanged
     public bool HasNext => _hasNext;
     public IReadOnlyList<NativeMovementArchiveRow> Rows => _rows;
     public NativeMovementArchiveDetail? SelectedDetail => _detail;
+    public bool HasDetail => _detail is not null;
     public IReadOnlyList<NativeMovementArchiveTypeOption> TypeOptions => Kinds;
     public string SelectedType => _type;
     public string SearchDraft
@@ -299,7 +300,7 @@ public sealed class NativeMovementArchiveViewModel : INotifyPropertyChanged
             names = [nameof(IsOpen), nameof(IsLoading), nameof(IsDetailLoading),
                 nameof(LoadError), nameof(DetailError), nameof(Page),
                 nameof(PageLabel), nameof(Total), nameof(HasNext), nameof(Rows),
-                nameof(SelectedDetail), nameof(SearchDraft), nameof(SelectedType)];
+                nameof(SelectedDetail), nameof(HasDetail), nameof(SearchDraft), nameof(SelectedType)];
         foreach (string name in names) PropertyChanged?.Invoke(this, new(name));
         foreach (var cmd in new[] { RefreshCommand, SearchCommand, NextPageCommand,
                                    PreviousPageCommand, DetailsCommand, CloseDetailsCommand,
