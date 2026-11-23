@@ -173,6 +173,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 individual historic report PersonId contract failed' }
           python build/test-native-phase9-site-revision-report-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 site and correction history contract failed' }
+          python build/test-native-phase9-monthly-audit-report-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 monthly and audit historical report contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
