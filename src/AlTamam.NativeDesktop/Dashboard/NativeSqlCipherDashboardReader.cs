@@ -41,7 +41,8 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.MovementPage is < 1 or > 100000 ||
             pages.IdentityPage is < 1 or > 100000 ||
             pages.SitePage is < 1 or > 100000 ||
-            pages.RevisionPage is < 1 or > 100000)
+            pages.RevisionPage is < 1 or > 100000 ||
+            pages.AuditPage is < 1 or > 100000)
             throw new InvalidDataException("Invalid native individual report request.");
 
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
@@ -53,7 +54,8 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["movementPage"] = pages.MovementPage,
                 ["identityPage"] = pages.IdentityPage,
                 ["sitePage"] = pages.SitePage,
-                ["revisionPage"] = pages.RevisionPage
+                ["revisionPage"] = pages.RevisionPage,
+                ["auditPage"] = pages.AuditPage
             }, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
@@ -66,7 +68,8 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredNumber(data, "movementPage") != pages.MovementPage ||
             RequiredNumber(data, "identityPage") != pages.IdentityPage ||
             RequiredNumber(data, "sitePage") != pages.SitePage ||
-            RequiredNumber(data, "revisionPage") != pages.RevisionPage)
+            RequiredNumber(data, "revisionPage") != pages.RevisionPage ||
+            RequiredNumber(data, "auditPage") != pages.AuditPage)
             throw new InvalidDataException("Original individual report identity or page mismatch.");
 
         var totals = RequiredArray(data, "statusTotals").Select(node =>
@@ -130,6 +133,35 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(item, "executor"));
         }).ToArray();
 
+        // Complete monthly aggregates are sourced from the canonical
+        // attendance GROUP BY month/status, not from any currently displayed page.
+        JsonArray monthSource = RequiredArray(data, "monthlyTotals");
+        if (monthSource.Count > 5000)
+            throw new InvalidDataException("Original monthly report exceeds native safety bound.");
+        var months = monthSource.Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportMonthSummary(
+                RequiredText(item, "period"), RequiredText(item, "statusId"),
+                RequiredText(item, "statusName"), RequiredNumber(item, "count"));
+        }).ToArray();
+
+        JsonArray auditSource = RequiredArray(data, "audit");
+        if (auditSource.Count > 100)
+            throw new InvalidDataException("Original historical audit page exceeds 100 records.");
+        var audits = auditSource.Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportAuditRecord(
+                RequiredText(item, "operation"),
+                RequiredText(item, "username"), RequiredText(item, "fullName"),
+                item["effectiveDate"] is null
+                    ? null : RequiredText(item, "effectiveDate"),
+                RequiredText(item, "executedAtUtc"),
+                RequiredText(item, "description"),
+                item["reason"] is null ? null : RequiredText(item, "reason"));
+        }).ToArray();
+
         var report = new NativePersonnelReportSnapshot(
             returnedId, RequiredText(person, "name"),
             RequiredText(person, "serviceNumberA"),
@@ -150,11 +182,17 @@ public sealed class NativeSqlCipherDashboardReader(
             RevisionPage = pages.RevisionPage,
             RevisionTotal = RequiredNumber(data, "revisionTotal"),
             RevisionHasNext = RequiredBoolean(data, "revisionHasNext"),
-            Revisions = revisions
+            Revisions = revisions,
+            MonthlyTotals = months,
+            AuditTotal = RequiredNumber(data, "auditTotal"),
+            AuditPage = pages.AuditPage,
+            AuditHasNext = RequiredBoolean(data, "auditHasNext"),
+            Audit = audits
         };
         if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
             report.Movements.Count > 100 || report.Identities.Count > 100 ||
             report.Sites.Count > 100 || report.Revisions.Count > 100 ||
+            report.MonthlyTotals.Count > 5000 || report.Audit.Count > 100 ||
             report.PersonId != pages.PersonId)
             throw new InvalidDataException("Original personnel report was truncated or forged.");
         return report;
