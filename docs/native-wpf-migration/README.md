@@ -1531,3 +1531,59 @@ and Windows Release pass at its exact head SHA, including nine
 disjoint C# test shards, real Windows WPF/WebView2 + SQLCipher
 pre-package E2E, four customer package acceptance jobs and
 independent customer artifact SHA-256 audit.
+
+
+## Phase 9 — slice 5: native movement-type filtering for the same unified report
+
+This increments merged Phase 9 slice 4 (#41) in the existing native
+`screen_025` individual historical report; no second SQLCipher query
+engine, new database schema, data modification or production host
+replacement. Original `PersonnelReportService.ReportAsync` already
+supports `movementType`: exact canonical codes **0 = all**,
+**1 = internal transfer**, **2 = external transfer**, **3 = separation**,
+**4 = return to service**. The existing `PersonnelMovements` filter
+`($moveType=0 OR MovementType=$moveType)` applies to the movement
+count and rows only. The WPF selector explicitly labels this restriction
+as **movement history only**, so attendance totals, monthly statuses,
+identity histories, site membership history, revision records and audit
+evidence are not incorrectly presented as movement-filtered.
+
+The report ViewModel retains the currently committed inclusive
+`dateFrom`/`dateTo` bounds, checks numeric type in the finite 0..4
+range, resets only the **movement** page index and re-reads the
+canonical encrypted SQLCipher service by immutable `PersonId`.
+Clearing the filter performs a new real unfiltered movement read.
+Applying new date bounds resets all history page indices but **preserves
+the already applied movement type**, avoiding silently broadening the
+operator's movement query. A separate source-verified display label
+shows the filter actually represented by visible rows.
+
+The authenticated native adapter verifies the exact source-echoed
+`movementType` against the request, while continuing to validate
+the live authorized admin session before and after the read.
+Page/index/count checks, selected original roster-row ownership,
+explicit first-person IDs and stale-response cancellation remain
+fail-closed. Draft values never masquerade as an applied filter.
+
+Test-first focused xUnit coverage adds valid canonical numeric codes,
+invalid code denial before the first SQLCipher read, independent
+movement paging, attendance/month integrity, precise result echo,
+clearing a movement filter with retained period, preserving movement
+filter when applying a new date range, unauthorized or stale
+selection prevention and superseded asynchronous result rejection.
+A new structural negative-path guard is run by BOTH Windows Core
+and Windows Release, in addition to all earlier tests and full
+Windows acceptance matrix.
+
+**Remaining report work:** historical site and attendance-status filter
+selectors backed by original evidence, full group reporting, grouped/
+individual XLSX and separate Windows 100/125/150% physical acceptance.
+The WPF pilot remains experimental. Customer x86/x64 Portable and
+Installer still build original complete DesktopHost/WebView2; no
+69-route parity claim or route matrix state change.
+
+**Merge gate:** latest exact PR SHA must pass Windows Core and
+Windows Release, Release nine xUnit test shards, actual Windows
+SQLCipher/WPF/WebView2 pre-package E2E, all x86/x64 Portable and
+Installer acceptance checks plus the independent four-package
+SHA-256 audit. Manual clean-machine acceptance remains independent.

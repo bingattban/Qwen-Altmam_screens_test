@@ -25,6 +25,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     private NativeIndividualReportPages? _pages;
     private string _dateFromDraft = "";
     private string _dateToDraft = "";
+    private int _movementTypeDraft;
 
     public NativePersonnelReportViewModel()
     {
@@ -43,6 +44,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         PreviousAuditCommand = new NativeCommand(_ => _ = PreviousAuditAsync(), _ => CanPreviousAudit);
         ApplyDateFiltersCommand = new NativeCommand(_ => _ = ApplyDateFiltersAsync(), _ => CanApplyDateFilters);
         ClearDateFiltersCommand = new NativeCommand(_ => _ = ClearDateFiltersAsync(), _ => CanApplyDateFilters);
+        ApplyMovementTypeFilterCommand = new NativeCommand(
+            _ => _ = ApplyMovementTypeFilterAsync(), _ => CanApplyMovementTypeFilter);
+        ClearMovementTypeFilterCommand = new NativeCommand(
+            _ => _ = ClearMovementTypeFilterAsync(), _ => CanApplyMovementTypeFilter);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -75,6 +80,32 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         ? "لا توجد نتائج تاريخية معتمدة حاليا."
         : $"الفترة المطبقة: {(_report.DateFrom.Length == 0 ? "من البداية" : _report.DateFrom)} — {(_report.DateTo.Length == 0 ? "حتى النهاية" : _report.DateTo)}";
     public bool CanApplyDateFilters => CanRead && _pages is not null;
+    public bool CanApplyMovementTypeFilter => CanRead && _pages is not null;
+
+    public IReadOnlyList<NativeReportMovementTypeOption> MovementTypeOptions { get; } =
+    [
+        new(0, "جميع الحركات"),
+        new(1, "نقل داخلي"),
+        new(2, "نقل خارجي"),
+        new(3, "فصل"),
+        new(4, "عودة للخدمة")
+    ];
+
+    public int MovementTypeDraft
+    {
+        get => _movementTypeDraft;
+        set
+        {
+            if (_movementTypeDraft == value) return;
+            _movementTypeDraft = value;
+            Changed();
+        }
+    }
+
+    public string AppliedMovementTypeLabel => _report is null
+        ? "لا توجد بيانات معتمدة للحركات حاليا."
+        : "مرشح الحركات المطبق: " + MovementTypeOptions
+            .First(x => x.Value == _report.MovementType).Title;
     public string AttendancePageLabel => _report is null ? "—" :
         $"صفحة التحضير {_report.AttendancePage} — إجمالي {_report.AttendanceTotal}";
     public string MovementsPageLabel => _report is null ? "—" :
@@ -120,6 +151,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public ICommand PreviousAuditCommand { get; }
     public ICommand ApplyDateFiltersCommand { get; }
     public ICommand ClearDateFiltersCommand { get; }
+    public ICommand ApplyMovementTypeFilterCommand { get; }
+    public ICommand ClearMovementTypeFilterCommand { get; }
 
     private bool CanRead => _open && _backend is not null &&
         _actor is { } actor && _liveActor?.Invoke() == actor &&
@@ -227,8 +260,12 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         }
         // An application of a range is one new original service query:
         // all six independent history streams reset to first page.
-        _pages = new NativeIndividualReportPages(
-            pages.PersonId, DateFrom: from, DateTo: to);
+        _pages = pages with
+        {
+            AttendancePage = 1, MovementPage = 1, IdentityPage = 1,
+            SitePage = 1, RevisionPage = 1, AuditPage = 1,
+            DateFrom = from, DateTo = to
+        };
         await LoadAsync(ct);
     }
 
@@ -238,6 +275,33 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         _dateToDraft = "";
         Changed();
         return ApplyDateFiltersAsync(ct);
+    }
+
+    public async Task ApplyMovementTypeFilterAsync(CancellationToken ct = default)
+    {
+        if (!CanRead || _pages is not { } pages)
+        {
+            Close();
+            return;
+        }
+        int movementType = _movementTypeDraft;
+        if (movementType is < 0 or > 4)
+        {
+            _error = "نوع الحركة غير صالح؛ اختر نوعا من القائمة المعتمدة.";
+            Changed();
+            return;
+        }
+        // Only the movement stream is restricted. Retain period and all
+        // other independent source page indices without hidden rewrites.
+        _pages = pages with { MovementType = movementType, MovementPage = 1 };
+        await LoadAsync(ct);
+    }
+
+    public Task ClearMovementTypeFilterAsync(CancellationToken ct = default)
+    {
+        _movementTypeDraft = 0;
+        Changed();
+        return ApplyMovementTypeFilterAsync(ct);
     }
 
     public Task NextAttendanceAsync(CancellationToken ct = default) =>
@@ -291,6 +355,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         _pages = null;
         _dateFromDraft = "";
         _dateToDraft = "";
+        _movementTypeDraft = 0;
         _open = false;
         _busy = false;
         _report = null;
@@ -313,6 +378,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             report.AuditPage != requested.AuditPage ||
             report.DateFrom != requested.DateFrom ||
             report.DateTo != requested.DateTo ||
+            report.MovementType != requested.MovementType ||
+            report.MovementType is < 0 or > 4 ||
             report.AttendanceTotal < 0 || report.MovementTotal < 0 || report.IdentityTotal < 0 ||
             report.SiteTotal < 0 || report.RevisionTotal < 0 ||
             report.AuditTotal < 0 ||
@@ -385,6 +452,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage), nameof(Report),
             nameof(DateFromDraft), nameof(DateToDraft),
             nameof(AppliedDateRangeLabel), nameof(CanApplyDateFilters),
+            nameof(MovementTypeOptions), nameof(MovementTypeDraft),
+            nameof(AppliedMovementTypeLabel), nameof(CanApplyMovementTypeFilter),
             nameof(AttendancePageLabel), nameof(MovementsPageLabel),
             nameof(IdentitiesPageLabel), nameof(SitesPageLabel),
             nameof(RevisionsPageLabel), nameof(AuditPageLabel),
@@ -404,7 +473,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             NextSitesCommand, PreviousSitesCommand,
             NextRevisionsCommand, PreviousRevisionsCommand,
             NextAuditCommand, PreviousAuditCommand,
-            ApplyDateFiltersCommand, ClearDateFiltersCommand
+            ApplyDateFiltersCommand, ClearDateFiltersCommand,
+            ApplyMovementTypeFilterCommand, ClearMovementTypeFilterCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
