@@ -50,8 +50,8 @@ internal static class R01WireShapeSnapshot
                 string title = titleField.GetString()!;
                 Assert.InRange(id.Length, 1, 128);
                 Assert.InRange(title.Length, 1, 240);
-                Assert.DoesNotContain(id, char.IsControl);
-                Assert.DoesNotContain(title, char.IsControl);
+                Assert.True(!id.Any(char.IsControl), "Historical filter ID has control characters");
+                Assert.True(!title.Any(char.IsControl), "Historical filter title has control characters");
                 Assert.True(ids.Add(id), "Duplicate historical site/status filter ID");
             }
             return "array<canonicalFilterOption>";
