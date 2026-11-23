@@ -30,12 +30,13 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Dashboard = new DashboardPageViewModel();
         DailyAttendance = new DailyAttendancePageViewModel();
         MonthlyAttendance = new MonthlyAttendancePageViewModel();
+        Administration = new AdministrationPageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
             DailyAttendance,
             MonthlyAttendance,
-            new AdministrationPageViewModel(),
+            Administration,
             new ReportsPageViewModel(),
             new SettingsPageViewModel()
         };
@@ -55,11 +56,15 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         MonthlyAttendance.CloseCellDetails();
                         MonthlyAttendance.Excel.Close();
                     }
+                    if (screen != NativeScreen.Administration)
+                        Administration.CloseProfile();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();
                     if (screen == NativeScreen.MonthlyAttendance)
                         _ = MonthlyAttendance.RefreshAsync();
+                    if (screen == NativeScreen.Administration)
+                        _ = Administration.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
@@ -71,6 +76,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public DashboardPageViewModel Dashboard { get; }
     public DailyAttendancePageViewModel DailyAttendance { get; }
     public MonthlyAttendancePageViewModel MonthlyAttendance { get; }
+    public AdministrationPageViewModel Administration { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -81,6 +87,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         DailyAttendance.AttachReader(reader, () => _active);
         if (reader is INativeMonthlyAttendanceReader archiveReader)
             MonthlyAttendance.AttachReader(archiveReader, () => _active);
+        if (reader is INativePersonnelDirectoryReader personnelReader)
+            Administration.AttachReader(personnelReader, () => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
@@ -109,6 +117,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private bool CanNavigate(NativeScreen screen)
         => IsAuthenticated && _pages.ContainsKey(screen) &&
            _active is { } identity && RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role) &&
+           (screen != NativeScreen.Administration ||
+            RoleAuthorizationPolicy.CanAccessUsersManagement(identity.Role)) &&
            // Never hide a live or ambiguous audited commit by leaving its page.
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit));
@@ -268,6 +278,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Dashboard.Clear();
         DailyAttendance.Clear();
         MonthlyAttendance.Clear();
+        Administration.Clear();
         _active = null;
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
         _loginError = message;

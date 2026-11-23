@@ -1,8 +1,9 @@
 namespace AlTamam.NativePresentation;
 
 /// <summary>
-/// Unconverted operational route previews: intentionally no domain mutation, fake personnel rows,
-/// database connection, authentication shortcut, or claim of completed migration.
+/// Shared native page base. Reports/Settings are still placeholders; the real
+/// Dashboard, Daily, Monthly and Administration people register use dedicated
+/// SQLCipher-backed view models. No placeholder may mutate domain data.
 /// Domain operations remain in the existing audited Application/Domain/Infrastructure.
 /// </summary>
 public abstract class NativePageViewModel(NativeScreen screen, string title)
@@ -14,6 +15,5 @@ public abstract class NativePageViewModel(NativeScreen screen, string title)
         "تم تفعيل تسجيل الدخول الأصلي والتحقق من الجلسة. لم يتم بعد ربط هذه الشاشة بالخدمات التشغيلية؛ هذه معاينة XAML للمرحلة التالية.";
 }
 
-public sealed class AdministrationPageViewModel() : NativePageViewModel(NativeScreen.Administration, "الإدارة");
 public sealed class ReportsPageViewModel() : NativePageViewModel(NativeScreen.Reports, "التقارير");
 public sealed class SettingsPageViewModel() : NativePageViewModel(NativeScreen.Settings, "الإعدادات");

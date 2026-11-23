@@ -17,10 +17,132 @@ public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
-      INativeMonthlyExcelExportBackend
+      INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
+
+
+    // Phase 8: personnel administration reads only the original roster
+    // service, with the same permanent PersonId and current custom fields.
+    // Both the verified session and manager-only authorization are required.
+    public async Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(
+        NativeIdentity actor, CancellationToken ct = default)
+    {
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await services.ListSitesAsync(
+            includeInactive: true, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var sites = RequiredArray(response, "NativePersonnelSites")
+            .Select(node =>
+            {
+                JsonObject site = RequireObject(node);
+                return new NativeDashboardSite(
+                    RequiredText(site, "siteId"), RequiredText(site, "name"));
+            }).ToArray();
+        return new NativePersonnelCatalogue(sites);
+    }
+
+    public async Task<NativePersonnelSnapshot> ReadPageAsync(
+        NativeIdentity actor, NativePersonnelFilter filter,
+        CancellationToken ct = default)
+    {
+        if (filter.SiteId is null || filter.SiteId.Length > 128 ||
+            filter.SiteId.Any(char.IsControl) ||
+            filter.SearchTerm is null || filter.SearchTerm.Length > 100 ||
+            filter.SearchTerm.Any(char.IsControl) ||
+            filter.OrganizationalStatus is < 0 or > 4 ||
+            filter.Page is < 1 or > 100000 || filter.PageSize != 100)
+            throw new InvalidDataException("Invalid personnel directory filter.");
+
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonRosterService(database)
+            .QueryPersonsAsync(new JsonObject
+            {
+                ["siteId"] = filter.SiteId,
+                ["term"] = filter.SearchTerm,
+                ["organizationalStatus"] = filter.OrganizationalStatus,
+                ["includeArchived"] = filter.OrganizationalStatus == 0,
+                ["page"] = filter.Page,
+                ["pageSize"] = filter.PageSize
+            }, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "QueryPersons");
+        if (RequiredNumber(data, "page") != filter.Page ||
+            RequiredNumber(data, "pageSize") != filter.PageSize)
+            throw new InvalidDataException("Personnel directory page mismatch.");
+        var cols = RequiredArray(data, "customColumns").Select(node =>
+        {
+            JsonObject col = RequireObject(node);
+            return new NativeDashboardColumn(
+                RequiredText(col, "columnId"), RequiredText(col, "caption"));
+        }).ToArray();
+        var rows = RequiredArray(data, "items").Select((node, index) =>
+        {
+            JsonObject row = RequireObject(node);
+            JsonObject fields = RequireObject(row["customFields"]);
+            return new NativePersonnelRow(
+                RequiredText(row, "personId"),
+                RequiredText(row, "serviceNumberA"),
+                RequiredText(row, "displayName"),
+                RequiredText(row, "siteName"),
+                checked((int)RequiredNumber(row, "organizationalStatus")),
+                RequiredBoolean(row, "active"), RequiredNumber(row, "revision"),
+                cols.Select(col => fields[col.ColumnId]?.GetValue<string>() ?? "").ToArray())
+            {
+                RowNumber = checked((filter.Page - 1) * filter.PageSize + index + 1)
+            };
+        }).ToArray();
+        if (RequiredNumber(data, "count") != rows.Length)
+            throw new InvalidDataException("Canonical person count mismatch.");
+        return new NativePersonnelSnapshot(
+            filter.SiteId, filter.SearchTerm, filter.OrganizationalStatus,
+            filter.Page, RequiredNumber(data, "total"),
+            RequiredBoolean(data, "hasNext"), cols, rows);
+    }
+
+    public async Task<NativePersonnelProfile> ReadProfileAsync(
+        NativeIdentity actor, string personId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(personId) || personId.Length > 128 ||
+            personId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid stable person identifier.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonRosterService(database)
+            .GetPersonSummaryAsync(new JsonObject { ["personId"] = personId }, ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "GetPersonSummary");
+        if (RequiredText(data, "personId") != personId)
+            throw new InvalidDataException("Canonical person profile identity mismatch.");
+        var history = RequiredArray(data, "identityHistory").Select(node =>
+        {
+            JsonObject entry = RequireObject(node);
+            return new NativePersonnelIdentityHistory(
+                RequiredText(entry, "name"),
+                RequiredText(entry, "serviceNumberA"),
+                RequiredText(entry, "validFrom"),
+                entry["validTo"]?.GetValue<string>() ?? "",
+                RequiredText(entry, "reason"),
+                RequiredText(entry, "recordedAtUtc"));
+        }).ToArray();
+        if (history.Length > 50)
+            throw new InvalidDataException("Excessive person identity history.");
+        return new NativePersonnelProfile(
+            personId, RequiredText(data, "displayName"),
+            RequiredText(data, "serviceNumberA"),
+            checked((int)RequiredNumber(data, "organizationalStatus")),
+            RequiredBoolean(data, "active"), RequiredNumber(data, "revision"),
+            RequiredText(data, "firstRecordedLocalDate"), history);
+    }
+
+    private async Task VerifyPersonnelManagerAsync(
+        NativeIdentity actor, CancellationToken ct)
+    {
+        if (!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            throw new UnauthorizedAccessException("Personnel administration requires a manager.");
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Monthly WPF catalogue: original archive periods and ALL canonical sites,

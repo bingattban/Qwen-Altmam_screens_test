@@ -26,16 +26,7 @@
         <views:NativeMonthlyAttendanceView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:AdministrationPageViewModel}">
-        <StackPanel>
-            <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <UniformGrid Rows="2" Columns="2" IsEnabled="False">
-                <Button Content="إدارة الأفراد" Margin="5" Height="70" />
-                <Button Content="التنقلات" Margin="5" Height="70" />
-                <Button Content="الفصل والاستعادة" Margin="5" Height="70" />
-                <Button Content="إدارة المستخدمين" Margin="5" Height="70" />
-            </UniformGrid>
-        </StackPanel>
+        <views:NativePersonnelDirectoryView />
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
         <StackPanel>
