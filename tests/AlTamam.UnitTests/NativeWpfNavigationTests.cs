@@ -45,14 +45,23 @@ public sealed class NativeWpfNavigationTests
     }
 
     [Fact]
-    public void Unconverted_pages_never_claim_access_to_protected_personnel_data()
+    public void Unauthenticated_pages_never_claim_access_to_protected_personnel_data()
     {
         var vm = new NativeShellViewModel();
-        Assert.All(vm.Pages, page =>
-        {
-            Assert.False(page.IsDataConnected);
-            Assert.Contains("لم يتم", page.StatusMessage);
-        });
+        // All six native sections, including the newly connected personnel
+        // manager, must fail closed before an authenticated SQLCipher session.
+        Assert.All(vm.Pages, page => Assert.False(page.IsDataConnected));
+        Assert.Empty(vm.Administration.Rows);
+        Assert.False(vm.Administration.IsProfileOpen);
+        Assert.Null(vm.Administration.SelectedProfile);
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.Administration));
+
+        // Only the two genuinely unconverted sections may continue to
+        // display the exact disconnected placeholder text.
+        Assert.All(vm.Pages.Where(page =>
+            page.Screen is NativeScreen.Reports or NativeScreen.Settings),
+            page => Assert.Contains("لم يتم", page.StatusMessage));
+        Assert.Contains("لم تتصل", vm.Administration.StatusMessage);
     }
 
     private sealed class FixedNativeBackend : INativeAuthenticationBackend
