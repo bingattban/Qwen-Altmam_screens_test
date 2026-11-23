@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Globalization;
 using System.Windows.Input;
 using AlTamam.Domain.Policies;
 
@@ -36,6 +37,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         PreviousSitesCommand = new NativeCommand(_ => _ = PreviousSitesAsync(), _ => CanPreviousSites);
         NextRevisionsCommand = new NativeCommand(_ => _ = NextRevisionsAsync(), _ => CanNextRevisions);
         PreviousRevisionsCommand = new NativeCommand(_ => _ = PreviousRevisionsAsync(), _ => CanPreviousRevisions);
+        NextAuditCommand = new NativeCommand(_ => _ = NextAuditAsync(), _ => CanNextAudit);
+        PreviousAuditCommand = new NativeCommand(_ => _ = PreviousAuditAsync(), _ => CanPreviousAudit);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -53,6 +56,11 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         $"صفحة المواقع التاريخية {_report.SitePage} — إجمالي {_report.SiteTotal}";
     public string RevisionsPageLabel => _report is null ? "—" :
         $"صفحة تصحيحات التحضير {_report.RevisionPage} — إجمالي {_report.RevisionTotal}";
+    public string AuditPageLabel => _report is null ? "—" :
+        $"صفحة سجل العمليات {_report.AuditPage} — إجمالي {_report.AuditTotal}";
+    public bool CanNextAudit => CanNavigate && _report is { AuditHasNext: true } &&
+                                _pages!.AuditPage < 100000;
+    public bool CanPreviousAudit => CanNavigate && _pages!.AuditPage > 1;
     public bool CanNextSites => CanNavigate && _report is { SiteHasNext: true } &&
                                 _pages!.SitePage < 100000;
     public bool CanPreviousSites => CanNavigate && _pages!.SitePage > 1;
@@ -79,6 +87,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public ICommand PreviousSitesCommand { get; }
     public ICommand NextRevisionsCommand { get; }
     public ICommand PreviousRevisionsCommand { get; }
+    public ICommand NextAuditCommand { get; }
+    public ICommand PreviousAuditCommand { get; }
 
     private bool CanRead => _open && _backend is not null &&
         _actor is { } actor && _liveActor?.Invoke() == actor &&
@@ -178,6 +188,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         ChangePageAsync(CanNextRevisions, "revisions", +1, ct);
     public Task PreviousRevisionsAsync(CancellationToken ct = default) =>
         ChangePageAsync(CanPreviousRevisions, "revisions", -1, ct);
+    public Task NextAuditAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanNextAudit, "audit", +1, ct);
+    public Task PreviousAuditAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanPreviousAudit, "audit", -1, ct);
 
     private Task ChangePageAsync(bool allowed, string stream, int step, CancellationToken ct)
     {
@@ -189,6 +203,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             "identities" => pages with { IdentityPage = checked(pages.IdentityPage + step) },
             "sites" => pages with { SitePage = checked(pages.SitePage + step) },
             "revisions" => pages with { RevisionPage = checked(pages.RevisionPage + step) },
+            "audit" => pages with { AuditPage = checked(pages.AuditPage + step) },
             _ => throw new InvalidOperationException("Unknown report page.")
         };
         return LoadAsync(ct);
@@ -221,16 +236,20 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             report.IdentityPage != requested.IdentityPage ||
             report.SitePage != requested.SitePage ||
             report.RevisionPage != requested.RevisionPage ||
+            report.AuditPage != requested.AuditPage ||
             report.AttendanceTotal < 0 || report.MovementTotal < 0 || report.IdentityTotal < 0 ||
             report.SiteTotal < 0 || report.RevisionTotal < 0 ||
+            report.AuditTotal < 0 ||
             report.AttendanceHasNext != ((long)requested.AttendancePage * 100 < report.AttendanceTotal) ||
             report.MovementHasNext != ((long)requested.MovementPage * 100 < report.MovementTotal) ||
             report.IdentityHasNext != ((long)requested.IdentityPage * 100 < report.IdentityTotal) ||
             report.SiteHasNext != ((long)requested.SitePage * 100 < report.SiteTotal) ||
             report.RevisionHasNext != ((long)requested.RevisionPage * 100 < report.RevisionTotal) ||
+            report.AuditHasNext != ((long)requested.AuditPage * 100 < report.AuditTotal) ||
             report.StatusTotals is null || report.Attendance is null ||
             report.Movements is null || report.Identities is null ||
             report.Sites is null || report.Revisions is null ||
+            report.MonthlyTotals is null || report.Audit is null ||
             report.StatusTotals.Count > 500 ||
             report.StatusTotals.Any(x => x is null || x.StatusName is not { Length: >= 1 and <= 180 } || x.Count < 0) ||
             !ValidPageCount(report.Attendance.Count, report.AttendanceTotal, requested.AttendancePage) ||
@@ -238,6 +257,24 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             !ValidPageCount(report.Identities.Count, report.IdentityTotal, requested.IdentityPage) ||
             !ValidPageCount(report.Sites.Count, report.SiteTotal, requested.SitePage) ||
             !ValidPageCount(report.Revisions.Count, report.RevisionTotal, requested.RevisionPage) ||
+            !ValidPageCount(report.Audit.Count, report.AuditTotal, requested.AuditPage) ||
+            report.MonthlyTotals.Count > 5000 ||
+            report.MonthlyTotals.Any(month => month is null ||
+                !DateOnly.TryParseExact(month.Period + "-01", "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
+                month.StatusId is not { Length: >= 1 and <= 128 } ||
+                month.StatusName is not { Length: >= 1 and <= 180 } ||
+                month.Count <= 0) ||
+            report.MonthlyTotals.Select(month =>
+                (month.Period, month.StatusId, month.StatusName)).Distinct().Count() !=
+                report.MonthlyTotals.Count ||
+            report.MonthlyTotals.Sum(month => month.Count) != report.AttendanceTotal ||
+            report.Audit.Any(item => item is null ||
+                item.Operation is not { Length: >= 1 and <= 180 } ||
+                item.UsernameSnapshot is not { Length: >= 1 and <= 180 } ||
+                item.FullNameSnapshot is null ||
+                item.ExecutedAtUtc is not { Length: >= 10 and <= 80 } ||
+                item.Description is null) ||
             report.Attendance.Any(x => x is null || x.StatusName is null || x.SiteName is null ||
                 x.Date is not { Length: 10 } || x.Revision < 0) ||
             report.Movements.Any(x => x is null || x.Type is null || x.NameSnapshot is null ||
@@ -272,7 +309,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage), nameof(Report),
             nameof(AttendancePageLabel), nameof(MovementsPageLabel),
             nameof(IdentitiesPageLabel), nameof(SitesPageLabel),
-            nameof(RevisionsPageLabel), nameof(CanNextSites),
+            nameof(RevisionsPageLabel), nameof(AuditPageLabel),
+            nameof(CanNextAudit), nameof(CanPreviousAudit), nameof(CanNextSites),
             nameof(CanPreviousSites), nameof(CanNextRevisions),
             nameof(CanPreviousRevisions), nameof(CanNextAttendance),
             nameof(CanPreviousAttendance), nameof(CanNextMovements),
@@ -286,7 +324,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             NextMovementsCommand, PreviousMovementsCommand,
             NextIdentitiesCommand, PreviousIdentitiesCommand,
             NextSitesCommand, PreviousSitesCommand,
-            NextRevisionsCommand, PreviousRevisionsCommand
+            NextRevisionsCommand, PreviousRevisionsCommand,
+            NextAuditCommand, PreviousAuditCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }

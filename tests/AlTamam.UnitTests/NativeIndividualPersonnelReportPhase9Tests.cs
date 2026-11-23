@@ -27,7 +27,11 @@ public sealed class NativeIndividualPersonnelReportPhase9Tests
             [new NativePersonnelReportMovement("نقل داخلي", "موقع 1", "موقع 2",
                 "2026-01-01", "الاسم التاريخي", "00077", "المسؤول")],
             [new NativePersonnelReportIdentity("الاسم التاريخي", "00077",
-                "2024-01-01", null, "إضافة")]);
+                "2024-01-01", null, "إضافة")])
+        {
+            MonthlyTotals = [new NativePersonnelReportMonthSummary(
+                "2026-11", "STS-P", "حاضر", 101)]
+        };
 
     private static NativePersonnelReportViewModel Make(FakeReader backend,
         Func<NativeIdentity?> principal, Func<NativePersonnelDisplayRow, bool>? allowed = null)

@@ -195,6 +195,48 @@
                                 <DataGridTextColumn Header="وقت التصحيح" Binding="{Binding ExecutedAtUtc}" Width="2*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <TextBlock Text="ملخص الحضور الشهري حسب الحالة التاريخية"
+                                   Style="{StaticResource ReportSection}"/>
+                        <TextBlock Text="إجماليات كاملة من السجلات المعتمدة، وليست إعادة احتساب للأيام الظاهرة في الصفحة."
+                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                        <DataGrid ItemsSource="{Binding Report.MonthlyTotals}" Height="190"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  AlternatingRowBackground="#F8FAFC"
+                                  AutomationProperties.Name="الإجماليات الشهرية للحالات التاريخية">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="الشهر" Binding="{Binding Period}" Width="*"/>
+                                <DataGridTextColumn Header="الحالة" Binding="{Binding StatusName}" Width="2*"/>
+                                <DataGridTextColumn Header="الأيام" Binding="{Binding Count}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DockPanel Margin="0,10,0,2">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                <Button Content="السابق" Command="{Binding PreviousAuditCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                                <Button Content="التالي" Command="{Binding NextAuditCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding AuditPageLabel}"
+                                       Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Text="سجل العمليات التاريخي للقراءة فقط؛ أسماء المستخدمين والمنفذين محفوظة كما سُجلت وقت العملية."
+                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                        <DataGrid ItemsSource="{Binding Report.Audit}" Height="200"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  AlternatingRowBackground="#F8FAFC"
+                                  AutomationProperties.Name="سجل عمليات الفرد المحفوظ حسب تاريخ تنفيذ العملية">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="العملية" Binding="{Binding Operation}" Width="*"/>
+                                <DataGridTextColumn Header="تاريخها" Binding="{Binding EffectiveDate}" Width="*"/>
+                                <DataGridTextColumn Header="وقت التنفيذ" Binding="{Binding ExecutedAtUtc}" Width="2*"/>
+                                <DataGridTextColumn Header="اسم المستخدم وقتها" Binding="{Binding UsernameSnapshot}" Width="*"/>
+                                <DataGridTextColumn Header="المنفذ وقتها" Binding="{Binding FullNameSnapshot}" Width="2*"/>
+                                <DataGridTextColumn Header="الوصف المحفوظ" Binding="{Binding Description}" Width="2*"/>
+                                <DataGridTextColumn Header="السبب" Binding="{Binding Reason}" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
