@@ -1131,7 +1131,7 @@ After reconciling competing PRs #33 and #34, **#33 is the sole
 approved native import implementation**, merged into main at
 `29f14b594d23a9f185acd8bf4bc2a9c049492cac`. Do not merge PR #34
 unchanged: it offers a tempting 500-addition approval while displaying
-only the first 500 accepted identities, and duplicates the original
+only the first 100 accepted identities, and duplicates the original
 import modal/view model/adapter. Its multi-worksheet option is ported
 here as an incremental change to the existing original SQLCipher
 import, **without** introducing another importer.
@@ -1154,14 +1154,12 @@ belong to a selected worksheet.
 
 **The critical limit is on accepted people, not merely Excel rows.**
 At most 500 source rows are inspected, with every rejected row/issue
-visible. But **no import can be approved if the original analysis
-contains more than 500 new accepted individuals**, because the
-canonical `acceptedPreview` lists at most 500. All 1–500 accepted
-people — across ALL selected worksheets — must appear with immutable
-name, number (ع), site, worksheet and row. Never approve 500
-additions based on a 500-person display; an over-limit file must be
-split into smaller reviewed files or handled through the original
-production importer. The single original SQLCipher transaction
+visible. The original parser now exposes all 1–500 accepted people
+in its canonical `acceptedPreview` rather than silently truncating
+at 100. All accepted people across ALL selected worksheets must appear
+with immutable name, number (ع), site, worksheet and row before approval.
+Never approve 500 additions based on a truncated 100-person display;
+a file containing 501 or more data rows must be rejected without writes. The single original SQLCipher transaction
 continues to enforce `updateExistingCustomFields:false` and
 `approveCustomUpdates:false`: no existing PersonIds, identifiers,
 site assignments or historical attendance are modified.
@@ -1175,10 +1173,11 @@ batches/roster/audit before doing anything else. The four
 production variants remain the original DesktopHost/WebView2
 until full 69-route WPF parity and clean-machine acceptance.
 
-**Test-first:** seven new xUnit cases were committed *before the
-implementation* (default first sheet, explicit two-sheet accepted
+**Test-first:** the seven original xUnit cases preceded the multi-sheet
+implementation; additional 500-row boundary and truncated-preview tests
+were committed before the 500-row extension (default first sheet, explicit two-sheet accepted
 list, mode-change invalidation of three approvals, prevention of
-101/500 hidden accepted identities, forged/custom-update refusal,
+truncated accepted identities, forged/custom-update refusal,
 late logout response cancellation, no-session/supervisor denial).
 Existing 9 unit tests for safe native XLSX imports remain in place,
 alongside real SQLCipher multi-worksheet/relationships integration
@@ -1188,7 +1187,7 @@ Exact final-head success is mandatory for BOTH Windows workflows;
 nine disjoint Release test shards and real WPF/WebView2 E2E BEFORE
 building x86/x64 Portable and Installer; all four package acceptance
 jobs and independent SHA-256 provenance audit. Manual clean-machine
-Windows, keyboard/accessibility and 500/125/150% DPI evidence remains
+Windows, keyboard/accessibility and 100/125/150% DPI evidence remains
 a separate production-gate requirement.
 
 
