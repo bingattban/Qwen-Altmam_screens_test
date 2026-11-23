@@ -530,3 +530,55 @@ four customer packages still use the original complete
 DesktopHost/WebView2, not this experimental WPF pilot. Real Windows
 keyboard/DPI checks at 100%, 125%, 150% and independent clean-machine
 acceptance remain necessary before any production switch.
+
+
+## Phase 8 — slice 5: native one-person separation (preview, 5-second approval, commit)
+
+The WPF personnel directory adds **فصل الفرد المحدد** for managers, and
+only for ONE currently active person in an explicitly selected canonical
+source-site filter. The current person must match the original page's
+`PersonId`, `RowVersion`, site name and manager SQLCipher session.
+Separation from "all sites", inactive/archive rows, a supervisor session
+or stale page context is deliberately prohibited.
+
+The Arabic RTL dialog requires a **5–1000 character explicit reason**.
+Typing or opening the modal never writes to the database. A preview
+calls the original `PersonnelSeparationService.PreviewAsync`; the
+canonical response includes the live name, number, site, assignment,
+revision, today's date, reason and one-use preview token. All are checked
+against the frozen selected row. The UI waits at least **five seconds
+after the preview is received** before enabling the separate confirmation.
+The original SQLCipher service independently enforces its five-second
+minimum from token issuance; the UI cannot bypass that server rule.
+
+Only explicit confirmation can invoke the existing audited
+`PersonnelSeparationService.CommitAsync` with one immutable operation
+ID. The canonical atomic SQLCipher transaction closes the current
+assignment, sets separated organizational status, stores a dated
+movement, audit and idempotency receipt, and suspends linked eligible
+user sessions; it does NOT physically delete the person, attendance
+history or audit records. Any stale identity, changed day, invalid
+token, day/month closure or previously recorded movement is rejected by
+the canonical service. Logout, navigation, reason change, session/nonce
+change and altered roster selection cancel pending preview and the
+local confirmation delay. An ambiguous write outcome is **never
+automatically retried**: the operator must consult the historical
+separation archive and operations journal first.
+
+Six C# xUnit regressions were committed before the implementation:
+authorization, exact source, reason/nonmutating preview, mandatory five
+seconds, forged identity, cancellation, and a lost commit response.
+A separate negative-path structural contract runs with an immediately
+checked exit code in BOTH Windows Core and Windows Release. The original
+nine Release shards and canonical SQLCipher integration tests must
+finish before building all four customer artifacts; real packaged
+x86/x64 Portable/Installer acceptance and independent SHA-256 audit
+must also succeed on the same final head SHA.
+
+**Limitations:** Only one person at a time is exposed in native WPF;
+the original distinct dismissal archive UI, archived identity return
+and recovery, multi-person transfers, site/status administration,
+remaining 69-route parity and real Windows 100/125/150% keyboard/DPI
+and clean-machine UAT are still separate migration milestones. The
+four customer binaries continue packaging DesktopHost/WebView2; there
+is NO native production switch in this slice.

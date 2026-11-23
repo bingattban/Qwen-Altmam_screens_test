@@ -18,13 +18,114 @@ public sealed class NativeSqlCipherDashboardReader(
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
-      INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend
+      INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
+      INativePersonnelSeparationBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8: original canonical PersonnelSeparationService owns all
+    // dismissal previews, five-second approval delays, transactions and audit.
+    public async Task<NativePersonnelSeparationPreview> PreviewSeparationAsync(
+        NativeIdentity actor, NativePersonnelSeparationDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidateSeparationDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Separation session expired.");
+        if (principal.UserId != actor.UserId || principal.Username != actor.Username ||
+            principal.Role != actor.Role || principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Separation actor changed.");
+        string today = LocalPersonDay();
+        BridgeResponse response = await new PersonnelSeparationService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["personId"] = draft.PersonId,
+                ["reason"] = draft.Reason,
+                ["businessDate"] = today
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelSeparationPreview");
+        string token = RequiredText(data, "previewToken");
+        string assignment = RequiredText(data, "assignmentId");
+        int minimumSeconds = checked((int)RequiredNumber(data, "minimumConfirmationSeconds"));
+        if (RequiredText(data, "personId") != draft.PersonId ||
+            RequiredText(data, "name") != draft.Name ||
+            RequiredText(data, "serviceNumberA") != draft.ServiceNumberA ||
+            RequiredNumber(data, "rowVersion") != draft.Revision ||
+            RequiredText(data, "siteId") != draft.SourceSiteId ||
+            RequiredText(data, "siteName") != draft.SourceSiteName ||
+            RequiredText(data, "reason") != draft.Reason ||
+            RequiredText(data, "businessDate") != today ||
+            assignment.Length is < 3 or > 128 || token.Length != 64 ||
+            token.Any(c => !char.IsAsciiHexDigit(c)) || minimumSeconds != 5)
+            throw new InvalidDataException("Canonical separation preview changed.");
+        return new NativePersonnelSeparationPreview(draft, today, token,
+            assignment, minimumSeconds);
+    }
+
+    public async Task<NativePersonnelSeparationReceipt> CommitSeparationAsync(
+        NativeIdentity actor, NativePersonnelSeparationPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.BusinessDate != LocalPersonDay() ||
+            preview.PreviewToken.Length != 64 ||
+            preview.PreviewToken.Any(c => !char.IsAsciiHexDigit(c)) ||
+            preview.SourceAssignmentId.Length is < 3 or > 128 ||
+            preview.MinimumConfirmationSeconds != 5)
+            throw new InvalidDataException("Invalid separation approval.");
+        ValidateSeparationDraft(preview.Draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Separation session expired.");
+        if (principal.UserId != actor.UserId || principal.Username != actor.Username ||
+            principal.Role != actor.Role || principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Separation actor changed.");
+        BridgeResponse response = await new PersonnelSeparationService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelSeparationCommit");
+        string movementId = RequiredText(data, "movementId");
+        if (RequiredText(data, "personId") != preview.Draft.PersonId ||
+            RequiredText(data, "name") != preview.Draft.Name ||
+            RequiredText(data, "serviceNumberA") != preview.Draft.ServiceNumberA ||
+            RequiredText(data, "date") != preview.BusinessDate ||
+            !RequiredBoolean(data, "separated") ||
+            movementId.Length is < 5 or > 128 ||
+            !movementId.StartsWith("MOV-", StringComparison.Ordinal))
+            throw new InvalidDataException("Canonical separation receipt mismatch.");
+        return new NativePersonnelSeparationReceipt(preview.Draft.PersonId,
+            movementId, preview.BusinessDate, true);
+    }
+
+    private static void ValidateSeparationDraft(NativePersonnelSeparationDraft draft)
+    {
+        if (draft is null ||
+            string.IsNullOrWhiteSpace(draft.PersonId) ||
+            draft.PersonId.Length > 128 || draft.PersonId.Any(char.IsControl) ||
+            string.IsNullOrWhiteSpace(draft.Name) ||
+            draft.Name.Length > 200 || draft.Name.Any(char.IsControl) ||
+            draft.ServiceNumberA is null || draft.Revision < 1 ||
+            string.IsNullOrWhiteSpace(draft.SourceSiteId) ||
+            draft.SourceSiteId.Length > 128 || draft.SourceSiteId.Any(char.IsControl) ||
+            string.IsNullOrWhiteSpace(draft.SourceSiteName) ||
+            draft.SourceSiteName.Length > 150 ||
+            draft.Reason is null || draft.Reason.Length is < 5 or > 1000 ||
+            draft.Reason != draft.Reason.Trim() || draft.Reason.Any(char.IsControl))
+            throw new InvalidDataException("Invalid canonical separation intent.");
+        _ = CanonicalNumber(draft.ServiceNumberA);
+    }
 
     // Phase 8: source-of-truth movement preview and commit are ONLY
     // PersonnelMovementService (SQLCipher, one-use preview, audit,

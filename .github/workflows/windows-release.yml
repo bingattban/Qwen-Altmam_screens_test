@@ -145,6 +145,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 personnel movement security contract failed' }
           python build/test-native-phase8-movement-archive-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 historical movement archive contract failed' }
+          python build/test-native-phase8-personnel-separation-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 separation audit/confirmation contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py

@@ -83,6 +83,11 @@
                         Command="{Binding OpenInternalTransferCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="نقل الفرد المحدد داخليا بعد اختيار الموقع المصدر"/>
+                <Button Content="فصل الفرد المحدد"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenSeparationCommand}"
+                        CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
+                        AutomationProperties.Name="فصل الفرد المحدد بعد مراجعة السبب والتأكيد"/>
                 <Button Content="أرشيف التنقلات" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenMovementArchiveCommand}"
@@ -208,5 +213,8 @@
         <views:NativeMovementArchiveView Grid.RowSpan="5"
                                          DataContext="{Binding Archive}"
                                          Panel.ZIndex="150"/>
+        <views:NativePersonnelSeparationView Grid.RowSpan="5"
+                                             DataContext="{Binding Separation}"
+                                             Panel.ZIndex="160"/>
     </Grid>
 </UserControl>
