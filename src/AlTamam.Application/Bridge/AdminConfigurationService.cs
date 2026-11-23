@@ -168,6 +168,126 @@ public sealed class AdminConfigurationService
     }
 
     /// <summary>
+    /// Side-effect-free impact preview for the EXISTING atomic retirement service.
+    /// This read only counts open assignments, mirrors its earliest blockers and
+    /// deliberately never modifies a PersonId, historical attendance or a site.
+    /// Commit must still independently revalidate everything in one transaction.
+    /// </summary>
+    public async Task<BridgeResponse> PreviewSiteRetirementAsync(
+        JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
+    {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.",
+                BridgeErrorCodes.Unauthorized);
+        string siteId = Read(payload, "siteId");
+        long version = ReadVersion(payload);
+        if (siteId.Length is < 3 or > 128 || siteId.Any(char.IsControl) ||
+            siteId == "SITE-UNSPECIFIED" || version < 1)
+            return Fail("لا يمكن معاينة الموقع المحمي أو معرف أو إصدار غير صحيح.");
+
+        using var c = _db.CreateOpenConnection();
+        string name;
+        long currentVersion;
+        bool system;
+        using (var q = c.CreateCommand())
+        {
+            q.CommandText = """
+                SELECT VisibleName,RowVersion,IsSystemSite FROM Sites
+                WHERE SiteId=$id AND ActiveFlag=1;
+                """;
+            q.Parameters.AddWithValue("$id", siteId);
+            using var reader = await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+                return Fail("الموقع غير موجود أو غير نشط؛ حدّث القائمة.",
+                    BridgeErrorCodes.ConflictStale);
+            name = reader.GetString(0);
+            currentVersion = reader.GetInt64(1);
+            system = reader.GetInt32(2) != 0;
+        }
+        if (system)
+            return Fail("الموقع النظامي محمي ولا يمكن إزالته.");
+        if (version != currentVersion)
+            return Fail("تغير إصدار الموقع؛ أعد تحميل قائمة المواقع.",
+                BridgeErrorCodes.ConflictStale);
+
+        long activeCount = 0;
+        bool invalidCurrent = false, enrolledToday = false;
+        string date = LocalDate();
+        using (var q = c.CreateCommand())
+        {
+            q.CommandText = """
+                SELECT a.ValidFromLocalDate,p.OrganizationalStatus,p.ActiveFlag
+                FROM PersonAssignments a
+                JOIN Persons p ON p.PersonId=a.PersonId
+                WHERE a.SiteId=$id AND a.ValidToLocalDate IS NULL
+                ORDER BY a.PersonId,a.AssignmentId;
+                """;
+            q.Parameters.AddWithValue("$id", siteId);
+            using var reader = await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                activeCount++;
+                if (reader.GetInt32(1) != 1 || reader.GetInt32(2) != 1)
+                    invalidCurrent = true;
+                if (string.CompareOrdinal(reader.GetString(0), date) >= 0)
+                    enrolledToday = true;
+            }
+        }
+
+        string reason = invalidCurrent
+            ? "يوجد انتساب غير نشط ما زال مفتوحا؛ يجب تصحيحه دون حذف التاريخ."
+            : enrolledToday
+                ? "هناك فرد التحق بالموقع اليوم؛ لا يجوز تغيير انتسابه في اليوم نفسه."
+                : "";
+
+        if (reason.Length == 0 && activeCount > 0)
+        {
+            using var closure = c.CreateCommand();
+            closure.CommandText = """
+                SELECT EXISTS(SELECT 1 FROM PeriodClosures
+                WHERE IsClosed=1 AND ((PeriodType='DAY' AND PeriodKey=$day)
+                  OR (PeriodType='MONTH' AND PeriodKey=$month)));
+                """;
+            closure.Parameters.AddWithValue("$day", date);
+            closure.Parameters.AddWithValue("$month", date[..7]);
+            if (Convert.ToInt64(await closure.ExecuteScalarAsync(ct)
+                    .ConfigureAwait(false)) != 0)
+                reason = "اليوم أو الشهر مغلق؛ لا يمكن تعديل الانتساب.";
+        }
+        if (reason.Length == 0 && activeCount > 0)
+        {
+            using var evidence = c.CreateCommand();
+            evidence.CommandText = """
+                SELECT EXISTS(
+                  SELECT 1 FROM PersonAssignments a
+                  WHERE a.SiteId=$site AND a.ValidToLocalDate IS NULL
+                    AND (EXISTS(SELECT 1 FROM AttendanceRecords d
+                        WHERE d.PersonId=a.PersonId AND d.AttendanceLocalDate=$day)
+                    OR EXISTS(SELECT 1 FROM PersonnelMovements m
+                        WHERE m.PersonId=a.PersonId AND m.EffectiveLocalDate=$day)));
+                """;
+            evidence.Parameters.AddWithValue("$site", siteId);
+            evidence.Parameters.AddWithValue("$day", date);
+            if (Convert.ToInt64(await evidence.ExecuteScalarAsync(ct)
+                    .ConfigureAwait(false)) != 0)
+                reason = "لأحد أفراد الموقع تحضير أو حركة اليوم؛ لا يجوز تعديل سجله التاريخي.";
+        }
+
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["siteId"] = siteId,
+            ["siteName"] = name,
+            ["rowVersion"] = currentVersion,
+            ["activeCount"] = activeCount,
+            ["effectiveDate"] = date,
+            ["destinationSiteId"] = "SITE-UNSPECIFIED",
+            ["destinationSiteName"] = "غير محدد",
+            ["eligible"] = reason.Length == 0,
+            ["blockReason"] = reason
+        });
+    }
+
+    /// <summary>
     /// Retire a non-system site without deleting its historical foreign keys.
     /// The move takes effect TODAY only if no selected person was enrolled,
     /// prepared or moved today. Otherwise refuse rather than rewrite history.
