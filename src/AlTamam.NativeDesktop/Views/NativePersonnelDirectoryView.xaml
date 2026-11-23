@@ -70,6 +70,10 @@
                         Command="{Binding OpenProfileCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فتح تفاصيل فرد بالمعرف الثابت"/>
+                <Button Content="إدارة المواقع" Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding OpenSiteCatalogCommand}"
+                        AutomationProperties.Name="إدارة المواقع المعتمدة إضافة وتعديل"/>
                 <Button Content="إضافة فرد" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom" Command="{Binding OpenCreateCommand}"
                         AutomationProperties.Name="بدء مراجعة إضافة فرد جديد"/>
@@ -231,5 +235,8 @@
         <views:NativeArchivedReturnView Grid.RowSpan="5"
                                         DataContext="{Binding Return}"
                                         Panel.ZIndex="180"/>
+        <views:NativeSiteCatalogView Grid.RowSpan="5"
+                                     DataContext="{Binding SiteCatalog}"
+                                     Panel.ZIndex="190"/>
     </Grid>
 </UserControl>
