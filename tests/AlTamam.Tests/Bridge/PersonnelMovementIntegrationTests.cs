@@ -690,6 +690,139 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(0L, (await Roster(tomorrow, "__TRANSFER_DAY__"))["total"]!.GetValue<long>());
     }
 
+    [Fact]
+    public async Task ExternalBulkTransfer_TwoLinkedAccountsSessionsAndHistory_AreSuspendedAtomically()
+    {
+        var users = new UserAccountManagementService(_db);
+        var ids = new List<string>();
+        for (int i = 1; i <= 2; i++)
+        {
+            var response = await users.CreateAsync(new JsonObject
+            {
+                ["username"] = "exit-batch-" + i,
+                ["password"] = "Abc123!secure",
+                ["passwordConfirmation"] = "Abc123!secure",
+                ["personId"] = "TST-MOVEMENT-P" + i,
+                ["role"] = "Supervisor"
+            }, Actor, default);
+            Assert.True(response.Success, response.UserMessage);
+            ids.Add(Assert.IsType<JsonObject>(response.Data)["userId"]!.GetValue<string>());
+        }
+        using (var c = _db.CreateOpenConnection())
+        {
+            for (int i = 0; i < ids.Count; i++)
+            {
+                using var q = c.CreateCommand();
+                q.CommandText = """
+                    INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+                    VALUES($nonce,$id,3,'2026-10-25T00:00:00Z','2028-10-25T00:00:00Z',0);
+                    """;
+                q.Parameters.AddWithValue("$nonce",
+                    "abcdef1234567890abcdef12345678" + i.ToString("D2"));
+                q.Parameters.AddWithValue("$id", ids[i]);
+                await q.ExecuteNonQueryAsync();
+            }
+        }
+        var original = new PersonnelMovementService(_db);
+        var preview = await original.PreviewAsync(
+            Plan(["TST-MOVEMENT-P1", "TST-MOVEMENT-P2"], external: true),
+            Actor, true, default);
+        string token = Token(preview);
+        var payload = new JsonObject
+        {
+            ["previewToken"] = token,
+            ["operationId"] = "external-batch-accounts-20261123"
+        };
+        var result = await original.CommitAsync(payload, Actor, true, default);
+        Assert.True(result.Success, result.UserMessage);
+        Assert.Equal(2, Assert.IsType<JsonObject>(result.Data)["count"]!.GetValue<int>());
+        var replay = await original.CommitAsync(payload, Actor, true, default);
+        Assert.True(replay.Success, replay.UserMessage);
+        using var conn = _db.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM Users
+            WHERE UserId IN ($one,$two) AND ActiveFlag=0;
+            """;
+        cmd.Parameters.AddWithValue("$one", ids[0]);
+        cmd.Parameters.AddWithValue("$two", ids[1]);
+        Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM UserSessions
+            WHERE UserId IN ($one,$two) AND RevokedFlag=1;
+            """;
+        Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM PersonnelMovements
+            WHERE PersonId IN ('TST-MOVEMENT-P1','TST-MOVEMENT-P2')
+              AND MovementType=2;
+            """;
+        Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM AuditEvents
+            WHERE OperationCode='USER_LIFECYCLE_SUSPEND';
+            """;
+        Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM Persons
+            WHERE PersonId IN ('TST-MOVEMENT-P1','TST-MOVEMENT-P2')
+              AND OrganizationalStatus=2 AND ActiveFlag=0;
+            """;
+        Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task ExternalBulkTransfer_StaleSecondMember_RejectsEntireBatchAndDoesNotSuspendAnyLinkedAccount()
+    {
+        var users = new UserAccountManagementService(_db);
+        var account = await users.CreateAsync(new JsonObject
+        {
+            ["username"] = "stale-batch-user",
+            ["password"] = "Abc123!secure",
+            ["passwordConfirmation"] = "Abc123!secure",
+            ["personId"] = "TST-MOVEMENT-P1",
+            ["role"] = "Supervisor"
+        }, Actor, default);
+        Assert.True(account.Success, account.UserMessage);
+        string linked = Assert.IsType<JsonObject>(account.Data)["userId"]!.GetValue<string>();
+        var original = new PersonnelMovementService(_db);
+        var preview = await original.PreviewAsync(
+            Plan(["TST-MOVEMENT-P1", "TST-MOVEMENT-P2"], external: true),
+            Actor, true, default);
+        string token = Token(preview);
+        using (var conn = _db.CreateOpenConnection())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                UPDATE Persons SET RowVersion=RowVersion+1
+                WHERE PersonId='TST-MOVEMENT-P2';
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var result = await original.CommitAsync(new JsonObject
+        {
+            ["previewToken"] = token,
+            ["operationId"] = "external-batch-stale-second-20261123"
+        }, Actor, true, default);
+        Assert.False(result.Success);
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = """
+            SELECT COUNT(*) FROM PersonnelMovements
+            WHERE PersonId IN ('TST-MOVEMENT-P1','TST-MOVEMENT-P2');
+            """;
+        Assert.Equal(0L, Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText = "SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+        q.Parameters.AddWithValue("$id", linked);
+        Assert.Equal(1L, Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText = """
+            SELECT COUNT(*) FROM Persons
+            WHERE PersonId IN ('TST-MOVEMENT-P1','TST-MOVEMENT-P2')
+              AND ActiveFlag=1 AND OrganizationalStatus=1;
+            """;
+        Assert.Equal(2L, Convert.ToInt64(q.ExecuteScalar()));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
