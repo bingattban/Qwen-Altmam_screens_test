@@ -57,7 +57,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         MonthlyAttendance.Excel.Close();
                     }
                     if (screen != NativeScreen.Administration)
+                    {
                         Administration.CloseProfile();
+                        Administration.Mutation.ForceCancel();
+                    }
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();

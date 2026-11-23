@@ -17,11 +17,175 @@ public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
-      INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader
+      INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
+      INativePersonnelMutationBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
+
+
+    // Phase 8: all mutations reuse existing audited canonical domain services.
+    // The adapter is the only route from native WPF to SQLCipher writes.
+    private static string CanonicalNumber(string input)
+    {
+        if (!ServiceNumberPolicy.TryCanonicalize(input, out string canonical))
+            throw new InvalidDataException("Invalid service number A (4–70 digits).");
+        return canonical;
+    }
+
+    private static string LocalPersonDay() =>
+        DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static void ValidatePersonDraft(NativePersonnelMutationDraft draft)
+    {
+        if (draft.Name is null || draft.Number is null ||
+            draft.SiteId is null || draft.Reason is null ||
+            draft.Name.Length is < 3 or > 200 ||
+            draft.Name != draft.Name.Trim() ||
+            draft.Name.Any(char.IsControl) ||
+            draft.SiteId.Length > 128 || draft.SiteId.Any(char.IsControl) ||
+            (!draft.IsCreate &&
+                (draft.Reason.Length is < 3 or > 500 ||
+                 draft.Reason.Any(char.IsControl))) ||
+            (draft.IsCreate &&
+                (draft.PersonId.Length != 0 || draft.BaseRevision != 0 ||
+                 draft.OriginalName.Length != 0 || draft.OriginalNumber.Length != 0)) ||
+            (!draft.IsCreate &&
+                (string.IsNullOrWhiteSpace(draft.PersonId) ||
+                 draft.PersonId.Length > 128 || draft.PersonId.Any(char.IsControl) ||
+                 draft.BaseRevision < 1 ||
+                 draft.OriginalName.Length < 3 ||
+                 draft.OriginalNumber.Length < 4)))
+            throw new InvalidDataException("Invalid person identity mutation draft.");
+        _ = CanonicalNumber(draft.Number);
+    }
+
+    public async Task<NativePersonnelMutationPreview> PreviewAsync(
+        NativeIdentity actor, NativePersonnelMutationDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidatePersonDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        string number = CanonicalNumber(draft.Number);
+        string day = LocalPersonDay();
+        NativePersonnelMutationPreview result;
+
+        if (draft.IsCreate)
+        {
+            var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+                .ConfigureAwait(false) ??
+                throw new UnauthorizedAccessException("Personnel session not found.");
+            if (principal.UserId != actor.UserId || principal.Username != actor.Username ||
+                principal.Role != actor.Role || principal.SessionNonce != actor.SessionNonce)
+                throw new UnauthorizedAccessException("Personnel principal changed.");
+            BridgeResponse preview = await new ArchivedReturnService(database)
+                .PreviewAsync(new JsonObject
+                {
+                    ["visibleName"] = draft.Name,
+                    ["serviceNumberA"] = number,
+                    ["siteId"] = draft.SiteId
+                }, principal, ct).ConfigureAwait(false);
+            JsonObject data = RequiredObject(preview, "ResolveArchivedIdentity");
+            JsonArray candidates = RequiredArray(data, "candidates");
+            bool conflict = RequiredBoolean(data, "requiresResolution");
+            if (conflict != (candidates.Count > 0) || candidates.Count > 50 ||
+                RequiredText(data, "businessDate") != day)
+                throw new InvalidDataException("Archived identity preview mismatch.");
+            result = new NativePersonnelMutationPreview(
+                draft, number, day, "", conflict, candidates.Count, "", "");
+        }
+        else
+        {
+            BridgeResponse preview = await new PersonRosterService(database)
+                .PreviewPersonIdentityUpdateAsync(new JsonObject
+                {
+                    ["personId"] = draft.PersonId,
+                    ["baseRevision"] = draft.BaseRevision,
+                    ["visibleName"] = draft.Name,
+                    ["serviceNumberA"] = number,
+                    ["effectiveLocalDate"] = day,
+                    ["actorHint"] = actor.UserId
+                }, ct).ConfigureAwait(false);
+            JsonObject data = RequiredObject(preview, "PreviewPersonIdentityUpdate");
+            string token = RequiredText(data, "previewToken");
+            string oldName = RequiredText(data, "oldName");
+            string oldNumber = RequiredText(data, "oldServiceNumberA");
+            if (RequiredText(data, "personId") != draft.PersonId ||
+                RequiredNumber(data, "baseRevision") != draft.BaseRevision ||
+                oldName != draft.OriginalName ||
+                oldNumber != draft.OriginalNumber ||
+                RequiredText(data, "newName") != draft.Name ||
+                RequiredText(data, "newServiceNumberA") != number ||
+                RequiredText(data, "effectiveLocalDate") != day ||
+                !RequiredBoolean(data, "willCloseOldSnapshot") ||
+                token.Length != 64)
+                throw new InvalidDataException("Canonical identity update preview mismatch.");
+            result = new NativePersonnelMutationPreview(
+                draft, number, day, token, false, 0, oldName, oldNumber);
+        }
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        return result;
+    }
+
+    public async Task<NativePersonnelMutationReceipt> CommitAsync(
+        NativeIdentity actor, NativePersonnelMutationPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || preview.RequiresIdentityResolution ||
+            preview.CandidateCount != 0 ||
+            preview.EffectiveLocalDate != LocalPersonDay() ||
+            !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.OldName != preview.Draft.OriginalName ||
+            preview.OldNumber != preview.Draft.OriginalNumber ||
+            preview.CanonicalNumber != CanonicalNumber(preview.Draft.Number) ||
+            (!preview.Draft.IsCreate && preview.PreviewToken.Length != 64) ||
+            (preview.Draft.IsCreate && preview.PreviewToken.Length != 0))
+            throw new InvalidDataException("Invalid or expired identity approval.");
+        ValidatePersonDraft(preview.Draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response;
+        if (preview.Draft.IsCreate)
+        {
+            // All archived-name/number collisions are blocked by the native
+            // preview. The canonical transaction re-checks them, along with
+            // active uniqueness and existing active-site assignment.
+            response = await new PersonRosterService(database).CreatePersonAsync(
+                actor.UserId, actor.Username, new JsonObject
+                {
+                    ["visibleName"] = preview.Draft.Name,
+                    ["serviceNumberA"] = preview.CanonicalNumber,
+                    ["siteId"] = preview.Draft.SiteId,
+                    ["firstRecordedLocalDate"] = preview.EffectiveLocalDate,
+                    ["operationId"] = operationId
+                }, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            response = await new PersonRosterService(database).UpdatePersonIdentityAsync(
+                actor.UserId, actor.Username, new JsonObject
+                {
+                    ["personId"] = preview.Draft.PersonId,
+                    ["expectedRevision"] = preview.Draft.BaseRevision,
+                    ["visibleName"] = preview.Draft.Name,
+                    ["serviceNumberA"] = preview.CanonicalNumber,
+                    ["effectiveLocalDate"] = preview.EffectiveLocalDate,
+                    ["reason"] = preview.Draft.Reason,
+                    ["previewToken"] = preview.PreviewToken,
+                    ["operationId"] = operationId
+                }, ct).ConfigureAwait(false);
+        }
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject result = RequiredObject(response,
+            preview.Draft.IsCreate ? "CreatePerson" : "UpdatePersonIdentity");
+        string id = RequiredText(result, "personId");
+        long revision = RequiredNumber(result, "revision");
+        if (string.IsNullOrWhiteSpace(id) || id.Length > 128 ||
+            (!preview.Draft.IsCreate && id != preview.Draft.PersonId) ||
+            revision != (preview.Draft.IsCreate ? 1 : preview.Draft.BaseRevision + 1))
+            throw new InvalidDataException("Identity commit receipt mismatch.");
+        return new NativePersonnelMutationReceipt(preview.Draft.IsCreate, id, revision);
+    }
 
     // Phase 8: personnel administration reads only the original roster
     // service, with the same permanent PersonId and current custom fields.
