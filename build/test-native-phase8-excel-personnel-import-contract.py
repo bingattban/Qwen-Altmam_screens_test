@@ -61,7 +61,7 @@ def inspect(files):
         "_review.NewSites.Count == 0 || _approvedSites",
         "_review.SimilarNameCount == 0 || _reviewedSimilarNames",
         "review.Collisions.Count != review.SimilarNameCount",
-        "review.NewCount is < 0 or > 100",
+        "review.NewCount is < 0 or > 500",
         "review.CustomUpdateCount != 0",
         "await _backend.StageAndPreviewAsync(",
         "_attempted = true",
@@ -88,7 +88,7 @@ def inspect(files):
         '["operationId"] = operationId',
         "JsonNode.DeepEquals(analysis[field], preview[field])",
         'RequiredBoolean(preview, "requiresExplicitConfirmation")',
-        "fresh is < 0 or > 100",
+        "fresh is < 0 or > 500",
         "similarCount != collisions.Count",
         "new NativeExcelImportCollision(",
         "checked((int)RequiredNumber(result, \"createdCount\"))",
@@ -122,7 +122,7 @@ def inspect(files):
         "Only_small_local_xlsx_and_exact_canonical_preview_are_accepted",
         "New_sites_and_similar_name_warnings_need_independent_consent",
         "Duplicate_service_number_and_archived_identity_remain_issues_not_automatic_merges",
-        "All_rows_must_be_visible_and_limit_100_in_native_pilot",
+        "All_rows_must_be_visible_and_limit_500_in_native_import",
         "Existing_custom_field_updates_are_rejected_even_if_preview_was_forged",
         "New_file_invalidates_all_old_consent_and_original_preview",
         "Logout_during_very_late_import_preview_drops_results",
@@ -220,4 +220,4 @@ if __name__ == "__main__":
         damaged[key] = damaged[key].replace(needle, "REMOVED_NEGATIVE_GUARD")
         if not inspect(damaged):
             raise SystemExit(f"No negative regression for {key}: {needle}")
-    print("PHASE8 XLSX IMPORT PASS: original additive SQLCipher, full 100-person review, no overwrite, both Windows gates")
+    print("PHASE8 XLSX IMPORT PASS: original additive SQLCipher, full 500-person review, no overwrite, both Windows gates")
