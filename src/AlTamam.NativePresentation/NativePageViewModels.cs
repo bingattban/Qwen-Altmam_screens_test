@@ -1,8 +1,9 @@
 namespace AlTamam.NativePresentation;
 
 /// <summary>
-/// Unconverted operational route previews: intentionally no domain mutation, fake personnel rows,
-/// database connection, authentication shortcut, or claim of completed migration.
+/// Shared native page base. Reports/Settings are still placeholders; the real
+/// Dashboard, Daily, Monthly and Administration people register use dedicated
+/// SQLCipher-backed view models. No placeholder may mutate domain data.
 /// Domain operations remain in the existing audited Application/Domain/Infrastructure.
 /// </summary>
 public abstract class NativePageViewModel(NativeScreen screen, string title)
