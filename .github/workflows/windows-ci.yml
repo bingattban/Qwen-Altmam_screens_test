@@ -140,6 +140,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 additive-only XLSX import contract failed' }
           python build/test-native-phase8-safe-multisheet-import-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 safe all-worksheet XLSX contract failed' }
+          python build/test-native-phase8-import-outcome-history-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 owner-scoped Excel import outcome history failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py

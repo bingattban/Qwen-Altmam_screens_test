@@ -74,6 +74,10 @@
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenExcelImportCommand}"
                         AutomationProperties.Name="اختيار ملف Excel ومعاينة الأفراد الجدد والمواقع قبل الحفظ"/>
+                <Button Content="سجل دفعات استيراد Excel"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenImportHistoryCommand}"
+                        AutomationProperties.Name="عرض دفعات Excel المحفوظة والأسماء المرفوضة دون تعديل"/>
                 <Button Content="إدارة حالات التحضير" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenStatusCatalogCommand}"
@@ -266,5 +270,8 @@
         <views:NativeExcelPersonnelImportView Grid.RowSpan="5"
                                               DataContext="{Binding ExcelImport}"
                                               Panel.ZIndex="220"/>
+        <views:NativeImportOutcomeHistoryView Grid.RowSpan="5"
+                                              DataContext="{Binding ImportHistory}"
+                                              Panel.ZIndex="225"/>
     </Grid>
 </UserControl>
