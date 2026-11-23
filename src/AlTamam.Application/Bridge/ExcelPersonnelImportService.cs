@@ -617,7 +617,7 @@ public sealed class ExcelPersonnelImportService
     private static JsonArray PreviewNames(JsonArray accepted)
     {
         var preview = new JsonArray();
-        foreach (var row in accepted.Take(100))
+        foreach (var row in accepted.Take(MaxRecords))
         {
             var x = (JsonObject)row!;
             preview.Add(new JsonObject {
