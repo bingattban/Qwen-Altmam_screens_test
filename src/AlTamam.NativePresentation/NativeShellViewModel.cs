@@ -60,6 +60,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     {
                         Administration.CloseProfile();
                         Administration.Mutation.ForceCancel();
+                        Administration.Movement.ForceCancel();
                     }
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)

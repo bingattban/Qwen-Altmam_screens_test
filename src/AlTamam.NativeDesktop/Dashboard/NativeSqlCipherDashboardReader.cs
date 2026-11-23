@@ -18,12 +18,148 @@ public sealed class NativeSqlCipherDashboardReader(
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
-      INativePersonnelMutationBackend
+      INativePersonnelMutationBackend, INativePersonnelMovementBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
+
+
+    // Phase 8: source-of-truth movement preview and commit are ONLY
+    // PersonnelMovementService (SQLCipher, one-use preview, audit,
+    // immutable assignment/movement history, same-day move guard).
+    private static void ValidateMovementDraft(NativePersonnelMovementDraft draft)
+    {
+        if (draft is null ||
+            string.IsNullOrWhiteSpace(draft.PersonId) ||
+            draft.PersonId.Length > 128 || draft.PersonId.Any(char.IsControl) ||
+            string.IsNullOrWhiteSpace(draft.PersonName) ||
+            draft.PersonName.Length > 200 || draft.PersonName.Any(char.IsControl) ||
+            draft.ServiceNumberA is null || draft.Revision < 1 ||
+            string.IsNullOrWhiteSpace(draft.SourceSiteId) ||
+            draft.SourceSiteId.Length > 128 || draft.SourceSiteId.Any(char.IsControl) ||
+            string.IsNullOrWhiteSpace(draft.SourceSiteName) ||
+            draft.SourceSiteName.Length > 150 ||
+            draft.DestinationSiteId is null ||
+            draft.ExternalDestinationName is null ||
+            (draft.IsExternal
+                ? draft.ExternalDestinationName.Length is < 2 or > 150 ||
+                  draft.ExternalDestinationName.Any(char.IsControl) ||
+                  draft.DestinationSiteId.Length != 0
+                : string.IsNullOrWhiteSpace(draft.DestinationSiteId) ||
+                  draft.DestinationSiteId.Length > 128 ||
+                  draft.DestinationSiteId.Any(char.IsControl) ||
+                  draft.DestinationSiteId == draft.SourceSiteId ||
+                  draft.ExternalDestinationName.Length != 0))
+            throw new InvalidDataException("Invalid transfer intent.");
+        _ = CanonicalNumber(draft.ServiceNumberA);
+    }
+
+    public async Task<NativePersonnelMovementPreview> PreviewMovementAsync(
+        NativeIdentity actor, NativePersonnelMovementDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidateMovementDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Movement session expired.");
+        if (principal.UserId != actor.UserId || principal.Username != actor.Username ||
+            principal.Role != actor.Role || principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Movement principal changed.");
+
+        string today = LocalPersonDay();
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["businessDate"] = today,
+                ["sourceSiteId"] = draft.SourceSiteId,
+                ["destinationSiteId"] = draft.IsExternal ? null : draft.DestinationSiteId,
+                ["destinationExternalName"] = draft.IsExternal ? draft.ExternalDestinationName : null,
+                ["personIds"] = new JsonArray(JsonValue.Create(draft.PersonId))
+            }, principal, draft.IsExternal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelMovementPreview");
+        string date = RequiredText(data, "businessDate");
+        string destination = RequiredText(data, "destinationName");
+        string token = RequiredText(data, "previewToken");
+        var personArray = RequiredArray(data, "persons");
+        if (date != today || RequiredText(data, "sourceSiteId") != draft.SourceSiteId ||
+            RequiredBoolean(data, "external") != draft.IsExternal ||
+            (!draft.IsExternal &&
+                RequiredText(data, "destinationSiteId") != draft.DestinationSiteId) ||
+            (draft.IsExternal && data["destinationSiteId"] is not null) ||
+            RequiredNumber(data, "count") != 1 ||
+            personArray.Count != 1 || token.Length != 64 ||
+            token.Any(c => !char.IsAsciiHexDigit(c)) ||
+            (draft.IsExternal && destination != draft.ExternalDestinationName) ||
+            string.IsNullOrWhiteSpace(destination))
+            throw new InvalidDataException("Canonical transfer preview mismatch.");
+        JsonObject person = RequireObject(personArray[0]);
+        NativePersonnelMovementPerson mapped = new(
+            RequiredText(person, "personId"),
+            RequiredText(person, "name"),
+            RequiredText(person, "serviceNumberA"),
+            RequiredNumber(person, "rowVersion"),
+            RequiredText(person, "sourceSiteId"),
+            RequiredText(person, "sourceSiteName"),
+            RequiredText(person, "sourceAssignmentId"));
+        if (mapped.PersonId != draft.PersonId || mapped.Name != draft.PersonName ||
+            mapped.ServiceNumberA != draft.ServiceNumberA ||
+            mapped.Revision != draft.Revision ||
+            mapped.SourceSiteId != draft.SourceSiteId ||
+            mapped.SourceSiteName != draft.SourceSiteName ||
+            mapped.SourceAssignmentId.Length is < 3 or > 128)
+            throw new InvalidDataException("Person moved since the selected roster.");
+        return new NativePersonnelMovementPreview(draft, date, token, destination, [mapped]);
+    }
+
+    public async Task<NativePersonnelMovementReceipt> CommitMovementAsync(
+        NativeIdentity actor, NativePersonnelMovementPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.BusinessDate != LocalPersonDay() ||
+            preview.PreviewToken.Length != 64 ||
+            preview.PreviewToken.Any(c => !char.IsAsciiHexDigit(c)) ||
+            preview.Persons.Count != 1 ||
+            (preview.Draft.IsExternal &&
+                preview.DestinationName != preview.Draft.ExternalDestinationName))
+            throw new InvalidDataException("Movement approval expired or invalid.");
+        ValidateMovementDraft(preview.Draft);
+        var person = preview.Persons[0];
+        if (person.PersonId != preview.Draft.PersonId ||
+            person.Name != preview.Draft.PersonName ||
+            person.ServiceNumberA != preview.Draft.ServiceNumberA ||
+            person.Revision != preview.Draft.Revision ||
+            person.SourceSiteId != preview.Draft.SourceSiteId ||
+            person.SourceSiteName != preview.Draft.SourceSiteName ||
+            string.IsNullOrWhiteSpace(person.SourceAssignmentId))
+            throw new InvalidDataException("Movement identity preview changed.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Movement session expired.");
+        if (principal.UserId != actor.UserId || principal.Username != actor.Username ||
+            principal.Role != actor.Role || principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Movement principal changed.");
+        BridgeResponse result = await new PersonnelMovementService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["operationId"] = operationId
+            }, principal, preview.Draft.IsExternal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject receipt = RequiredObject(result, "PersonnelMovementCommit");
+        if (RequiredNumber(receipt, "count") != 1 ||
+            RequiredText(receipt, "businessDate") != preview.BusinessDate ||
+            RequiredBoolean(receipt, "external") != preview.Draft.IsExternal ||
+            RequiredText(receipt, "destinationName") != preview.DestinationName)
+            throw new InvalidDataException("Canonical transfer receipt mismatch.");
+        return new NativePersonnelMovementReceipt(
+            preview.Draft.IsExternal, preview.BusinessDate, 1, preview.DestinationName);
+    }
 
     // Phase 8: all mutations reuse existing audited canonical domain services.
     // The adapter is the only route from native WPF to SQLCipher writes.

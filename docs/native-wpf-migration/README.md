@@ -435,3 +435,56 @@ Excel personnel import, full reports or native configuration.
 The production packages continue to use DesktopHost/WebView2 until
 all 69 routes, keyboard/DPI testing and clean-machine acceptance
 are completed.
+
+ 
+## Phase 8 — slice 3: native internal/external personnel transfer (one person)
+
+A manager can choose **نقل داخلي** or **نقل خارجي** for one CURRENT
+person from the native WPF personnel directory. The source site's
+canonical **SiteId must first be explicitly selected in the directory
+filter**, and the chosen row's current visible site name must agree
+with that site's canonical catalogue entry. Transfers are not offered
+from "all sites", from an archived/separated person, or from a
+supervisor session. The list remains read-only; movement happens only
+from a separate RTL preview/confirm overlay.
+
+The typed WPF adapter delegates BOTH phases strictly to the original
+`PersonnelMovementService.PreviewAsync` and `CommitAsync`, using
+`BridgeSharedServices.ResolveSessionAsync` and exact actor/role/nonce
+checks before and after each call. Source site, active PersonId,
+original number, name, RowVersion and source assignment are verified
+against the canonical server preview. Internal destinations must be
+a distinct active site (enforced by the original service); external
+transfers require an explicit 2–150 character target organization.
+The original SQLCipher transaction rejects changes to an old day,
+a duplicate movement that day, stale assignments and changed
+revisions, and atomically records the movement history, new/closed
+assignment, audit evidence and one-use preview token. External moves
+also use the existing account suspension policy.
+
+Merely opening the form or previewing NEVER mutates data. Editing
+the destination revokes preview approval. The operator must separately
+confirm, which sends a single immutable operationId. A lost or
+ambiguous commit reply must NOT trigger an automatic retry; inspect
+the movement archive and operations journal first. Leaving the
+page, changing source filter, logout, stale person row or changed
+session cancels pending approval and suppresses delayed responses.
+Successful approval is followed by a fresh original roster query.
+
+Six test-first xUnit cases cover permissions, mandatory source site,
+no-write internal preview, named external transfer, changed input
+revocation, forged/stale person snapshot, nonce and logout, and
+no double-send after an ambiguous result. A Phase 8 fail-closed
+security contract executes in parallel Windows Core AND Release,
+prior to x86/x64 Portable+Installer packaging, real Windows package
+acceptance and independent SHA-256 audit.
+
+**Limitations and deliberate exclusions:** this initial native slice
+moves **one person at a time**. The canonical movement service
+supports 1–100 people per operation, but the native multi-select UX
+and bulk preview are not yet implemented or tested. Archive search,
+details, separation, return/restoration, site/status administration
+and remaining functionality still require migration. All customer
+installer/portable packages remain the approved DesktopHost/WebView2
+product until full native 69-route parity and physical Windows
+keyboard/DPI/clean-machine acceptance.
