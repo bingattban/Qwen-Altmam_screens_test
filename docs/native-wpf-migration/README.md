@@ -801,3 +801,82 @@ plus remaining 69-route parity and independent Windows keyboard,
 accessibility, clean-machine and 100/125/150% DPI UAT. The **four shipped
 customer variants still use original DesktopHost/WebView2** until this
 full production parity gate is explicitly approved.
+
+
+## Phase 8 — slice 10: native WPF site retirement and safe reassignment
+
+The original `AdminConfigurationService.RemoveSiteAndReassignCurrentPersonsAsync`
+already implements an **atomic soft retirement**, not an SQL DELETE: it
+deactivates a non-system site and moves only its current **open and
+eligible** person assignments to the protected system site
+`SITE-UNSPECIFIED` ("غير محدد"). It retains existing PersonIds,
+historical site/name/identity snapshots, old dated assignments,
+attendance records and prior movements; all new assignments and audit
+events are in one original SQLCipher transaction.
+
+**No destination is selectable:** unlike a standard person transfer,
+site retirement has exactly one canonical destination. The native
+sites catalogue now exposes a separate `إيقاف الموقع المحدد ونقل انتساباته`
+command only for an actual **selected current active non-system site**,
+with manager-only role and server-resolved live session nonce. System
+site `SITE-UNSPECIFIED` and forged/stale list rows are denied.
+
+A newly added **read-only canonical impact preview** method
+`AdminConfigurationService.PreviewSiteRetirementAsync` reports the
+original active site's immutable SiteId, name and RowVersion; exact
+count of open assignments; effective local date; the fixed
+`SITE-UNSPECIFIED` destination; and clear eligibility/blocking
+reasons. It never writes to SQLCipher. It preflights the original
+service's no-retirement rules for inactive or invalid open assignments,
+same-day newly opened assignments, closed DAY/MONTH periods, and an
+individual's attendance or movement on the effective date. Invalid
+protected/missing/stale sites reject. Previews are advisory only;
+the original commit rechecks ALL version, count, closure, assignment
+and date constraints atomically, refusing change rather than rewriting
+past records.
+
+The modal discloses site name, stable ID, revision, active assignment
+count, specific effective date and system destination. The operator
+must separately tick an unchecked consent: **إيقاف الموقع ونقل
+انتسابات جميع الأفراد إلى غير محدد مع الحفاظ على التاريخ**. Without
+eligibility and consent, no commit is possible. Any stale/rejected
+preview fails closed. The single explicit confirm calls ONLY original
+`RemoveSiteAndReassignCurrentPersonsAsync` with actor-bound
+`siteId`, `expectedRevision`, the exact preview
+`expectedActiveCount`, `confirmed:true`, and one unique
+`operationId`. The full canonical receipt must match original
+SiteId/name, new RowVersion, exact reassigned count and date and must
+report `active:false`.
+
+No native direct SQL writer or schema migration is introduced.
+The site catalogue and administration roster refresh after successful
+close. Logout, page navigation, source row change and stale replies
+invalidate a pending review. If a commit response is lost or malformed,
+the same session is blocked from replaying the action; the operator
+must inspect original sites, personnel assignments and audit events.
+There is no silent retry and no workaround for a closed day.
+
+**Tests-first:** Eight C# native view-model xUnit tests were
+committed *before* implementation, covering no-session/supervisor,
+protected site and forged-row denial; non-writing preview with
+immutable source/version/count/fixed destination; blocked/stale
+previews; explicit one-time consent; stale day/count/identity;
+logout-late-response; unknown write no retry and nonselectable
+destination. Two additional integration regressions in the existing
+synthetic SQLCipher site-retirement suite verify the side-effect-free
+count read and protected/closed-day behavior alongside existing atomic
+reassignment/history tests. A structural negative-path source/XAML
+contract runs with fail-closed immediate exit in BOTH Windows Core
+and Windows Release before costly builds.
+
+**Merge gate remains unchanged:** same-head green Core and Release,
+nine disjoint C# Release shards (1,162+ unique tests), true pre-package
+Windows WPF/WebView2 E2E, two 32/64-bit builds only AFTER tests, all
+four real Portable/Installer acceptance jobs, then independent SHA-256
+audit. Manual clean-machine Windows, keyboard/accessibility and
+100/125/150% scaling evidence remain separate production requirements.
+The four published customer packages continue to use original
+DesktopHost/WebView2 until ALL native 69 routes and manual acceptance
+are proven. Future native administration slices: batch movement,
+import personnel Excel, reports and settings; this slice does NOT
+substitute for the original person transfer features.

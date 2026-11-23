@@ -213,6 +213,63 @@ public sealed class SiteRetirementIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Equal(0L,Count("SELECT COUNT(*) FROM AuditEvents"));
     }
 
+    [Fact]
+    public async Task PreviewRetirement_ExposesExactCurrentActiveCountWithoutAnyWrites()
+    {
+        var svc = new AdminConfigurationService(_db, _clock);
+        var snapshot = await svc.PreviewSiteRetirementAsync(new JsonObject
+        {
+            ["siteId"]="SITE-RETIRE", ["expectedRevision"]=3L
+        }, Actor, CancellationToken.None);
+        Assert.True(snapshot.Success, snapshot.UserMessage);
+        var data = Assert.IsType<JsonObject>(snapshot.Data);
+        Assert.Equal("SITE-RETIRE", data["siteId"]!.GetValue<string>());
+        Assert.Equal("موقع التجربة", data["siteName"]!.GetValue<string>());
+        Assert.Equal(3L, data["rowVersion"]!.GetValue<long>());
+        Assert.Equal(2L, data["activeCount"]!.GetValue<long>());
+        Assert.Equal("2026-10-26", data["effectiveDate"]!.GetValue<string>());
+        Assert.Equal("SITE-UNSPECIFIED", data["destinationSiteId"]!.GetValue<string>());
+        Assert.True(data["eligible"]!.GetValue<bool>());
+        Assert.Equal(0L, Count("SELECT COUNT(*) FROM AuditEvents"));
+        Assert.Equal(3L, Count("SELECT COUNT(*) FROM PersonAssignments"));
+        Assert.Equal("1", Scalar("SELECT ActiveFlag FROM Sites WHERE SiteId='SITE-RETIRE'"));
+    }
+
+    [Fact]
+    public async Task PreviewRetirement_ProtectsSystemSiteAndClosedDayWithoutChangingHistory()
+    {
+        var svc = new AdminConfigurationService(_db, _clock);
+        var protectedResult = await svc.PreviewSiteRetirementAsync(new JsonObject
+        {
+            ["siteId"]="SITE-UNSPECIFIED", ["expectedRevision"]=1L
+        }, Actor, CancellationToken.None);
+        Assert.False(protectedResult.Success);
+        var wrongVersion = await svc.PreviewSiteRetirementAsync(new JsonObject
+        {
+            ["siteId"]="SITE-RETIRE", ["expectedRevision"]=99L
+        }, Actor, CancellationToken.None);
+        Assert.False(wrongVersion.Success);
+        using (var c = _db.CreateOpenConnection())
+        using (var q = c.CreateCommand())
+        {
+            q.CommandText = """
+                INSERT INTO PeriodClosures(PeriodType,PeriodKey,IsClosed,ClosedAtUtc,ClosedByActor,PolicyVersion)
+                VALUES('DAY','2026-10-26',1,'2026-10-26T20:00:00Z','TEST','site-preview-guard');
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var closed = await svc.PreviewSiteRetirementAsync(new JsonObject
+        {
+            ["siteId"]="SITE-RETIRE", ["expectedRevision"]=3L
+        }, Actor, CancellationToken.None);
+        Assert.True(closed.Success, closed.UserMessage);
+        var data = Assert.IsType<JsonObject>(closed.Data);
+        Assert.False(data["eligible"]!.GetValue<bool>());
+        Assert.Contains("مغلق", data["blockReason"]!.GetValue<string>());
+        Assert.Equal(0L, Count("SELECT COUNT(*) FROM AuditEvents"));
+        Assert.Equal(3L, Count("SELECT COUNT(*) FROM PersonAssignments"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

@@ -225,6 +225,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         {
             SiteCatalog.AttachBackend(siteBackend, () => _liveActor?.Invoke());
             SiteCatalog.CommittedAndClosed += () => _ = RefreshAsync();
+            if (reader is INativeSiteRetirementBackend retirementBackend)
+                SiteCatalog.AttachRetirementBackend(retirementBackend);
         }
         if (reader is INativeStatusCatalogBackend statusBackend)
         {

@@ -13,6 +13,7 @@ namespace AlTamam.NativePresentation;
 public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
 {
     private INativeSiteCatalogBackend? _backend;
+    private bool _retirementAvailable;
     private Func<NativeIdentity?>? _liveActor;
     private NativeIdentity? _actor, _uncertainActor;
     private CancellationTokenSource? _pending;
@@ -29,15 +30,28 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
 
     public NativeSiteCatalogViewModel()
     {
-        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead && !_busy);
+        Retirement = new NativeSiteRetirementViewModel();
+        Retirement.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(NativeSiteRetirementViewModel.IsOpen))
+                Notify();
+        };
+        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(),
+            _ => CanRead && !_busy && !Retirement.IsOpen);
         CreateCommand = new NativeCommand(_ => BeginCreate(), _ => CanEdit);
         RenameCommand = new NativeCommand(x => {
             if (x is NativeSiteRow row) BeginRename(row);
         }, x => CanEdit && x is NativeSiteRow row && MayRename(row));
+        RetireCommand = new NativeCommand(x =>
+        {
+            if (x is NativeSiteRow row && CanRetireSite(row))
+                Retirement.Open(row);
+        }, x => x is NativeSiteRow row && CanRetireSite(row));
         ReviewCommand = new NativeCommand(_ => Review(), _ => CanReview);
         ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(), _ => CanConfirm);
         CancelDraftCommand = new NativeCommand(_ => CancelDraft(), _ => CanEdit);
-        CloseCommand = new NativeCommand(_ => Close(), _ => _open && !_busy);
+        CloseCommand = new NativeCommand(_ => Close(),
+            _ => _open && !_busy && !Retirement.IsOpen);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -48,7 +62,8 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
     public bool CanRead => _open && _backend is not null && _actor is { } actor &&
         _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
-    public bool CanEdit => CanRead && !_busy && !_attempted;
+    public bool CanEdit => CanRead && !_busy && !_attempted &&
+        !Retirement.IsOpen;
     public bool IsCreating => _create;
     public bool IsReviewing => _reviewing;
     public bool HasDraft => _selected is not null || _create;
@@ -79,9 +94,11 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
         $"تم اعتماد الموقع {_receipt.Name} — المعرف {_receipt.SiteId}، الإصدار {_receipt.Revision}.";
     public NativeSiteMutationReceipt? Receipt => _receipt;
     public IReadOnlyList<NativeSiteRow> Sites => _sites;
+    public NativeSiteRetirementViewModel Retirement { get; }
     public ICommand RefreshCommand { get; }
     public ICommand CreateCommand { get; }
     public ICommand RenameCommand { get; }
+    public ICommand RetireCommand { get; }
     public ICommand ReviewCommand { get; }
     public ICommand ConfirmCommand { get; }
     public ICommand CancelDraftCommand { get; }
@@ -95,6 +112,28 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
     }
+
+    public void AttachRetirementBackend(INativeSiteRetirementBackend backend)
+    {
+        if (_retirementAvailable)
+            throw new InvalidOperationException("Site retirement already attached.");
+        _retirementAvailable = true;
+        Retirement.AttachBackend(backend, () => _liveActor?.Invoke(),
+            row => CanRead && !_busy && !_attempted &&
+                _sites.Any(current => ReferenceEquals(current, row)));
+        Retirement.CommittedAndClosed += () =>
+        {
+            _ = RefreshAsync();
+            CommittedAndClosed?.Invoke();
+        };
+        Notify();
+    }
+
+    private bool CanRetireSite(NativeSiteRow row) =>
+        _retirementAvailable && CanEdit &&
+        row.Active && row.Revision >= 1 &&
+        row.SiteId != "SITE-UNSPECIFIED" &&
+        _sites.Any(current => ReferenceEquals(current, row));
 
     public async Task OpenAsync(CancellationToken ct = default)
     {
@@ -266,7 +305,9 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
 
     public void Close()
     {
-        if (_open && _busy && _attempted) return; // no hiding possible write
+        if ((_open && _busy && _attempted) || Retirement.IsOpen) return;
+        // A retirement has its own explicit close/confirmation. Do not hide it
+        // through a catalogue navigation or unknown write response.
         bool success = _receipt is not null;
         Reset();
         if (success) CommittedAndClosed?.Invoke();
@@ -274,6 +315,7 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
 
     public void ForceCancel()
     {
+        Retirement.ForceCancel();
         if (_attempted && _receipt is null && _actor is { } actor)
             _uncertainActor = actor;
         Reset();
@@ -345,7 +387,7 @@ public sealed class NativeSiteCatalogViewModel : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         foreach (ICommand command in new[]
         {
-            RefreshCommand, CreateCommand, RenameCommand,
+            RefreshCommand, CreateCommand, RenameCommand, RetireCommand,
             ReviewCommand, ConfirmCommand, CancelDraftCommand, CloseCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();

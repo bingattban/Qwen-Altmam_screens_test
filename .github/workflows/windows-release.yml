@@ -155,6 +155,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 audited site management contract failed' }
           python build/test-native-phase8-status-catalog-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 canonical attendance status catalogue contract failed' }
+          python build/test-native-phase8-site-retirement-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 original SQLCipher site retirement contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
