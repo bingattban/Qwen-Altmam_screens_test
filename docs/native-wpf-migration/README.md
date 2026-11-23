@@ -880,3 +880,81 @@ DesktopHost/WebView2 until ALL native 69 routes and manual acceptance
 are proven. Future native administration slices: batch movement,
 import personnel Excel, reports and settings; this slice does NOT
 substitute for the original person transfer features.
+
+
+## Phase 8 — slice 11: native WPF internal batch transfers, selected current page ONLY
+
+The original `PersonnelMovementService.PreviewAsync` and
+`CommitAsync(external:false)` already support **1–100 PersonIds in ONE
+atomic SQLCipher operation** using an actor-bound one-use preview token,
+identical mutation idempotency and a single transaction for all new
+movement records, effective-dated assignments and audits. The canonical
+service independently validates current active status/assignment,
+original stable PersonId and RowVersion, source site, destination site
+activity and absence of any previous movement on the effective date;
+any stale member rejects the ENTIRE batch. It does NOT rewrite an old
+attendance snapshot or retroactively alter the person's earlier site.
+
+The new Arabic RTL WPF `نقل جماعي داخلي — الصفحة الحالية` command is
+available only to the live manager in administration with an
+**explicit source-site filter** and active-person status filter.
+Selection is NEVER inferred from the site's total count or from
+unloaded pages. Only the at most 100 verified live rows in the CURRENT
+visible directory page are available, all initially unchecked. The
+operator ticks individual people, chooses a distinct active destination
+site, and presses the separate **nonmutating canonical preview**.
+Every returned person must match the selected immutable PersonId,
+display name, number (ع), RowVersion, original source site and
+source AssignmentId; the date must equal today, destination name must
+match and the actor-bound one-use preview token must be a 64-digit hex
+value. A forged, missing or extra member invalidates the **whole**
+preview. Changing any selection or destination clears the old token
+and the human attestation.
+
+The preview shows every selected person's original name, number (ع)
+and immutable PersonId, exact total and explicit source/destination
+for review. A separate unchecked checkbox requires the manager to
+certify the exact list and destination. Only after this consent does
+one call to the ORIGINAL `PersonnelMovementService.CommitAsync` occur
+with original one-use preview token, `external:false` and one
+unique operationId; it is NEVER a loop of individual writers. The
+canonical SQLCipher transaction independently rechecks the entire
+batch, persists each immutable movement/assignment, and stores one
+matching receipt for the whole action.
+
+Both preview and commit validate live role, SQLCipher principal,
+unchanged authenticated session nonce and the current page
+identity before and after the operation. Navigation, logout,
+page refresh or a changed destination/checkbox invalidate pending
+previews; unknown outcome, lost response or malformed receipt locks
+the same manager session from an accidental retry. The operator must
+verify the roster, original movements archive and operations audit
+before any new attempt. No silent resend of a possibly persisted
+batch, no attendance-history edits and no direct native SQL writer.
+
+**Test-first:** Nine C# xUnit regressions were added to the independent
+feature branch BEFORE the implementation: RBAC/logout denial, wrong
+source and stale/duplicated rows, manual selection of ONLY visible
+people, non-writing preview, forged/missing candidate, selection or
+destination invalidation, explicit one atomic write, cancellation of
+late preview on logout, lost/forged receipt no-retry, and roster
+replacement. The original SQLCipher
+`PersonnelMovementIntegrationTests` continue to validate atomic
+multi-person movement, replay idempotency, transfer after attendance
+and preservation of prior monthly/attendance history. A fail-closed
+negative-path structural contract executes separately in BOTH Windows
+Core and Windows Release before C# tests and packaging.
+
+**Boundaries:** This slice transfers INTERNAL personnel only;
+EXTERNAL batch transfer must be treated as a separate sensitive slice
+because it may revoke linked accounts/sessions. Batch selection does
+not cover hidden roster pages or automatically select a site's full
+strength. Site management, attendance, archived identities and
+reports must not be silently affected. The shipped four customer
+variants continue using the original DesktopHost/WebView2 host.
+Production adoption of native WPF still requires all 69 route
+equivalents plus clean-machine Windows, keyboard/accessibility,
+100/125/150% DPI acceptance. The exact-head merge gate still
+requires two green parallel workflows, nine disjoint C# Release
+test shards and genuine WPF/WebView2 E2E BEFORE building x86/x64
+Portable+Installer, four package acceptances and independent SHA256.
