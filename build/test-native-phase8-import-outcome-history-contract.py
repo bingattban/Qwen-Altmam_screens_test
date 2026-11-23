@@ -75,7 +75,8 @@ def problems(files):
     for k in ("contracts", "vm", "view", "viewcode"):
         for unsafe in ("INSERT INTO", "UPDATE Persons SET", "DELETE FROM",
                        "new SqliteConnection(", "new ExcelImportOutcomeService(",
-                       "ExportIssuesAsync(", "ExcelImportOutcomeService(database)"):
+                       "File.WriteAllBytes(", "SaveFileDialog",
+                       "ExcelImportOutcomeService(database)"):
             if unsafe in files[k]:
                 result.append(f"{k}: unexpected SQL/export writer {unsafe}")
     for k in ("core", "release"):
