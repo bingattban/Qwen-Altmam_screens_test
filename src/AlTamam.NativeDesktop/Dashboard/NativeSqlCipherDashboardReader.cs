@@ -16,7 +16,8 @@ namespace AlTamam.NativeDesktop.Dashboard;
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
-      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader
+      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
+      INativeMonthlyExcelExportBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -225,6 +226,96 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredText(data, "personName"), RequiredText(data, "serviceNumberA"),
             RequiredText(data, "siteName"), status, symbol, attendanceSite,
             source, committed, movementSummary, movementReason, history);
+    }
+
+
+    // Only this existing canonical service chooses the local output directory,
+    // writes .xlsx and enforces non-overwrite/atomic completion. Presentation
+    // layers never supply a path or clone any Excel writer.
+    private static (int Year, int Month) ValidateMonthlyExcelFilter(
+        NativeMonthlyExcelFilter filter)
+    {
+        if (filter.Period is not { Length: 7 } ||
+            !DateOnly.TryParseExact(filter.Period + "-01", "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var period) ||
+            period.Year is < 1900 or > 2199 ||
+            period > new DateOnly(DateTime.Now.Year, DateTime.Now.Month, 1) ||
+            filter.SiteId is null || filter.SiteId.Length > 128 ||
+            filter.SiteId.Any(char.IsControl) ||
+            filter.SearchTerm is null || filter.SearchTerm.Length > 100 ||
+            filter.SearchTerm.Any(char.IsControl))
+            throw new InvalidDataException("Invalid native monthly XLSX filter.");
+        return (period.Year, period.Month);
+    }
+
+    private static JsonObject MonthlyExcelPayload(
+        NativeMonthlyExcelFilter filter, int year, int month) => new()
+        {
+            ["year"] = year, ["month"] = month,
+            ["siteId"] = filter.SiteId, ["term"] = filter.SearchTerm
+        };
+
+    public async Task<NativeMonthlyExcelPreview> PreviewExcelAsync(
+        NativeIdentity actor, NativeMonthlyExcelFilter filter,
+        CancellationToken ct = default)
+    {
+        var (year, month) = ValidateMonthlyExcelFilter(filter);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new MonthlyExcelExportService(database)
+            .PreviewAsync(MonthlyExcelPayload(filter, year, month), ct)
+            .ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PreviewMonthlyExcelExport");
+        long total = RequiredNumber(data, "personCount");
+        if (RequiredNumber(data, "year") != year ||
+            RequiredNumber(data, "month") != month ||
+            RequiredNumber(data, "daysInMonth") != DateTime.DaysInMonth(year, month) ||
+            RequiredText(data, "siteId") != filter.SiteId ||
+            RequiredText(data, "term") != filter.SearchTerm ||
+            RequiredText(data, "format") != "xlsx" ||
+            total is < 0 or > 100000)
+            throw new InvalidDataException("Monthly Excel preview mismatch.");
+        string name = RequiredText(data, "suggestedFileName");
+        if (!name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains('/') || name.Contains('\\'))
+            throw new InvalidDataException("Unsafe monthly Excel filename.");
+        return new NativeMonthlyExcelPreview(
+            filter.Period, filter.SiteId, filter.SearchTerm,
+            RequiredText(data, "siteName"), name, total,
+            DateTime.DaysInMonth(year, month));
+    }
+
+    public async Task<NativeMonthlyExcelReceipt> ExportExcelAsync(
+        NativeIdentity actor, NativeMonthlyExcelFilter filter,
+        CancellationToken ct = default)
+    {
+        var (year, month) = ValidateMonthlyExcelFilter(filter);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new MonthlyExcelExportService(database)
+            .ExportAsync(MonthlyExcelPayload(filter, year, month), ct)
+            .ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "ExportMonthlyExcel");
+        // The existing service exports combined + per-site workbooks when
+        // siteId is empty; otherwise exactly one workbook. Its FileCount
+        // only appears for the consolidated all-sites result.
+        int fileCount = filter.SiteId.Length == 0
+            ? checked((int)RequiredNumber(data, "fileCount")) : 1;
+        string filePath = RequiredText(data, "filePath");
+        long total = RequiredNumber(data, "personCount");
+        if (RequiredText(data, "format") != "xlsx" ||
+            fileCount is < 1 or > 10001 ||
+            total is < 1 or > 100000 ||
+            !filePath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            RequiredNumber(data, "year") != year ||
+            RequiredNumber(data, "month") != month ||
+            (filter.SiteId.Length != 0 &&
+                (RequiredText(data, "siteId") != filter.SiteId ||
+                 RequiredText(data, "term") != filter.SearchTerm)))
+            throw new InvalidDataException("Monthly Excel export receipt mismatch.");
+        return new NativeMonthlyExcelReceipt(
+            filter.Period, filter.SiteId, filter.SearchTerm,
+            filePath, fileCount, total);
     }
 
     public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(

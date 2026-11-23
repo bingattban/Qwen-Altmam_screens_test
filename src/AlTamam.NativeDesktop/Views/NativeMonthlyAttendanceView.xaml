@@ -65,6 +65,9 @@
                         VerticalAlignment="Bottom" Command="{Binding ClearSearchCommand}"/>
                 <Button Style="{StaticResource MonthlyButton}" Content="تحديث"
                         VerticalAlignment="Bottom" Command="{Binding RefreshCommand}"/>
+                <Button Style="{StaticResource MonthlyButton}" Content="معاينة تصدير Excel"
+                        VerticalAlignment="Bottom" Command="{Binding Excel.OpenPreviewCommand}"
+                        AutomationProperties.Name="معاينة تصدير التمام الشهري إلى Excel قبل التأكيد"/>
             </WrapPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="4,2,4,8">
@@ -191,6 +194,69 @@
                             <TextBlock Margin="0,10,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
                                        Text="عرض تاريخي للقراءة فقط. لا يغير هذا العرض بيانات التحضير أو الصلاحيات."/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Border>
+        <!-- Native WPF Excel is a two-step, operator-approved action.
+             Original MonthlyExcelExportService owns safe path, files, and cleanup. -->
+        <Border Grid.RowSpan="5" Background="#B80F172A" Panel.ZIndex="120"
+                Visibility="{Binding Excel.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="10" Padding="18" Width="550" MaxHeight="520"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                <DockPanel LastChildFill="True">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <TextBlock Text="معاينة تصدير التمام الشهري" FontSize="19"
+                                   FontWeight="Bold" Foreground="#0F2942"
+                                   VerticalAlignment="Center" DockPanel.Dock="Right"/>
+                        <Button Content="إغلاق" Command="{Binding Excel.CloseCommand}"
+                                Style="{StaticResource MonthlyButton}"
+                                AutomationProperties.Name="إلغاء وإغلاق معاينة Excel"/>
+                    </DockPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock Text="المصدر: الأرشيف الشهري المعتمد في SQLCipher"
+                                       Foreground="#475569" TextWrapping="Wrap"/>
+                            <ProgressBar Height="5" IsIndeterminate="True"
+                                         Visibility="{Binding Excel.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <TextBlock Text="{Binding Excel.Error}" Foreground="#BE123C"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="الشهر المختار" FontWeight="Bold" Foreground="#64748B"
+                                       Margin="0,12,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.Period}" FontWeight="SemiBold"
+                                       Foreground="#0F2942" FlowDirection="LeftToRight"
+                                       HorizontalAlignment="Right"/>
+                            <TextBlock Text="الموقع المختار" FontWeight="Bold" Foreground="#64748B"
+                                       Margin="0,8,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.SiteName}" Foreground="#0F2942"/>
+                            <TextBlock Text="البحث المطبق" FontWeight="Bold" Foreground="#64748B"
+                                       Margin="0,8,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.SearchTerm}" Foreground="#0F2942"/>
+                            <TextBlock Text="عدد الأفراد ضمن المعاينة" FontWeight="Bold"
+                                       Foreground="#64748B" Margin="0,8,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.PersonCount}" Foreground="#0F2942"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="اسم الملف المقترح" FontWeight="Bold" Foreground="#64748B"
+                                       Margin="0,8,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.SuggestedFileName}"
+                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                            <TextBlock Text="يعتمد الحفظ على مجلد التقارير المحلي المحدد في إعدادات البرنامج. عند اختيار جميع المواقع ينشئ النظام كشفا موحدا وكشوفا لكل موقع، ولا يستبدل ملفات سابقة."
+                                       Foreground="#475569" TextWrapping="Wrap" Margin="0,12,0,8"/>
+                            <Button Content="تأكيد تصدير Excel"
+                                    Style="{StaticResource MonthlyButton}"
+                                    Command="{Binding Excel.ConfirmCommand}"
+                                    AutomationProperties.Name="تأكيد إنشاء ملفات Excel في المجلد المعتمد"/>
+                            <TextBlock Text="{Binding Excel.CompletionMessage}"
+                                       Foreground="#0D9488" FontWeight="Bold"
+                                       TextWrapping="Wrap" Margin="0,10,0,2"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="{Binding Excel.Receipt.PrimaryFilePath}"
+                                       Foreground="#0F2942" TextWrapping="Wrap"
+                                       FlowDirection="LeftToRight"/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

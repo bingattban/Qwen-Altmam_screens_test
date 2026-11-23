@@ -72,3 +72,29 @@ public sealed record NativeMonthlyCellDetails(
     string AttendanceSource, string AttendanceCommittedAtUtc,
     string MovementSummary, string MovementReason,
     IReadOnlyList<NativeMonthlyRevisionDetail> Revisions);
+
+/// <summary>
+/// Native monthly XLSX export is a privileged, two-step user intention:
+/// preview is read-only, while explicit confirm calls the ORIGINAL
+/// MonthlyExcelExportService and its locally configured safe output directory.
+/// </summary>
+public interface INativeMonthlyExcelExportBackend
+{
+    Task<NativeMonthlyExcelPreview> PreviewExcelAsync(
+        NativeIdentity actor, NativeMonthlyExcelFilter filter,
+        CancellationToken ct = default);
+    Task<NativeMonthlyExcelReceipt> ExportExcelAsync(
+        NativeIdentity actor, NativeMonthlyExcelFilter filter,
+        CancellationToken ct = default);
+}
+
+public sealed record NativeMonthlyExcelFilter(
+    string Period, string SiteId, string SearchTerm);
+
+public sealed record NativeMonthlyExcelPreview(
+    string Period, string SiteId, string SearchTerm, string SiteName,
+    string SuggestedFileName, long PersonCount, int DaysInMonth);
+
+public sealed record NativeMonthlyExcelReceipt(
+    string Period, string SiteId, string SearchTerm,
+    string PrimaryFilePath, int FileCount, long PersonCount);

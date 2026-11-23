@@ -13,6 +13,9 @@ FILES = {
     "vm": "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
+    "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
+    "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
+    "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
     "canonical": "src/AlTamam.Application/Bridge/DailyMonthlyReadService.cs",
     "shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
@@ -44,7 +47,10 @@ def problems(content):
                   "NativeMonthlyFilter(", "NativeMonthlyCell(",
                   "NativeMonthlySnapshot(",
                   "INativeMonthlyCellDetailsReader",
-                  "NativeMonthlyCellDetails", "NativeMonthlyCellRequest("):
+                  "NativeMonthlyCellDetails", "NativeMonthlyCellRequest(",
+                  "INativeMonthlyExcelExportBackend",
+                  "NativeMonthlyExcelFilter(", "NativeMonthlyExcelPreview(",
+                  "NativeMonthlyExcelReceipt("):
 
         require("contracts", token)
     for token in ("VerifyContinuationIdentityAsync(actor, ct)",
@@ -56,7 +62,13 @@ def problems(content):
                   "MonthlyCellDetailsAsync(new JsonObject",
                   '["personId"] = request.PersonId',
                   '["businessDate"] = request.BusinessDate.ToString(',
-                  "ReadCellDetailsAsync(", "new NativeMonthlyCellDetails("):
+                  "ReadCellDetailsAsync(", "new NativeMonthlyCellDetails(",
+                  "new MonthlyExcelExportService(database)",
+                  ".PreviewAsync(MonthlyExcelPayload(",
+                  ".ExportAsync(MonthlyExcelPayload(",
+                  "PreviewExcelAsync(", "ExportExcelAsync(",
+                  "VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false)",
+                  "new NativeMonthlyExcelReceipt("):
 
         require("backend", token)
     for token in ("ArchivePeriodsAsync(", "MonthlyGridAsync(",
@@ -75,13 +87,19 @@ def problems(content):
                   "OpenCellDetailsAsync(", "CloseCellDetails()",
                   "_detailsReader.ReadCellDetailsAsync(", "ReferenceEquals(item, row)",
                   "version != _detailGeneration", "result.PersonId != row.PersonId",
-                  "result.BusinessDate != date"):
+                  "result.BusinessDate != date",
+                  "Excel = new NativeMonthlyExcelExportViewModel()",
+                  "Excel.Attach(exportBackend",
+                  "Excel.Close();",
+                  "Excel.NotifyContextChanged()",
+                  "new NativeMonthlyExcelFilter(_period, _site, _term)"):
 
         require("vm", token)
     for token in ("MonthlyAttendance = new MonthlyAttendancePageViewModel()",
                   "MonthlyAttendance.AttachReader(archiveReader, () => _active)",
                   "MonthlyAttendance.RefreshAsync()", "MonthlyAttendance.Clear();",
-                  "MonthlyAttendance.CloseCellDetails();"):
+                  "MonthlyAttendance.CloseCellDetails();",
+                  "MonthlyAttendance.Excel.Close();"):
 
         require("shell", token)
     if "public sealed class MonthlyAttendancePageViewModel()" in content["pages"]:
@@ -93,7 +111,10 @@ def problems(content):
                   "SelectedPeriod", "SelectedSiteId", "MonthlyGrid",
                   "SearchCommand",
                   "SelectedCellDetails", "IsCellDetailsOpen",
-                  "CellDetailsError", "CloseCellDetailsCommand"):
+                  "CellDetailsError", "CloseCellDetailsCommand",
+                  "Excel.OpenPreviewCommand", "Excel.ConfirmCommand",
+                  "Excel.Preview.PersonCount", "Excel.Receipt.PrimaryFilePath",
+                  "Excel.IsOpen", "Excel.CloseCommand"):
 
         require("xaml", token)
     for token in ("RenderColumns()", "MonthlyGrid.Columns.Add(",
@@ -120,6 +141,25 @@ def problems(content):
         require("detail_tests", token)
     if content["detail_tests"].count("[Fact]") < 4:
         errors.append("Monthly canonical detail security/replay tests are missing.")
+    for token in ("PreviewAsync(", "ExportAsync(",
+                  "OutputDirectorySettings.IsSafeDirectory",
+                  "MonthlyGridForExcelAsync", "ReportWorkbookCommit.VerifyFlushAndMove"):
+        require("excel_service", token)
+    for token in ("OpenPreviewAsync(", "ConfirmAsync(", "Close()",
+                  "PreviewExcelAsync(actor, filter, linked.Token)",
+                  "ExportExcelAsync(actor, filter, linked.Token)",
+                  "ValidatePreview(result, filter)", "ValidateReceipt(result, filter)",
+                  "_currentFilter?.Invoke() != filter",
+                  "_liveActor?.Invoke() != actor"):
+        require("excel_vm", token)
+    for token in ("Preview_does_not_write_and_confirm_uses_the_same_month_site",
+                  "All_sites_export_uses_canonical_consolidated_and_per_site_files",
+                  "Unapplied_search_and_stale_period_site_or_filter_cannot_export",
+                  "Logout_and_nonce_replacement_hide_inflight_preview_and_export_results",
+                  "Forged_preview_or_export_receipt_is_rejected"):
+        require("excel_tests", token)
+    if content["excel_tests"].count("[Fact]") < 5:
+        errors.append("Missing monthly Excel preview/confirm negative-path tests.")
     for k in ("core", "release"):
         require(k, "python build/test-native-phase7-monthly-roster-contract.py")
     for token in ("RunPendingAsync(", "ExecuteInWriteTransactionAsync(",
@@ -140,6 +180,12 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("excel_vm", "ExportExcelAsync(actor, filter, linked.Token)"),
+        ("excel_vm", "_currentFilter?.Invoke() != filter"),
+        ("backend", "new MonthlyExcelExportService(database)"),
+        ("excel_tests", "Forged_preview_or_export_receipt_is_rejected"),
+        ("xaml", "Excel.ConfirmCommand"),
+        ("vm", "Excel.Close();"),
         ("view", "OnDayCellClick("),
         ("xaml", "SelectedCellDetails"),
         ("detail_tests", "Forged_old_or_out_of_range_rows_never_start_detail_reads"),
@@ -156,4 +202,4 @@ if __name__ == "__main__":
         changed[key] = changed[key].replace(token, "REMOVED_BY_NEGATIVE_TEST")
         if not problems(changed):
             raise SystemExit(f"Unsafe missing monthly invariant passed: {key}: {token}")
-    print("PHASE 7 NATIVE MONTHLY PASS: archived SQLCipher, day details, revisions, nonce, Core+Release")
+    print("PHASE 7 NATIVE MONTHLY PASS: SQLCipher, day details, approved XLSX, nonce, Core+Release")

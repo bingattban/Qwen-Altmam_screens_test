@@ -51,7 +51,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     if (screen != NativeScreen.DailyAttendance)
                         DailyAttendance.Review.Cancel();
                     if (screen != NativeScreen.MonthlyAttendance)
+                    {
                         MonthlyAttendance.CloseCellDetails();
+                        MonthlyAttendance.Excel.Close();
+                    }
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();
