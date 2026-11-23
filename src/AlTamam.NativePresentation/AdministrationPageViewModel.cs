@@ -162,7 +162,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         {
             if (!_catalogueLoaded)
             {
-                var catalogue = await _reader.ReadCatalogueAsync(actor, linked.Token);
+                var catalogue = await _reader.ReadPersonnelCatalogueAsync(actor, linked.Token);
                 if (version != _generation || linked.IsCancellationRequested ||
                     _liveActor?.Invoke() != actor) return;
                 if (catalogue.Sites.Count > 10000 ||
