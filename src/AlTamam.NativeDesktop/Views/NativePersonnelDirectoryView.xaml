@@ -86,6 +86,10 @@
                         Command="{Binding OpenEditCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="بدء مراجعة تعديل هوية الفرد المحدد"/>
+                <Button Content="نقل جماعي خارجي — الصفحة الحالية"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenBulkExternalTransferCommand}"
+                        AutomationProperties.Name="نقل خارجي جماعي لأفراد محددين مع الإقرار بتعليق حساباتهم"/>
                 <Button Content="نقل جماعي داخلي — الصفحة الحالية"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenBulkInternalTransferCommand}"
@@ -219,7 +223,7 @@
                             </ItemsControl>
                             <TextBlock Margin="0,12,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ النقل الجماعي الداخلي متاح لأفراد الصفحة الحالية المحددين صراحة بعد المعاينة؛ النقل الجماعي الخارجي لاحقا."/>
+                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ النقل الجماعي الداخلي متاح لأفراد الصفحة الحالية المحددين صراحة بعد المعاينة؛ النقل الجماعي الخارجي يتطلب إقرارا منفصلا بتعليق الحسابات المرتبطة وإلغاء جلساتها."/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -234,6 +238,9 @@
         <views:NativeBulkInternalTransferView Grid.RowSpan="5"
                                               DataContext="{Binding BulkMovement}"
                                               Panel.ZIndex="145"/>
+        <views:NativeBulkExternalTransferView Grid.RowSpan="5"
+                                              DataContext="{Binding BulkExternalMovement}"
+                                              Panel.ZIndex="147"/>
         <views:NativeMovementArchiveView Grid.RowSpan="5"
                                          DataContext="{Binding Archive}"
                                          Panel.ZIndex="150"/>
