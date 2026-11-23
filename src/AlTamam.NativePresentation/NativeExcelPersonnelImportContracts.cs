@@ -38,7 +38,8 @@ public sealed record NativeExcelImportReview(
     int TotalRows, int NewCount, int RejectedCount, int CustomUpdateCount,
     IReadOnlyList<NativeExcelImportSite> NewSites, int SimilarNameCount,
     IReadOnlyList<NativeExcelImportPerson> NewPeople,
-    IReadOnlyList<NativeExcelImportIssue> Issues);
+    IReadOnlyList<NativeExcelImportIssue> Issues,
+    IReadOnlyList<NativeExcelImportCollision>? Collisions = null);
 
 public sealed record NativeExcelImportReceipt(
     string ImportBatchId, int CreatedCount, int RejectedCount,
