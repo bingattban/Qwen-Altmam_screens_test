@@ -111,6 +111,48 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
     }
 
     [Fact]
+    public async Task Five_hundred_new_people_have_complete_preview_and_atomic_import_but_501_are_rejected()
+    {
+        var entries = Enumerable.Range(1, 500)
+            .Select(i => ($"فرد اختبار رقم {i}", (100000 + i).ToString()))
+            .ToArray();
+        var selected = await Service.SelectAsync(
+            FilePayload(Workbook(entries)), Owner, CancellationToken.None);
+        Assert.True(selected.Success, selected.UserMessage);
+        string workbookToken = ((JsonObject)selected.Data!)["workbookToken"]!.GetValue<string>();
+        var analysis = await Service.AnalyzeAsync(new JsonObject
+        {
+            ["workbookToken"] = workbookToken
+        }, Owner, CancellationToken.None);
+        Assert.True(analysis.Success, analysis.UserMessage);
+        Assert.Equal(500, ((JsonObject)analysis.Data!)["newCount"]!.GetValue<int>());
+        var reviewed = await Service.PreviewAsync(new JsonObject
+        {
+            ["workbookToken"] = workbookToken
+        }, Owner, CancellationToken.None);
+        Assert.True(reviewed.Success, reviewed.UserMessage);
+        var preview = (JsonObject)reviewed.Data!;
+        var accepted = Assert.IsType<JsonArray>(preview["acceptedPreview"]);
+        Assert.Equal(500, accepted.Count);
+        Assert.Equal("100001", accepted[0]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("100500", accepted[499]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Persons"));
+        var committed = await Service.CommitAsync(new JsonObject
+        {
+            ["previewToken"] = preview["previewToken"]!.GetValue<string>()
+        }, Owner, "owner", CancellationToken.None);
+        Assert.True(committed.Success, committed.UserMessage);
+        Assert.Equal("500", Scalar("SELECT COUNT(*) FROM Persons"));
+        var rejected = await Service.SelectAsync(
+            FilePayload(Workbook(
+                Enumerable.Range(1, 501)
+                    .Select(i => ($"اسم جديد رقم {i}", (200000 + i).ToString()))
+                    .ToArray())), Owner, CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal("500", Scalar("SELECT COUNT(*) FROM Persons"));
+    }
+
+    [Fact]
     public async Task Import_AddsNewPeopleAndIdentityHistoryOnly_Audited_WithoutAttendance()
     {
         var select=await Service.SelectAsync(FilePayload(Workbook(
