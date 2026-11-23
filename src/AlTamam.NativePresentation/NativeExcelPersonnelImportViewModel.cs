@@ -19,6 +19,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
     private int _generation;
     private bool _open, _busy, _attempted, _uncertain;
     private bool _reviewedPeople, _approvedSites, _reviewedSimilarNames;
+    private bool _allSheets;
     private string _error = "";
     private NativeExcelImportReview? _review;
     private NativeExcelImportReceipt? _receipt;
@@ -42,6 +43,30 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
     public NativeExcelImportReview? Review => _review;
     public NativeExcelImportReceipt? Receipt => _receipt;
     public string Error => _error;
+
+    /// <summary>
+    /// False by default: first worksheet only. Switching modes invalidates
+    /// the original actor-bound signed review AND every prior approval.
+    /// </summary>
+    public bool ImportAllSheets
+    {
+        get => _allSheets;
+        set
+        {
+            if (!CanSelect || _allSheets == value) return;
+            _allSheets = value;
+            ++_generation;
+            _pending?.Cancel();
+            _pending = null;
+            _review = null;
+            _receipt = null;
+            _reviewedPeople = false;
+            _approvedSites = false;
+            _reviewedSimilarNames = false;
+            _error = "";
+            Notify();
+        }
+    }
 
     public bool ReviewedPeopleAndIssues
     {
@@ -83,6 +108,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         $"ملف «{r.FileName}»: {r.TotalRows} صفا. جديد: {r.NewCount}، " +
         $"مرفوض: {r.RejectedCount}، مواقع جديدة: {r.NewSites.Count}، " +
         $"أسماء متشابهة تستوجب المراجعة: {r.SimilarNameCount}. " +
+        $"نطاق أوراق العمل: {(_allSheets ? "جميع الأوراق" : "الورقة الأولى")}. " +
         "لا يتغير أي فرد موجود أو تحضير أو انتساب تاريخي. " +
         "تُنشأ المواقع الجديدة فقط إذا وافقت عليها صراحة.";
     public string ReceiptSummary => _receipt is not { } r ? "" :
@@ -147,9 +173,19 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         try
         {
             NativeExcelImportReview preview = await _backend.StageAndPreviewAsync(
-                actor, fileName, workbook, linked.Token);
+                actor, fileName, workbook, _allSheets, linked.Token);
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanReadOriginalActor(actor)) { ForceCancel(); return; }
+            // Original previews display at most 100 accepted people. Never
+            // authorize the undisplayed 101st...500th even when allSheets
+            // is selected. The operator must divide the XLSX into safe batches.
+            if (preview is { NewCount: > 100 })
+            {
+                _error = "الكشف يحتوي على أكثر من 100 فرد جديد مقبول. " +
+                    "لم يُحفظ أي تغيير؛ قسّم الكشف إلى دفعات من 100 فرد " +
+                    "حتى تتمكن من مراجعة هوية كل فرد قبل الاعتماد.";
+                return;
+            }
             ValidateCanonicalReview(preview, fileName);
             _review = preview;
             if (preview.NewCount == 0)
@@ -308,6 +344,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         _reviewedPeople = false;
         _approvedSites = false;
         _reviewedSimilarNames = false;
+        _allSheets = false;
         _review = null;
         _receipt = null;
         _error = "";
@@ -322,7 +359,8 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             nameof(CanCommit), nameof(HasReview),
             nameof(HasUnverifiedCommit), nameof(Review), nameof(Receipt),
             nameof(ReviewedPeopleAndIssues), nameof(ApproveCreatingSites),
-            nameof(AcknowledgeSimilarNames), nameof(ReviewSummary),
+            nameof(AcknowledgeSimilarNames), nameof(ImportAllSheets),
+            nameof(ReviewSummary),
             nameof(ReceiptSummary), nameof(Error)
         })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
