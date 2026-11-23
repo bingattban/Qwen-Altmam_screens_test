@@ -19,7 +19,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -742,6 +742,148 @@ public sealed class NativeSqlCipherDashboardReader(
                   draft.ExternalDestinationName.Length != 0))
             throw new InvalidDataException("Invalid transfer intent.");
         _ = CanonicalNumber(draft.ServiceNumberA);
+    }
+
+    // External transfer's canonical commit also suspends linked account
+    // credentials and revokes current sessions in the SAME SQLCipher transaction.
+    // Reuse original PersonnelMovementService, NEVER mirror account-writes here.
+    public async Task<NativeBulkExternalTransferPreview> PreviewExternalBatchAsync(
+        NativeIdentity actor, NativeBulkExternalTransferDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidateBulkExternalDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        string today = LocalPersonDay();
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["businessDate"] = today,
+                ["sourceSiteId"] = draft.SourceSiteId,
+                ["destinationSiteId"] = null,
+                ["destinationExternalName"] = draft.ExternalDestinationName,
+                ["personIds"] = new JsonArray(draft.Persons.Select(p =>
+                    (JsonNode?)JsonValue.Create(p.PersonId)).ToArray())
+            }, principal, true, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "BulkExternalPreview(native)");
+        string date = RequiredText(data, "businessDate");
+        string name = RequiredText(data, "destinationName");
+        string token = RequiredText(data, "previewToken");
+        JsonArray candidates = RequiredArray(data, "persons");
+        if (date != today ||
+            RequiredText(data, "sourceSiteId") != draft.SourceSiteId ||
+            !RequiredBoolean(data, "external") ||
+            data["destinationSiteId"] is not null ||
+            name != draft.ExternalDestinationName ||
+            RequiredNumber(data, "count") != draft.Persons.Count ||
+            candidates.Count != draft.Persons.Count ||
+            token is not { Length: 64 } ||
+            token.Any(ch => !char.IsAsciiHexDigit(ch)))
+            throw new InvalidDataException("Canonical external preview mismatch.");
+        var people = candidates.Select(node =>
+        {
+            JsonObject row = RequireObject(node);
+            return new NativePersonnelMovementPerson(
+                RequiredText(row, "personId"),
+                RequiredText(row, "name"),
+                RequiredText(row, "serviceNumberA"),
+                RequiredNumber(row, "rowVersion"),
+                RequiredText(row, "sourceSiteId"),
+                RequiredText(row, "sourceSiteName"),
+                RequiredText(row, "sourceAssignmentId"));
+        }).ToArray();
+        ValidateBulkExternalPersons(draft, people);
+        return new NativeBulkExternalTransferPreview(
+            draft, date, token, name, true, people);
+    }
+
+    public async Task<NativeBulkExternalTransferReceipt> CommitExternalBatchAsync(
+        NativeIdentity actor, NativeBulkExternalTransferPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !preview.IsExternal ||
+            !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.BusinessDate != LocalPersonDay() ||
+            preview.PreviewToken is not { Length: 64 } ||
+            preview.PreviewToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            preview.DestinationName != preview.Draft.ExternalDestinationName)
+            throw new InvalidDataException("External movement approval expired or changed.");
+        ValidateBulkExternalDraft(preview.Draft);
+        ValidateBulkExternalPersons(preview.Draft, preview.Persons);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        // Exactly ONE canonical transaction for 1–100 people, including
+        // immutable movements, linked account suspension and session revocation.
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["operationId"] = operationId
+            }, principal, true, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "BulkExternalCommit(native)");
+        long count = RequiredNumber(data, "count");
+        string date = RequiredText(data, "businessDate");
+        string name = RequiredText(data, "destinationName");
+        if (!RequiredBoolean(data, "external") ||
+            count != preview.Persons.Count ||
+            date != preview.BusinessDate ||
+            name != preview.DestinationName)
+            throw new InvalidDataException("Original external transfer receipt mismatch.");
+        return new NativeBulkExternalTransferReceipt(date,
+            checked((int)count), name, true);
+    }
+
+    private static void ValidateBulkExternalDraft(
+        NativeBulkExternalTransferDraft draft)
+    {
+        if (draft is null ||
+            draft.SourceSiteId is not { Length: >= 1 and <= 128 } ||
+            draft.SourceSiteId.Any(char.IsControl) ||
+            draft.SourceSiteName is not { Length: >= 1 and <= 200 } ||
+            draft.SourceSiteName.Any(char.IsControl) ||
+            draft.ExternalDestinationName is not { Length: >= 2 and <= 150 } ||
+            draft.ExternalDestinationName != draft.ExternalDestinationName.Trim() ||
+            draft.ExternalDestinationName.Any(char.IsControl) ||
+            draft.Persons is null ||
+            draft.Persons.Count is < 1 or > 100 ||
+            draft.Persons.Any(p => p is null ||
+                p.PersonId is not { Length: >= 1 and <= 128 } ||
+                p.PersonId.Any(char.IsControl) ||
+                p.Name is not { Length: >= 2 and <= 200 } ||
+                p.ServiceNumberA is not { Length: >= 4 and <= 70 } ||
+                p.Revision < 1) ||
+            draft.Persons.Select(p => p.PersonId)
+                .Distinct(StringComparer.Ordinal).Count() != draft.Persons.Count)
+            throw new InvalidDataException("Invalid external 1–100 selected persons.");
+        foreach (var person in draft.Persons)
+            if (CanonicalNumber(person.ServiceNumberA) != person.ServiceNumberA)
+                throw new InvalidDataException("Noncanonical external exit number.");
+    }
+
+    private static void ValidateBulkExternalPersons(
+        NativeBulkExternalTransferDraft draft,
+        IReadOnlyList<NativePersonnelMovementPerson> actual)
+    {
+        if (actual is null || actual.Count != draft.Persons.Count)
+            throw new InvalidDataException("Missing external batch member.");
+        for (int i = 0; i < draft.Persons.Count; i++)
+        {
+            var expected = draft.Persons[i];
+            var candidate = actual[i];
+            if (candidate is null ||
+                candidate.PersonId != expected.PersonId ||
+                candidate.Name != expected.Name ||
+                candidate.ServiceNumberA != expected.ServiceNumberA ||
+                candidate.Revision != expected.Revision ||
+                candidate.SourceSiteId != draft.SourceSiteId ||
+                candidate.SourceSiteName != draft.SourceSiteName ||
+                candidate.SourceAssignmentId is not { Length: >= 3 and <= 128 })
+                throw new InvalidDataException("Stale or forged external exit identity.");
+        }
     }
 
     // Phase 8: one ORIGINAL transactional multi-person internal transfer.
