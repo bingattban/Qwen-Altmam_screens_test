@@ -1,0 +1,134 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeBulkInternalTransferView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" FontFamily="Segoe UI">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BulkVisible"/>
+        <Style x:Key="BulkButton" TargetType="Button">
+            <Setter Property="Background" Value="#0D9488"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinHeight" Value="37"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid Background="#CF0F172A"
+          Visibility="{Binding IsOpen, Converter={StaticResource BulkVisible}}">
+        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+                CornerRadius="9" Padding="16" Width="870" MaxHeight="730"
+                Margin="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <DockPanel LastChildFill="True">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <Button Content="إغلاق دون تنفيذ" DockPanel.Dock="Left"
+                            Command="{Binding CloseCommand}"
+                            Style="{StaticResource BulkButton}"/>
+                    <TextBlock Text="النقل الجماعي الداخلي — مراجعة أفراد الصفحة الحالية"
+                               FontSize="18" FontWeight="Bold"
+                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="حدد الأفراد صراحة بعلامة ✓ من هذه الصفحة الحالية فقط (1–100 فرد). لا تُنقل بقية المواقع أو الصفحات تلقائيا. يُراجع النظام كل معرف فرد وانتسابه، وتعتمد الحركة مرة واحدة دون تغيير التحضير السابق."
+                                   Foreground="#475569" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="الموقع المصدر: " FontWeight="Bold" Foreground="#0F2942"/>
+                            <TextBlock Text="{Binding SourceSiteName}" Foreground="#0F2942"/>
+                            <TextBlock Text=" — المعرف: " Foreground="#64748B"/>
+                            <TextBlock Text="{Binding SourceSiteId}" Foreground="#475569"/>
+                        </StackPanel>
+                        <TextBlock Text="الأفراد الذين اختارهم المشرف المصرح لهم"
+                                   FontWeight="Bold" Foreground="#0F2942" Margin="0,2,0,5"/>
+                        <DataGrid ItemsSource="{Binding Options}" Height="245"
+                                  AutoGenerateColumns="False" IsReadOnly="False"
+                                  IsEnabled="{Binding CanEdit}"
+                                  SelectionMode="Single" SelectionUnit="FullRow"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  HeadersVisibility="Column" RowHeight="32"
+                                  AlternatingRowBackground="#F8FAFC"
+                                  AutomationProperties.Name="اختر الأفراد الذين تريد نقلهم من الصفحة الحالية فقط">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Header="اختر" Width="65"
+                                    Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <DataGridTextColumn Header="الاسم" Binding="{Binding Name}"
+                                    IsReadOnly="True" Width="3*"/>
+                                <DataGridTextColumn Header="الرتبة" Binding="{Binding Rank}"
+                                    IsReadOnly="True" Width="*"/>
+                                <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding Number}"
+                                    IsReadOnly="True" Width="*"/>
+                                <DataGridTextColumn Header="معرف الفرد" Binding="{Binding PersonId}"
+                                    IsReadOnly="True" Width="2*"/>
+                                <DataGridTextColumn Header="الإصدار" Binding="{Binding Revision}"
+                                    IsReadOnly="True" Width="70"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBlock Text="{Binding SelectedCount, StringFormat='عدد الأفراد المحددين: {0}'}"
+                                   FontWeight="Bold" Foreground="#0D9488" Margin="0,7,0,7"/>
+                        <TextBlock Text="الموقع الهدف النشط (يجب أن يختلف عن المصدر)"
+                                   FontWeight="Bold" Foreground="#0F2942"/>
+                        <ComboBox ItemsSource="{Binding SiteOptions}"
+                                  DisplayMemberPath="Name" SelectedValuePath="SiteId"
+                                  SelectedValue="{Binding DestinationSiteId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  IsEnabled="{Binding CanEdit}" MinHeight="35"
+                                  Margin="0,5,0,7"
+                                  AutomationProperties.Name="موقع الوجهة للنقل الجماعي الداخلي"/>
+                        <ProgressBar Height="4" IsIndeterminate="True"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BulkVisible}}"/>
+                        <Button Content="معاينة التنقلات المحددة دون حفظ"
+                                Style="{StaticResource BulkButton}"
+                                Command="{Binding PreviewCommand}"
+                                AutomationProperties.Name="المعاينة الأصلية للمعرفات المختارة دون حفظ"/>
+                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                                   TextWrapping="Wrap" FontWeight="SemiBold"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <Border Background="#F8FAFC" BorderBrush="#CBD5E1"
+                                BorderThickness="1" CornerRadius="6" Padding="12"
+                                Margin="0,8,0,8"
+                                Visibility="{Binding HasPreview, Converter={StaticResource BulkVisible}}">
+                            <StackPanel>
+                                <TextBlock Text="نتيجة معاينة خدمة SQLCipher الأصلية"
+                                           Foreground="#0F2942" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding ReviewMessage}"
+                                           Foreground="#334155" TextWrapping="Wrap"
+                                           Margin="0,8,0,8"/>
+                                <ItemsControl ItemsSource="{Binding Preview.Persons}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                <TextBlock Text=" — "/>
+                                                <TextBlock Text="{Binding ServiceNumberA}"/>
+                                                <TextBlock Text=" — "/>
+                                                <TextBlock Text="{Binding PersonId}" Foreground="#64748B"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <CheckBox IsChecked="{Binding ReviewAcknowledged, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanEdit}"
+                                          Margin="0,10,0,3"
+                                          AutomationProperties.Name="إقرار صريح بهوية جميع الأفراد المحددين والوجهة">
+                                    <TextBlock Text="أقر بأنني راجعت جميع الأفراد المحددين بالمعرف والرقم (ع) وموقع الوجهة وأوافق على النقل الجماعي مرة واحدة."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+                        <Button Content="تأكيد النقل الجماعي الداخلي مرة واحدة"
+                                Command="{Binding ConfirmCommand}"
+                                Style="{StaticResource BulkButton}"
+                                AutomationProperties.Name="اعتماد معاملة نقل داخلي جماعي واحدة"/>
+                        <TextBlock Text="{Binding CompletionMessage}"
+                                   Foreground="#0D9488" FontWeight="Bold"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <TextBlock Text="في حال تغير موقع أي فرد أو سبق نقله اليوم، تُرفض الدفعة كاملة. إذا فقدنا رد الحفظ افحص أرشيف التنقلات وسجل العمليات قبل أي إجراء؛ لا إعادة إرسال تلقائية."
+                                   Foreground="#64748B" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
