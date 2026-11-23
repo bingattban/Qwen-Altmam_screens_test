@@ -19,7 +19,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -742,6 +742,147 @@ public sealed class NativeSqlCipherDashboardReader(
                   draft.ExternalDestinationName.Length != 0))
             throw new InvalidDataException("Invalid transfer intent.");
         _ = CanonicalNumber(draft.ServiceNumberA);
+    }
+
+    // Phase 8: one ORIGINAL transactional multi-person internal transfer.
+    // The same canonical service is used for 1 and up to 100 persons.
+    public async Task<NativeBulkInternalTransferPreview> PreviewInternalBatchAsync(
+        NativeIdentity actor, NativeBulkInternalTransferDraft draft,
+        CancellationToken ct = default)
+    {
+        ValidateBulkInternalDraft(draft);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        string today = LocalPersonDay();
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["businessDate"] = today,
+                ["sourceSiteId"] = draft.SourceSiteId,
+                ["destinationSiteId"] = draft.DestinationSiteId,
+                ["destinationExternalName"] = null,
+                ["personIds"] = new JsonArray(draft.Persons.Select(p =>
+                    (JsonNode?)JsonValue.Create(p.PersonId)).ToArray())
+            }, principal, false, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "BulkInternalTransferPreview(native)");
+        string businessDay = RequiredText(data, "businessDate");
+        string destinationName = RequiredText(data, "destinationName");
+        string token = RequiredText(data, "previewToken");
+        var items = RequiredArray(data, "persons");
+        if (businessDay != today ||
+            RequiredText(data, "sourceSiteId") != draft.SourceSiteId ||
+            RequiredText(data, "destinationSiteId") != draft.DestinationSiteId ||
+            RequiredBoolean(data, "external") ||
+            RequiredNumber(data, "count") != draft.Persons.Count ||
+            items.Count != draft.Persons.Count ||
+            string.IsNullOrWhiteSpace(destinationName) ||
+            token is not { Length: 64 } ||
+            token.Any(ch => !char.IsAsciiHexDigit(ch)))
+            throw new InvalidDataException("Bulk internal preview head mismatch.");
+
+        var people = items.Select(node =>
+        {
+            JsonObject x = RequireObject(node);
+            return new NativePersonnelMovementPerson(
+                RequiredText(x, "personId"),
+                RequiredText(x, "name"),
+                RequiredText(x, "serviceNumberA"),
+                RequiredNumber(x, "rowVersion"),
+                RequiredText(x, "sourceSiteId"),
+                RequiredText(x, "sourceSiteName"),
+                RequiredText(x, "sourceAssignmentId"));
+        }).ToArray();
+        ValidateBulkCanonicalPersons(draft, people);
+        return new NativeBulkInternalTransferPreview(
+            draft, businessDay, token, destinationName, people);
+    }
+
+    public async Task<NativeBulkInternalTransferReceipt> CommitInternalBatchAsync(
+        NativeIdentity actor, NativeBulkInternalTransferPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
+            preview.BusinessDate != LocalPersonDay() ||
+            preview.PreviewToken is not { Length: 64 } ||
+            preview.PreviewToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            string.IsNullOrWhiteSpace(preview.DestinationName))
+            throw new InvalidDataException("Bulk internal approval token expired.");
+        ValidateBulkInternalDraft(preview.Draft);
+        ValidateBulkCanonicalPersons(preview.Draft, preview.Persons);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct)
+            .ConfigureAwait(false);
+        // Exactly ONE atomic original batch commit. No per-person SQL,
+        // automatic retry, or alternate/nonexistent original service.
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["operationId"] = operationId
+            }, principal, false, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject result = RequiredObject(response, "BulkInternalTransferCommit(native)");
+        int count = checked((int)RequiredNumber(result, "count"));
+        string businessDate = RequiredText(result, "businessDate");
+        string destination = RequiredText(result, "destinationName");
+        if (RequiredBoolean(result, "external") ||
+            count != preview.Draft.Persons.Count ||
+            businessDate != preview.BusinessDate ||
+            destination != preview.DestinationName)
+            throw new InvalidDataException("Original batch commit receipt mismatch.");
+        return new NativeBulkInternalTransferReceipt(
+            businessDate, count, destination);
+    }
+
+    private static void ValidateBulkInternalDraft(
+        NativeBulkInternalTransferDraft draft)
+    {
+        if (draft is null ||
+            draft.SourceSiteId is not { Length: >= 1 and <= 128 } ||
+            draft.DestinationSiteId is not { Length: >= 1 and <= 128 } ||
+            draft.SourceSiteId == draft.DestinationSiteId ||
+            draft.SourceSiteId.Any(char.IsControl) ||
+            draft.DestinationSiteId.Any(char.IsControl) ||
+            draft.SourceSiteName is not { Length: >= 1 and <= 200 } ||
+            draft.SourceSiteName.Any(char.IsControl) ||
+            draft.Persons is null ||
+            draft.Persons.Count is < 1 or > 100 ||
+            draft.Persons.Any(x => x is null ||
+                x.PersonId is not { Length: >= 1 and <= 128 } ||
+                x.PersonId.Any(char.IsControl) ||
+                x.Name is not { Length: >= 2 and <= 200 } ||
+                x.ServiceNumberA is not { Length: >= 4 and <= 70 } ||
+                x.Revision < 1) ||
+            draft.Persons.Select(x => x.PersonId)
+                .Distinct(StringComparer.Ordinal).Count() != draft.Persons.Count)
+            throw new InvalidDataException("Invalid selected current page batch.");
+        foreach (var person in draft.Persons)
+            if (CanonicalNumber(person.ServiceNumberA) != person.ServiceNumberA)
+                throw new InvalidDataException("Uncanonical service number in batch.");
+    }
+
+    private static void ValidateBulkCanonicalPersons(
+        NativeBulkInternalTransferDraft draft,
+        IReadOnlyList<NativePersonnelMovementPerson> persons)
+    {
+        if (persons is null || persons.Count != draft.Persons.Count)
+            throw new InvalidDataException("Incomplete bulk PersonId list.");
+        for (int i = 0; i < draft.Persons.Count; i++)
+        {
+            var original = draft.Persons[i];
+            var actual = persons[i];
+            if (actual is null ||
+                actual.PersonId != original.PersonId ||
+                actual.Name != original.Name ||
+                actual.ServiceNumberA != original.ServiceNumberA ||
+                actual.Revision != original.Revision ||
+                actual.SourceSiteId != draft.SourceSiteId ||
+                actual.SourceSiteName != draft.SourceSiteName ||
+                actual.SourceAssignmentId is not { Length: >= 3 and <= 128 })
+                throw new InvalidDataException("Person identity or assignment changed.");
+        }
     }
 
     public async Task<NativePersonnelMovementPreview> PreviewMovementAsync(
