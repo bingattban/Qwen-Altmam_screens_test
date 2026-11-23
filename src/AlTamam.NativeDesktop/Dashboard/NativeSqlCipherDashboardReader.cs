@@ -19,13 +19,199 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8: canonical XLSX preview and additive-only, one-use import commit.
+    // File bytes stay local and bounded; no workbook path ever reaches SQLCipher.
+    public async Task<NativeExcelImportReview> StageAndPreviewAsync(
+        NativeIdentity actor, string fileName, byte[] workbook,
+        CancellationToken ct = default)
+    {
+        if (fileName is not { Length: >= 6 and <= 180 } ||
+            !fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Any(char.IsControl) ||
+            workbook is not { Length: >= 1 and <= 160 * 1024 })
+            throw new InvalidDataException("Unsafe local XLSX import file.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        string sha = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(workbook));
+        string base64 = Convert.ToBase64String(workbook);
+        var original = new ExcelPersonnelImportService(database);
+        // Forbid updates to any current PersonId or existing custom field.
+        BridgeResponse selected = await original.SelectAsync(new JsonObject
+        {
+            ["fileName"] = fileName,
+            ["base64"] = base64,
+            ["updateExistingCustomFields"] = false
+        }, actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject source = RequiredObject(selected, "ExcelImportSelect(native)");
+        string workbookToken = RequiredText(source, "workbookToken");
+        long sourceRows = RequiredNumber(source, "rowCount");
+        if (workbookToken is not { Length: 64 } ||
+            workbookToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            RequiredText(source, "fileName") != fileName ||
+            sourceRows is < 1 or > 500)
+            throw new InvalidDataException("Unsafe original staged workbook.");
+
+        BridgeResponse analysisResponse = await original.AnalyzeAsync(
+            new JsonObject { ["workbookToken"] = workbookToken },
+            actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject analysis = RequiredObject(
+            analysisResponse, "ExcelImportAnalyze(native)");
+        BridgeResponse previewResponse = await original.PreviewAsync(
+            new JsonObject { ["workbookToken"] = workbookToken },
+            actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject preview = RequiredObject(
+            previewResponse, "ExcelImportPreview(native)");
+        string token = RequiredText(preview, "previewToken");
+        if (token is not { Length: 64 } ||
+            token.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            !RequiredBoolean(preview, "requiresExplicitConfirmation"))
+            throw new InvalidDataException("Missing canonical one-use import approval.");
+
+        foreach (string field in new[]
+        {
+            "totalRows", "newCount", "issueCount", "customUpdateCount",
+            "acceptedPreview", "issues", "newSites", "similarNames",
+            "similarNameCount", "customUpdatesPreview"
+        })
+            if (!JsonNode.DeepEquals(analysis[field], preview[field]))
+                throw new InvalidDataException("Workbook changed during review: " + field);
+
+        int total = checked((int)RequiredNumber(analysis, "totalRows"));
+        int fresh = checked((int)RequiredNumber(preview, "newCount"));
+        int issues = checked((int)RequiredNumber(preview, "issueCount"));
+        int customUpdated = checked((int)RequiredNumber(preview, "customUpdateCount"));
+        int similarCount = checked((int)RequiredNumber(preview, "similarNameCount"));
+        JsonArray accepted = RequiredArray(preview, "acceptedPreview");
+        JsonArray rejected = RequiredArray(preview, "issues");
+        JsonArray newSites = RequiredArray(preview, "newSites");
+        JsonArray collisions = RequiredArray(preview, "similarNames");
+        if (total != sourceRows || total is < 1 or > 500 ||
+            fresh is < 0 or > 100 || customUpdated != 0 ||
+            fresh + issues != total || accepted.Count != fresh ||
+            rejected.Count != issues || newSites.Count > 100 ||
+            similarCount != collisions.Count || collisions.Count > 40 ||
+            RequiredArray(preview, "customUpdatesPreview").Count != 0)
+            throw new InvalidDataException(
+                "Native pilot requires ALL accepted and same-name rows visible; " +
+                "use original DesktopHost import for >100 additions or >40 similar names.");
+
+        var people = accepted.Select(n =>
+        {
+            var x = RequireObject(n);
+            return new NativeExcelImportPerson(
+                RequiredText(x, "worksheet"),
+                checked((int)RequiredNumber(x, "row")),
+                RequiredText(x, "name"),
+                RequiredText(x, "serviceNumberA"),
+                RequiredText(x, "siteName"));
+        }).ToArray();
+        var errors = rejected.Select(n =>
+        {
+            var x = RequireObject(n);
+            return new NativeExcelImportIssue(
+                RequiredText(x, "worksheet"),
+                checked((int)RequiredNumber(x, "row")),
+                RequiredText(x, "serviceNumberA"),
+                RequiredText(x, "name"), RequiredText(x, "siteName"),
+                RequiredText(x, "reason"));
+        }).ToArray();
+        var sites = newSites.Select(n =>
+        {
+            var x = RequireObject(n);
+            return new NativeExcelImportSite(
+                RequiredText(x, "name"),
+                checked((int)RequiredNumber(x, "personCount")));
+        }).ToArray();
+        var hints = collisions.Select(n =>
+        {
+            var x = RequireObject(n);
+            if (!RequiredBoolean(x, "advisoryOnly"))
+                throw new InvalidDataException("Non-advisory name-collision hint.");
+            var matching = RequiredArray(x, "matches").Select(y =>
+            {
+                var m = RequireObject(y);
+                return new NativeExcelImportMatch(
+                    RequiredText(m, "personId"), RequiredText(m, "name"),
+                    RequiredText(m, "serviceNumberA"),
+                    RequiredBoolean(m, "active"));
+            }).ToArray();
+            if (matching.Length is < 1 or > 4)
+                throw new InvalidDataException("Incomplete name collision hint.");
+            return new NativeExcelImportCollision(
+                RequiredText(x, "worksheet"),
+                checked((int)RequiredNumber(x, "row")),
+                RequiredText(x, "name"),
+                RequiredText(x, "serviceNumberA"), matching);
+        }).ToArray();
+
+        if (people.Select(p => p.ServiceNumberA)
+                .Distinct(StringComparer.Ordinal).Count() != people.Length ||
+            sites.Select(s => s.Name)
+                .Distinct(StringComparer.Ordinal).Count() != sites.Length ||
+            people.Any(p => p.Row < 2 || p.Name.Length is < 3 or > 180 ||
+                p.ServiceNumberA.Length is < 4 or > 70) ||
+            sites.Any(s => s.PersonCount is < 1 or > 100))
+            throw new InvalidDataException("Duplicated or malformed canonical import.");
+        return new NativeExcelImportReview(
+            fileName, sha, token, total, fresh, issues, 0, sites,
+            similarCount, people, errors, hints);
+    }
+
+    public async Task<NativeExcelImportReceipt> CommitAsync(
+        NativeIdentity actor, NativeExcelImportReview reviewed,
+        string operationId, CancellationToken ct = default)
+    {
+        if (reviewed is null || reviewed.CustomUpdateCount != 0 ||
+            reviewed.NewCount is < 1 or > 100 ||
+            reviewed.TotalRows is < 1 or > 500 ||
+            reviewed.NewPeople.Count != reviewed.NewCount ||
+            reviewed.Issues.Count != reviewed.RejectedCount ||
+            reviewed.NewCount + reviewed.RejectedCount != reviewed.TotalRows ||
+            reviewed.Collisions is null ||
+            reviewed.Collisions.Count != reviewed.SimilarNameCount ||
+            reviewed.PreviewToken is not { Length: 64 } ||
+            reviewed.PreviewToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            !Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Original XLSX import approval invalid.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        // ONLY the original SQLCipher additive import writer. Explicit false
+        // means existing peoples' custom fields cannot be silently updated.
+        BridgeResponse committed = await new ExcelPersonnelImportService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = reviewed.PreviewToken,
+                ["operationId"] = operationId,
+                ["approveCustomUpdates"] = false
+            }, actor.UserId, actor.Username, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject result = RequiredObject(committed, "ExcelImportCommit(native)");
+        var receipt = new NativeExcelImportReceipt(
+            RequiredText(result, "importBatchId"),
+            checked((int)RequiredNumber(result, "createdCount")),
+            checked((int)RequiredNumber(result, "rejectedCount")),
+            checked((int)RequiredNumber(result, "createdSitesCount")),
+            checked((int)RequiredNumber(result, "customUpdatedCount")),
+            RequiredText(result, "committedAtUtc"));
+        if (receipt.CreatedCount != reviewed.NewCount ||
+            receipt.RejectedCount != reviewed.RejectedCount ||
+            receipt.CreatedSitesCount != reviewed.NewSites.Count ||
+            receipt.CustomUpdatedCount != 0 ||
+            receipt.ImportBatchId is not { Length: >= 5 and <= 128 } ||
+            !receipt.ImportBatchId.StartsWith("IMP-", StringComparison.Ordinal))
+            throw new InvalidDataException("Original XLSX receipt inconsistent.");
+        return receipt;
+    }
 
     // Phase 8 status definitions: original SQLCipher read and audited
     // AdminConfigurationService create/update/deactivate; never write SQL here.
