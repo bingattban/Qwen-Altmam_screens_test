@@ -17,7 +17,7 @@ public sealed class NativeIndividualPersonnelReportPhase9Tests
     private static NativePersonnelReportSnapshot Snapshot(
         NativeIndividualReportPages pages, string? personId = null, bool forgedPage = false) =>
         new(personId ?? pages.PersonId, "الفرد الأول", "00077", "2024-01-01", true,
-            101, 1, 2, 100, forgedPage ? 9 : pages.AttendancePage,
+            101, 1, 1, 100, forgedPage ? 9 : pages.AttendancePage,
             pages.AttendancePage == 1, pages.MovementPage, false,
             pages.IdentityPage, false,
             [new NativePersonnelReportStatusTotal("STS-P", "حاضر", 101)],
