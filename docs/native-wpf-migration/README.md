@@ -958,3 +958,79 @@ equivalents plus clean-machine Windows, keyboard/accessibility,
 requires two green parallel workflows, nine disjoint C# Release
 test shards and genuine WPF/WebView2 E2E BEFORE building x86/x64
 Portable+Installer, four package acceptances and independent SHA256.
+
+
+## Phase 8 — slice 12: external batch movement and linked-account safety
+
+The native Arabic RTL `نقل جماعي خارجي — الصفحة الحالية` dialog adds
+the original **external** operation to the separate internal batch
+slice, without modifying the canonical `PersonnelMovementService`.
+This is a higher-impact personnel exit: in its original ONE SQLCipher
+transaction, `CommitAsync(external:true)` moves all selected active
+people from their source assignment to an external destination,
+marks each Person's status as externally transferred and inactive,
+records individual immutable movements/assignment closure/audits,
+**suspends every account linked to each exited PersonId and revokes
+its sessions** using the existing
+`AccountLifecycleService.SuspendAccountsForPersonnelExitAsync`.
+Returning a person to active status later does **not** silently
+reactivate any previously suspended account. Independent founders
+with `LinkedPersonId = NULL` remain protected.
+
+Selection is manual, initially zero and from the current visible,
+authenticated source-filtered personnel page ONLY (1–100 rows maximum).
+No hidden page, no entire site default, no batch written as a loop
+of individual transfers. An explicit external organisation/destination
+name (2–150 characters) is entered, not a native site ID. An original
+`PersonnelMovementService.PreviewAsync(external:true)` issues an
+actor-bound one-use token containing exactly the selected original
+PersonIds, name, service number (ع), RowVersion, assignment ID, source
+site and local business date. The WPF adapter and view model check
+**every** returned person against its corresponding selected current
+row, the token's 64-hex-digit envelope, exact external destination,
+date and count. A missing member, modified row or replaced page rejects
+the **entire preview**, without any write.
+
+A visibly highlighted caution explains the real account/session
+effect. Two separately **unchecked** operator acknowledgments are
+required **after preview**, first for identities and destination,
+second for **linked-account suspension and session revocation**.
+Changing any selection or external destination clears BOTH approvals
+and invalidates the original preview. Only a second explicit confirm
+issues ONE original SQLCipher `CommitAsync(external:true)` request
+with that preview token and a new unique operationId. The canonical
+service revalidates every PersonId, row revision, source assignment
+and absence of a prior same-day transfer in its own atomic transaction.
+One failed member means **no one** is moved, no account is suspended
+and no session is revoked. Canonical original idempotency protects
+against duplicate movements at the storage layer. The WPF interface
+does not automatically retry a possibly persisted batch; uncertain
+writes or forged/missing receipts lock the same manager session until
+the administrator reviews original movement archive, users, sessions,
+roster and audit events.
+
+Test-first: nine new native xUnit tests were committed before any
+external interface/implementation, including manager-only RBAC,
+duplicate/forged row refusal, explicit selection, 100-person cap,
+forged identity/count/preview envelope rejection, invalidated
+double approval, genuine two-person single atomic commit, stale
+response after logout and uncertain no-retry. Two additional
+**original SQLCipher integration tests** were committed before the
+implementation: two independently linked accounts and sessions are
+both suspended/revoked exactly once in a two-person batch, and a stale
+second member causes a complete rollback leaving a first member's
+linked account enabled. Existing integration tests still verify
+single-person linked-session revocation, the unrelated founder,
+historical attendance invariance and true transactional idempotency.
+
+A separate negative-path structural contract now runs in **both
+Windows Core and Windows Release**, before expensive .NET builds.
+The untouched release workflow still requires both Windows workflows
+green on the final PR head, all nine disjoint C# Release test shards
+and real WPF/WebView2 E2E **before** building 32/64-bit Portable
+and Installer (four customer variants), all four acceptance jobs,
+and independent SHA-256 provenance. The manual clean-machine,
+keyboard/accessibility and 100/125/150% Windows DPI gate remains
+separate from GitHub CI. The four production customer variants
+continue shipping the original DesktopHost/WebView2 executable
+until complete native 69-route parity and manual approval.
