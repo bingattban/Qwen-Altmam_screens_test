@@ -14,7 +14,7 @@ public interface INativePersonnelReportReader
 
 public sealed record NativeIndividualReportPages(
     string PersonId, int AttendancePage = 1, int MovementPage = 1,
-    int IdentityPage = 1);
+    int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1);
 
 public sealed record NativePersonnelReportStatusTotal(
     string StatusId, string StatusName, long Count);
@@ -37,6 +37,24 @@ public sealed record NativePersonnelReportIdentity(
     string Name, string ServiceNumberA, string ValidFrom,
     string? ValidTo, string Reason);
 
+
+/// <summary>
+/// Original effective-dated PersonAssignments and SiteNameHistory evidence;
+/// SiteId remains stable even when a visible site name later changes.
+/// </summary>
+public sealed record NativePersonnelReportSite(
+    string SiteId, string SiteName, string ValidFrom,
+    string? ValidTo, string CreatedAtUtc);
+
+/// <summary>
+/// Original append-only AttendanceRevisions evidence, never a synthesized
+/// interpretation of the current AttendanceRecords status.
+/// </summary>
+public sealed record NativePersonnelReportRevision(
+    string Date, string Before, string After, string? Reason,
+    string ExecutedAtUtc, string? AuthorizationMethod,
+    string ExecutorSnapshot);
+
 public sealed record NativePersonnelReportSnapshot(
     string PersonId, string Name, string ServiceNumberA,
     string FirstRecordedDate, bool Active,
@@ -47,4 +65,17 @@ public sealed record NativePersonnelReportSnapshot(
     IReadOnlyList<NativePersonnelReportStatusTotal> StatusTotals,
     IReadOnlyList<NativePersonnelReportAttendance> Attendance,
     IReadOnlyList<NativePersonnelReportMovement> Movements,
-    IReadOnlyList<NativePersonnelReportIdentity> Identities);
+    IReadOnlyList<NativePersonnelReportIdentity> Identities)
+{
+    // Additional read-only evidence from the SAME canonical report service.
+    // Defaults preserve first-slice tests and older independent fakes.
+    public long SiteTotal { get; init; }
+    public int SitePage { get; init; } = 1;
+    public bool SiteHasNext { get; init; }
+    public IReadOnlyList<NativePersonnelReportSite> Sites { get; init; } = [];
+
+    public long RevisionTotal { get; init; }
+    public int RevisionPage { get; init; } = 1;
+    public bool RevisionHasNext { get; init; }
+    public IReadOnlyList<NativePersonnelReportRevision> Revisions { get; init; } = [];
+}

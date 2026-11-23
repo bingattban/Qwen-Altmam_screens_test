@@ -1361,3 +1361,57 @@ audit. Real clean-machine UI/keyboard/accessibility validation at
 canonical SQLCipher service to show the remaining original individual
 history panels, then group mode and original XLSX report export, before
 claiming `screen_025` functional parity or changing the production host.
+
+
+## Phase 9 — slice 2: native effective-dated site history and attendance corrections
+
+Builds on merged Phase 9 slice 1 (PR #38), inside the **same**
+`screen_025` individual report and the **same** original
+`PersonnelReportService.ReportAsync` SQLCipher source. The original
+read-only report returns `PersonAssignments` with the effective-dated
+site-name snapshot from `SiteNameHistory`, and append-only
+`AttendanceRevisions` with original before/after status, original
+effective date, explanation, authorization method, saved execution
+timestamp and executor's original audit attribution. No data migration,
+historical re-labeling, new SQL queries, duplicate reporting engine or
+write operation was introduced.
+
+The WPF view now includes two more independent, bounded 100-row
+history lists: **previous sites / site memberships** and
+**approved attendance corrections**. Each list has its own Previous/
+Next controls and report parameter (`sitePage` or `revisionPage`)
+while all existing attendance, movement and identity paging retains
+the previous source request indices.
+
+The native adapter verifies the current SQLCipher administrator nonce
+and role before and after the original service read, checks the exact
+`PersonId`, page echoes and source data. The presentation layer
+independently checks total counts, next-page flags, all returned row
+counts, required original historic fields and current selected-row
+ownership, failing closed rather than displaying mismatched history.
+Logout, navigation and a roster refresh invalidate the pending read;
+the app does not present or fabricate historical evidence.
+
+A new test-first xUnit class asserts isolated page transitions,
+immutable site-name and correction executor snapshots, rejects
+forged page indexes, totals, has-next flags, row counts and
+unauthorized/stale roster selections, and verifies late-response
+invalidation. A new fail-closed negative-path structural guard runs
+in both Windows Core and Windows Release, in addition to the
+previous Phase 9 tests.
+
+**Still not fully migrated**: the original unified report's
+monthly-status detail, full audit timeline, grouped reporting,
+advanced report filters and XLSX export. All those remain in the
+production DesktopHost until an equivalent native implementation
+passes complete route/role/functional parity. Neither the 69-route
+acceptance matrix nor the production packaging host is switched
+by this incremental slice.
+
+**Required PR merge gates**: success of BOTH Windows Core and
+Windows Release at the same exact final SHA, all nine C# Release
+test shards, pre-package Windows WPF/WebView2+SQLCipher E2E,
+x86/x64 Portable and Installer builds, four package acceptance jobs
+and independent SHA-256 verification. Manual clean-machine
+Windows and DPI 100/125/150% acceptance remains a separate
+production gate.

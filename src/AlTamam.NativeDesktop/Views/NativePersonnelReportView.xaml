@@ -145,6 +145,56 @@
                                 <DataGridTextColumn Header="سبب التغيير" Binding="{Binding Reason}" Width="2*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <DockPanel Margin="0,10,0,2">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                <Button Content="السابق" Command="{Binding PreviousSitesCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                                <Button Content="التالي" Command="{Binding NextSitesCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding SitesPageLabel}"
+                                       Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Text="المواقع حسب فترات انتساب الفرد الفعلية، بما فيها المواقع المسماة تاريخيا."
+                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                        <DataGrid ItemsSource="{Binding Report.Sites}" Height="190"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  AlternatingRowBackground="#F8FAFC"
+                                  AutomationProperties.Name="مواقع الفرد التاريخية حسب فترات الانتساب">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="الموقع وقتها" Binding="{Binding SiteName}" Width="2*"/>
+                                <DataGridTextColumn Header="من" Binding="{Binding ValidFrom}" Width="*"/>
+                                <DataGridTextColumn Header="إلى" Binding="{Binding ValidTo}" Width="*"/>
+                                <DataGridTextColumn Header="وقت تسجيل الانتساب" Binding="{Binding CreatedAtUtc}" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DockPanel Margin="0,10,0,2">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                <Button Content="السابق" Command="{Binding PreviousRevisionsCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                                <Button Content="التالي" Command="{Binding NextRevisionsCommand}"
+                                        Style="{StaticResource ReportAction}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding RevisionsPageLabel}"
+                                       Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Text="التصحيحات المعتمدة محفوظة بأثر مستقل عن حالة التحضير الحالية ولا يمكن تعديلها من التقرير."
+                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                        <DataGrid ItemsSource="{Binding Report.Revisions}" Height="200"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  AlternatingRowBackground="#F8FAFC"
+                                  AutomationProperties.Name="سجل تصحيحات حالات التحضير المؤرشف">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="تاريخ التحضير" Binding="{Binding Date}" Width="*"/>
+                                <DataGridTextColumn Header="قبل" Binding="{Binding Before}" Width="*"/>
+                                <DataGridTextColumn Header="بعد" Binding="{Binding After}" Width="*"/>
+                                <DataGridTextColumn Header="السبب" Binding="{Binding Reason}" Width="2*"/>
+                                <DataGridTextColumn Header="المنفذ تاريخيا" Binding="{Binding ExecutorSnapshot}" Width="2*"/>
+                                <DataGridTextColumn Header="وقت التصحيح" Binding="{Binding ExecutedAtUtc}" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

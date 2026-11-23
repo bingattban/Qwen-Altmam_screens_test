@@ -32,6 +32,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         PreviousMovementsCommand = new NativeCommand(_ => _ = PreviousMovementsAsync(), _ => CanPreviousMovements);
         NextIdentitiesCommand = new NativeCommand(_ => _ = NextIdentitiesAsync(), _ => CanNextIdentities);
         PreviousIdentitiesCommand = new NativeCommand(_ => _ = PreviousIdentitiesAsync(), _ => CanPreviousIdentities);
+        NextSitesCommand = new NativeCommand(_ => _ = NextSitesAsync(), _ => CanNextSites);
+        PreviousSitesCommand = new NativeCommand(_ => _ = PreviousSitesAsync(), _ => CanPreviousSites);
+        NextRevisionsCommand = new NativeCommand(_ => _ = NextRevisionsAsync(), _ => CanNextRevisions);
+        PreviousRevisionsCommand = new NativeCommand(_ => _ = PreviousRevisionsAsync(), _ => CanPreviousRevisions);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -45,6 +49,16 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         $"صفحة التنقلات {_report.MovementPage} — إجمالي {_report.MovementTotal}";
     public string IdentitiesPageLabel => _report is null ? "—" :
         $"صفحة تغير الأسماء والأرقام {_report.IdentityPage} — إجمالي {_report.IdentityTotal}";
+    public string SitesPageLabel => _report is null ? "—" :
+        $"صفحة المواقع التاريخية {_report.SitePage} — إجمالي {_report.SiteTotal}";
+    public string RevisionsPageLabel => _report is null ? "—" :
+        $"صفحة تصحيحات التحضير {_report.RevisionPage} — إجمالي {_report.RevisionTotal}";
+    public bool CanNextSites => CanNavigate && _report is { SiteHasNext: true } &&
+                                _pages!.SitePage < 100000;
+    public bool CanPreviousSites => CanNavigate && _pages!.SitePage > 1;
+    public bool CanNextRevisions => CanNavigate && _report is { RevisionHasNext: true } &&
+                                    _pages!.RevisionPage < 100000;
+    public bool CanPreviousRevisions => CanNavigate && _pages!.RevisionPage > 1;
     public bool CanNextAttendance => CanNavigate && _report is { AttendanceHasNext: true } &&
                                      _pages!.AttendancePage < 100000;
     public bool CanPreviousAttendance => CanNavigate && _pages!.AttendancePage > 1;
@@ -61,6 +75,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public ICommand PreviousMovementsCommand { get; }
     public ICommand NextIdentitiesCommand { get; }
     public ICommand PreviousIdentitiesCommand { get; }
+    public ICommand NextSitesCommand { get; }
+    public ICommand PreviousSitesCommand { get; }
+    public ICommand NextRevisionsCommand { get; }
+    public ICommand PreviousRevisionsCommand { get; }
 
     private bool CanRead => _open && _backend is not null &&
         _actor is { } actor && _liveActor?.Invoke() == actor &&
@@ -152,6 +170,14 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         ChangePageAsync(CanNextIdentities, "identities", +1, ct);
     public Task PreviousIdentitiesAsync(CancellationToken ct = default) =>
         ChangePageAsync(CanPreviousIdentities, "identities", -1, ct);
+    public Task NextSitesAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanNextSites, "sites", +1, ct);
+    public Task PreviousSitesAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanPreviousSites, "sites", -1, ct);
+    public Task NextRevisionsAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanNextRevisions, "revisions", +1, ct);
+    public Task PreviousRevisionsAsync(CancellationToken ct = default) =>
+        ChangePageAsync(CanPreviousRevisions, "revisions", -1, ct);
 
     private Task ChangePageAsync(bool allowed, string stream, int step, CancellationToken ct)
     {
@@ -161,6 +187,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             "attendance" => pages with { AttendancePage = checked(pages.AttendancePage + step) },
             "movements" => pages with { MovementPage = checked(pages.MovementPage + step) },
             "identities" => pages with { IdentityPage = checked(pages.IdentityPage + step) },
+            "sites" => pages with { SitePage = checked(pages.SitePage + step) },
+            "revisions" => pages with { RevisionPage = checked(pages.RevisionPage + step) },
             _ => throw new InvalidOperationException("Unknown report page.")
         };
         return LoadAsync(ct);
@@ -191,23 +219,42 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             report.AttendancePage != requested.AttendancePage ||
             report.MovementPage != requested.MovementPage ||
             report.IdentityPage != requested.IdentityPage ||
+            report.SitePage != requested.SitePage ||
+            report.RevisionPage != requested.RevisionPage ||
             report.AttendanceTotal < 0 || report.MovementTotal < 0 || report.IdentityTotal < 0 ||
+            report.SiteTotal < 0 || report.RevisionTotal < 0 ||
             report.AttendanceHasNext != ((long)requested.AttendancePage * 100 < report.AttendanceTotal) ||
             report.MovementHasNext != ((long)requested.MovementPage * 100 < report.MovementTotal) ||
             report.IdentityHasNext != ((long)requested.IdentityPage * 100 < report.IdentityTotal) ||
+            report.SiteHasNext != ((long)requested.SitePage * 100 < report.SiteTotal) ||
+            report.RevisionHasNext != ((long)requested.RevisionPage * 100 < report.RevisionTotal) ||
             report.StatusTotals is null || report.Attendance is null ||
             report.Movements is null || report.Identities is null ||
+            report.Sites is null || report.Revisions is null ||
             report.StatusTotals.Count > 500 ||
             report.StatusTotals.Any(x => x is null || x.StatusName is not { Length: >= 1 and <= 180 } || x.Count < 0) ||
             !ValidPageCount(report.Attendance.Count, report.AttendanceTotal, requested.AttendancePage) ||
             !ValidPageCount(report.Movements.Count, report.MovementTotal, requested.MovementPage) ||
             !ValidPageCount(report.Identities.Count, report.IdentityTotal, requested.IdentityPage) ||
+            !ValidPageCount(report.Sites.Count, report.SiteTotal, requested.SitePage) ||
+            !ValidPageCount(report.Revisions.Count, report.RevisionTotal, requested.RevisionPage) ||
             report.Attendance.Any(x => x is null || x.StatusName is null || x.SiteName is null ||
                 x.Date is not { Length: 10 } || x.Revision < 0) ||
             report.Movements.Any(x => x is null || x.Type is null || x.NameSnapshot is null ||
                 x.NumberSnapshot is null || x.Date is not { Length: 10 }) ||
             report.Identities.Any(x => x is null || x.Name is null ||
-                x.ServiceNumberA is null || x.ValidFrom is not { Length: 10 }))
+                x.ServiceNumberA is null || x.ValidFrom is not { Length: 10 }) ||
+            report.Sites.Any(x => x is null ||
+                x.SiteId is not { Length: >= 1 and <= 128 } ||
+                x.SiteName is not { Length: >= 1 and <= 180 } ||
+                x.ValidFrom is not { Length: 10 } ||
+                x.CreatedAtUtc is null) ||
+            report.Revisions.Any(x => x is null ||
+                x.Date is not { Length: 10 } ||
+                x.Before is not { Length: >= 1 and <= 180 } ||
+                x.After is not { Length: >= 1 and <= 180 } ||
+                x.ExecutedAtUtc is not { Length: >= 10 } ||
+                x.ExecutorSnapshot is null))
             throw new InvalidDataException("Incomplete or forged canonical personnel report.");
     }
 
@@ -224,7 +271,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage), nameof(Report),
             nameof(AttendancePageLabel), nameof(MovementsPageLabel),
-            nameof(IdentitiesPageLabel), nameof(CanNextAttendance),
+            nameof(IdentitiesPageLabel), nameof(SitesPageLabel),
+            nameof(RevisionsPageLabel), nameof(CanNextSites),
+            nameof(CanPreviousSites), nameof(CanNextRevisions),
+            nameof(CanPreviousRevisions), nameof(CanNextAttendance),
             nameof(CanPreviousAttendance), nameof(CanNextMovements),
             nameof(CanPreviousMovements), nameof(CanNextIdentities),
             nameof(CanPreviousIdentities)
@@ -234,7 +284,9 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         {
             CloseCommand, NextAttendanceCommand, PreviousAttendanceCommand,
             NextMovementsCommand, PreviousMovementsCommand,
-            NextIdentitiesCommand, PreviousIdentitiesCommand
+            NextIdentitiesCommand, PreviousIdentitiesCommand,
+            NextSitesCommand, PreviousSitesCommand,
+            NextRevisionsCommand, PreviousRevisionsCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
