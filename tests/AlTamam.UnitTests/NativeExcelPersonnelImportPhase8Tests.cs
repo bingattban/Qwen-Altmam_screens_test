@@ -100,9 +100,9 @@ public sealed class NativeExcelPersonnelImportPhase8Tests
     }
 
     [Fact]
-    public async Task All_rows_must_be_visible_and_limit_100_in_native_pilot()
+    public async Task All_rows_must_be_visible_and_limit_500_in_native_import()
     {
-        var backend = new FakeBackend { NewCountOverride = 101 };
+        var backend = new FakeBackend { NewCountOverride = 501 };
         var vm = Create(backend, () => Manager);
         vm.Open();
         await vm.LoadWorkbookAsync("كشف.xlsx", Workbook());
@@ -192,7 +192,7 @@ public sealed class NativeExcelPersonnelImportPhase8Tests
         public NativeExcelImportReview Make(string fileName)
         {
             int count = NewCountOverride >= 0 ? NewCountOverride : 1;
-            var items = Enumerable.Range(0, Math.Min(count, 100))
+            var items = Enumerable.Range(0, Math.Min(count, 500))
                 .Select(i => Person((1234 + i).ToString("D5"))).ToArray();
             var issues = Enumerable.Range(0, RejectedRows)
                 .Select(i => new NativeExcelImportIssue("الورقة الأولى", 3 + i,

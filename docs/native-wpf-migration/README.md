@@ -1123,3 +1123,84 @@ acceptance jobs and independent SHA256 audit. Clean-machine Windows,
 keyboard/accessibility and DPI 100/125/150% manual UAT remains
 separate. Legacy screen/route parity, export, historical import
 results and custom-field updates will be handled in later slices.
+
+
+## Phase 8 — slice 14: safe multi-worksheet XLSX import, single WPF workflow
+
+After reconciling competing PRs #33 and #34, **#33 is the sole
+approved native import implementation**, merged into main at
+`29f14b594d23a9f185acd8bf4bc2a9c049492cac`. Do not merge PR #34
+unchanged: it offers a tempting 500-addition approval while displaying
+only the first 100 accepted identities, and duplicates the original
+import modal/view model/adapter. Its multi-worksheet option is ported
+here as an incremental change to the existing original SQLCipher
+import, **without** introducing another importer.
+
+The original WPF import overlay now has an explicit Arabic checkbox
+`استيراد جميع أوراق العمل`. It defaults **unchecked**, so
+first-worksheet import and all earlier callers/tests are unchanged.
+The operator can opt in *before selecting* a local XLSX; the
+existing `INativeExcelPersonnelImportBackend` has a safe optional
+overload carrying `bool allSheets`, and an unsupported provider must
+throw rather than silently import only the first sheet. The existing
+SQLCipher adapter passes the flag to the **original**
+`ExcelPersonnelImportService.SelectAsync` as `allSheets:true`,
+which parses all worksheets using the original workbook relationships,
+headers, duplicate/identity/site validation, signed actor-bound
+workbook token and one-time import preview token. The adapter
+independently validates the original `selectedWorksheets` allowlist
+and requires every accepted, rejected and same-name-collision row to
+belong to a selected worksheet.
+
+**The critical limit is on accepted people, not merely Excel rows.**
+At most 500 source rows are inspected, with every rejected row/issue
+visible. The original parser now exposes all 1–500 accepted people
+in its canonical `acceptedPreview` rather than silently truncating
+at 100. All accepted people across ALL selected worksheets must appear
+with immutable name, number (ع), site, worksheet and row before approval.
+Never approve 500 additions based on a truncated 100-person display;
+a file containing 501 or more data rows must be rejected without writes. The single original SQLCipher transaction
+continues to enforce `updateExistingCustomFields:false` and
+`approveCustomUpdates:false`: no existing PersonIds, identifiers,
+site assignments or historical attendance are modified.
+
+Changing the sheet-mode checkbox invalidates any staged original
+review, one-time preview token and *all* prior unchecked consent
+flags; the operator must choose and analyze the XLSX again.
+Logout/navigation cancels late previews. A failed/unknown write
+response is not retried automatically: inspect original import
+batches/roster/audit before doing anything else. The four
+production variants remain the original DesktopHost/WebView2
+until full 69-route WPF parity and clean-machine acceptance.
+
+**Test-first:** the seven original xUnit cases preceded the multi-sheet
+implementation; additional 500-row boundary and truncated-preview tests
+were committed before the 500-row extension (default first sheet, explicit two-sheet accepted
+list, mode-change invalidation of three approvals, prevention of
+truncated accepted identities, forged/custom-update refusal,
+late logout response cancellation, no-session/supervisor denial).
+Existing 9 unit tests for safe native XLSX imports remain in place,
+alongside real SQLCipher multi-worksheet/relationships integration
+tests. A new fail-closed structural negative-path contract now
+executes in BOTH Windows Core and Release before all C# tests.
+Exact final-head success is mandatory for BOTH Windows workflows;
+nine disjoint Release test shards and real WPF/WebView2 E2E BEFORE
+building x86/x64 Portable and Installer; all four package acceptance
+jobs and independent SHA-256 provenance audit. Manual clean-machine
+Windows, keyboard/accessibility and 100/125/150% DPI evidence remains
+a separate production-gate requirement.
+
+
+### Clarification — 23 November 2026: import limit
+
+The native WPF importer accepts **up to 500 rows/names in one local XLSX**,
+including an explicitly selected multi-worksheet workbook. The canonical SQLCipher
+preview now returns **every accepted new identity**, not only the first 100,
+so a manager can verify all names, service numbers, worksheets and sites before
+individually approving creation. A workbook with 501 or more rows is rejected
+without writes. Existing identities, rejected rows, and audit/idempotency
+protections remain unchanged. The required first-test regressions include 500
+accepted/committed atomically, 501 rejected, and a forged truncated 500-row
+preview denied. This change does not relax the separate name-collision hint
+safety gate: when complete collision evidence is unavailable, import is denied
+rather than allowing an unseen approval.

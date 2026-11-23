@@ -7,8 +7,8 @@ namespace AlTamam.NativePresentation;
 
 /// <summary>
 /// Additive native XLSX import. Original SQLCipher service owns ALL parsing,
-/// duplicate rejection, site creation and atomic audit. Max 100 visible
-/// additions here, so every new person can be reviewed before commitment.
+/// duplicate rejection, site creation and atomic audit. All accepted rows,
+/// up to 500, must be shown before the operator can approve one transaction.
 /// </summary>
 public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
 {
@@ -19,6 +19,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
     private int _generation;
     private bool _open, _busy, _attempted, _uncertain;
     private bool _reviewedPeople, _approvedSites, _reviewedSimilarNames;
+    private bool _allSheets;
     private string _error = "";
     private NativeExcelImportReview? _review;
     private NativeExcelImportReceipt? _receipt;
@@ -42,6 +43,30 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
     public NativeExcelImportReview? Review => _review;
     public NativeExcelImportReceipt? Receipt => _receipt;
     public string Error => _error;
+
+    /// <summary>
+    /// False by default: first worksheet only. Switching modes invalidates
+    /// the original actor-bound signed review AND every prior approval.
+    /// </summary>
+    public bool ImportAllSheets
+    {
+        get => _allSheets;
+        set
+        {
+            if (!CanSelect || _allSheets == value) return;
+            _allSheets = value;
+            ++_generation;
+            _pending?.Cancel();
+            _pending = null;
+            _review = null;
+            _receipt = null;
+            _reviewedPeople = false;
+            _approvedSites = false;
+            _reviewedSimilarNames = false;
+            _error = "";
+            Notify();
+        }
+    }
 
     public bool ReviewedPeopleAndIssues
     {
@@ -83,6 +108,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         $"ملف «{r.FileName}»: {r.TotalRows} صفا. جديد: {r.NewCount}، " +
         $"مرفوض: {r.RejectedCount}، مواقع جديدة: {r.NewSites.Count}، " +
         $"أسماء متشابهة تستوجب المراجعة: {r.SimilarNameCount}. " +
+        $"نطاق أوراق العمل: {(_allSheets ? "جميع الأوراق" : "الورقة الأولى")}. " +
         "لا يتغير أي فرد موجود أو تحضير أو انتساب تاريخي. " +
         "تُنشأ المواقع الجديدة فقط إذا وافقت عليها صراحة.";
     public string ReceiptSummary => _receipt is not { } r ? "" :
@@ -147,9 +173,17 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         try
         {
             NativeExcelImportReview preview = await _backend.StageAndPreviewAsync(
-                actor, fileName, workbook, linked.Token);
+                actor, fileName, workbook, _allSheets, linked.Token);
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanReadOriginalActor(actor)) { ForceCancel(); return; }
+            // The signed canonical preview must contain every accepted row.
+            // Never authorize 501+ people, regardless of worksheet mode.
+            if (preview is { NewCount: > 500 })
+            {
+                _error = "الحد الأقصى للاستيراد 500 اسم في الملف الواحد. " +
+                    "لم يُحفظ أي تغيير؛ قسّم الكشف إلى ملفات لا تتجاوز 500 اسما.";
+                return;
+            }
             ValidateCanonicalReview(preview, fileName);
             _review = preview;
             if (preview.NewCount == 0)
@@ -268,7 +302,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             review.PreviewToken is not { Length: 64 } ||
             review.PreviewToken.Any(c => !char.IsAsciiHexDigit(c)) ||
             review.TotalRows is < 1 or > 500 ||
-            review.NewCount is < 0 or > 100 ||
+            review.NewCount is < 0 or > 500 ||
             review.RejectedCount < 0 || review.CustomUpdateCount != 0 ||
             review.NewCount + review.RejectedCount != review.TotalRows ||
             review.NewPeople is null || review.Issues is null ||
@@ -277,7 +311,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             review.Collisions.Count > 40 ||
             review.NewPeople.Count != review.NewCount ||
             review.Issues.Count != review.RejectedCount ||
-            review.NewSites.Count > 100 ||
+            review.NewSites.Count > 500 ||
             review.SimilarNameCount is < 0 or > 500 ||
             review.NewPeople.Any(p => p is null ||
                 p.Row < 2 ||
@@ -291,7 +325,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
                 string.IsNullOrWhiteSpace(x.Reason)) ||
             review.NewSites.Any(x => x is null ||
                 x.Name is not { Length: >= 2 and <= 100 } ||
-                x.PersonCount is < 1 or > 100))
+                x.PersonCount is < 1 or > 500))
             throw new InvalidDataException("Invalid, abbreviated or write-enabled canonical import preview.");
     }
 
@@ -308,6 +342,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
         _reviewedPeople = false;
         _approvedSites = false;
         _reviewedSimilarNames = false;
+        _allSheets = false;
         _review = null;
         _receipt = null;
         _error = "";
@@ -322,7 +357,8 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             nameof(CanCommit), nameof(HasReview),
             nameof(HasUnverifiedCommit), nameof(Review), nameof(Receipt),
             nameof(ReviewedPeopleAndIssues), nameof(ApproveCreatingSites),
-            nameof(AcknowledgeSimilarNames), nameof(ReviewSummary),
+            nameof(AcknowledgeSimilarNames), nameof(ImportAllSheets),
+            nameof(ReviewSummary),
             nameof(ReceiptSummary), nameof(Error)
         })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
