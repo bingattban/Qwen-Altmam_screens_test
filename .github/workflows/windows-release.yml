@@ -136,10 +136,13 @@ jobs:
           python build/test-native-phase6-daily-roster-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 6 daily SQLCipher roster / session gate failed' }
           python build/test-native-phase7-monthly-roster-contract.py
-          python build/test-native-phase8-personnel-directory-contract.py
-          python build/test-native-phase8-personnel-write-contract.py
-          python build/test-native-phase8-personnel-movement-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 7 archived monthly SQLCipher / session contract failed' }
+          python build/test-native-phase8-personnel-directory-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 personnel directory security contract failed' }
+          python build/test-native-phase8-personnel-write-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 personnel mutation security contract failed' }
+          python build/test-native-phase8-personnel-movement-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 personnel movement security contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
