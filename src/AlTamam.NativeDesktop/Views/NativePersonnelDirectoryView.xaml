@@ -70,6 +70,10 @@
                         Command="{Binding OpenProfileCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فتح تفاصيل فرد بالمعرف الثابت"/>
+                <Button Content="إدارة حالات التحضير" Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding OpenStatusCatalogCommand}"
+                        AutomationProperties.Name="فتح إضافة وتعديل وتعطيل حالات التحضير الأصلية"/>
                 <Button Content="إدارة المواقع" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenSiteCatalogCommand}"
@@ -238,5 +242,8 @@
         <views:NativeSiteCatalogView Grid.RowSpan="5"
                                      DataContext="{Binding SiteCatalog}"
                                      Panel.ZIndex="190"/>
+        <views:NativeStatusCatalogView Grid.RowSpan="5"
+                                       DataContext="{Binding StatusCatalog}"
+                                       Panel.ZIndex="200"/>
     </Grid>
 </UserControl>
