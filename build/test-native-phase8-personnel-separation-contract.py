@@ -55,7 +55,7 @@ def problems(files):
         '["operationId"] = operationId',
         'RequiredText(data, "assignmentId")',
         'RequiredNumber(data, "minimumConfirmationSeconds")',
-        'RequiredText(data, "rowVersion")',
+        'RequiredNumber(data, "rowVersion")',
         'RequiredText(data, "siteId")',
         'RequiredText(data, "siteName")',
         'RequiredText(data, "reason")',
