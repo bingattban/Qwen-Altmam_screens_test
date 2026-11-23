@@ -18,7 +18,7 @@ public sealed class NativeSqlCipherDashboardReader(
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
-      INativePersonnelMutationBackend, INativePersonnelMovementBackend
+      INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -434,6 +434,86 @@ public sealed class NativeSqlCipherDashboardReader(
             checked((int)RequiredNumber(data, "organizationalStatus")),
             RequiredBoolean(data, "active"), RequiredNumber(data, "revision"),
             RequiredText(data, "firstRecordedLocalDate"), history);
+    }
+
+    /// <summary>
+    /// Historical personnel movements remain immutable. The original SQLCipher
+    /// movement service owns both archive queries and historical detail reads.
+    /// Every read is bounded by a fresh exact manager/nonce authorization.
+    /// </summary>
+    public async Task<NativeMovementArchivePage> ReadMovementsAsync(
+        NativeIdentity actor, NativeMovementArchiveFilter filter,
+        CancellationToken ct = default)
+    {
+        if (filter is null || filter.Page is < 1 or > 100000 ||
+            filter.PageSize != 50 || filter.SearchTerm is null ||
+            filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl) ||
+            filter.Type is not ("all" or "internal" or "external" or "return"))
+            throw new InvalidDataException("Invalid native movement archive filter.");
+
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .ArchiveAsync(new JsonObject
+            {
+                ["page"] = filter.Page,
+                ["pageSize"] = filter.PageSize,
+                ["term"] = filter.SearchTerm,
+                ["type"] = filter.Type
+            }, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+
+        JsonObject data = RequiredObject(response, "PersonnelMovementArchive");
+        if (RequiredNumber(data, "page") != filter.Page ||
+            RequiredNumber(data, "pageSize") != filter.PageSize)
+            throw new InvalidDataException("Canonical movement archive page mismatch.");
+        var items = RequiredArray(data, "items");
+        if (items.Count > filter.PageSize)
+            throw new InvalidDataException("Unbounded movement archive response.");
+        var rows = items.Select(node =>
+        {
+            JsonObject entry = RequireObject(node);
+            return new NativeMovementArchiveRow(
+                RequiredText(entry, "movementId"),
+                RequiredText(entry, "personId"),
+                RequiredText(entry, "name"),
+                RequiredText(entry, "serviceNumberA"),
+                RequiredText(entry, "type"),
+                RequiredText(entry, "sourceSite"),
+                RequiredText(entry, "destination"),
+                RequiredText(entry, "date"),
+                RequiredText(entry, "committedAtUtc"));
+        }).ToArray();
+        return new NativeMovementArchivePage(filter,
+            RequiredNumber(data, "total"),
+            RequiredBoolean(data, "hasNext"), rows);
+    }
+
+    public async Task<NativeMovementArchiveDetail> ReadMovementDetailsAsync(
+        NativeIdentity actor, string movementId,
+        CancellationToken ct = default)
+    {
+        if (movementId is null || movementId.Length is < 3 or > 128 ||
+            movementId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid movement id.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelMovementService(database)
+            .DetailsAsync(new JsonObject { ["movementId"] = movementId }, ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelMovementDetails");
+        if (RequiredText(data, "movementId") != movementId)
+            throw new InvalidDataException("Canonical movement detail id changed.");
+        return new NativeMovementArchiveDetail(
+            RequiredText(data, "movementId"),
+            RequiredText(data, "personId"),
+            RequiredText(data, "name"),
+            RequiredText(data, "serviceNumberA"),
+            RequiredText(data, "type"),
+            RequiredText(data, "sourceSite"),
+            RequiredText(data, "destination"),
+            RequiredText(data, "date"),
+            RequiredText(data, "committedAtUtc"),
+            RequiredText(data, "actorUsername"));
     }
 
     private async Task VerifyPersonnelManagerAsync(
