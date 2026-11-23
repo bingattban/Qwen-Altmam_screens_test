@@ -7,7 +7,7 @@ namespace AlTamam.NativePresentation;
 /// </summary>
 public interface INativePersonnelDirectoryReader
 {
-    Task<NativePersonnelCatalogue> ReadCatalogueAsync(
+    Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(
         NativeIdentity actor, CancellationToken ct = default);
     Task<NativePersonnelSnapshot> ReadPageAsync(
         NativeIdentity actor, NativePersonnelFilter filter,
