@@ -1415,3 +1415,62 @@ x86/x64 Portable and Installer builds, four package acceptance jobs
 and independent SHA-256 verification. Manual clean-machine
 Windows and DPI 100/125/150% acceptance remains a separate
 production gate.
+
+
+## Phase 9 — slice 3: original monthly status totals and individual audit timeline
+
+Extends merged Phase 9 slices 1–2 in the SAME unified `screen_025`
+native C#/WPF report under Administration. The only source continues
+to be the canonical `PersonnelReportService.ReportAsync` using
+immutable `PersonId`, original encrypted SQLCipher storage and real
+signed-in admin role/nonce verification before and after service calls.
+
+**Monthly status summary:** the original service returns
+`monthlyTotals` grouped from every saved `AttendanceRecords` day by
+`yyyy-MM`, immutable `StatusId` and historical status-name snapshot.
+The native report renders all original month/status rows, not totals
+inferred from the visible attendance page. It verifies that source
+periods are calendar-valid, status names/IDs are present, counts are
+positive, no historical month/status key is duplicated and the sum
+equals the original individual `attendanceTotal`. If the original
+non-paged monthly output exceeds a documented 5,000-row
+client safety bound, the native view **fails closed** and explicitly
+reports that the original evidence cannot be verified; it never
+silently truncates a historical report.
+
+**Original saved operations:** the same service supplies audit events
+from the historic `AuditEvents` table in independently paged 100-row
+`auditPage` increments. The view shows original Arabic operation,
+effective date, UTC execution timestamp, original executor login/full
+name snapshots, saved description and reason, not the current operator
+or a reconstructed personnel identity. Audit paging retains the
+positions of all other independent histories. Exact page echo,
+100-row count, source totals and has-next consistency are verified
+before rendering. The live authorized session and source-row ownership
+are rechecked after every read, with cancellation and stale-response
+invalidation on logout, roster refresh and navigation.
+
+New xUnit tests were committed FIRST for month-status evidence,
+audit source paging, original executor snapshots, forged totals
+and page indexes, role restrictions, old-row rejection and late
+response suppression. The original slice-one 101-day test fixture
+was updated to include its expected month/status aggregate,
+making cross-aggregate consistency independently testable.
+Additional fail-closed Python structural negative-path checks run
+in both Windows Core and Windows Release, supplementing all
+existing native checks.
+
+**Deferred (NOT native parity):** advanced report date/site/status/
+movement filters, group reports, original XLSX export and its
+progress/audit remain hosted by the original production DesktopHost
+until separately migrated and accepted. This slice does NOT change
+the 69-route inventory state or switch customer x86/x64 package
+entry point to NativeDesktop.
+
+**Required gates before merging this PR:** same final head SHA passes
+Windows Core plus Windows Release; real Windows WPF/WebView2/
+SQLCipher pre-package E2E, all nine C# Release test shards,
+x86 and x64 Portable/Installer builds, all four real package
+acceptance jobs and independent SHA-256 audit. Clean-machine
+Windows keyboard/DPI 100/125/150% manual acceptance remains a
+separate pre-production gate.
