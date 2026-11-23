@@ -1297,3 +1297,67 @@ manual UAT is still required before switching the customer DesktopHost.
 **Next:** continue mapping original remaining routes and screen behaviors
 into native C#/WPF in small test-first increments. Do not switch the
 production entry point until all 69 routes and manual UAT are satisfied.
+
+
+## Phase 9 — slice 1: first read-only native view of unified personnel report (screen_025)
+
+This incremental native C#/WPF slice begins **the existing single unified
+`screen_025` report inside Administration / Force Management**. It does not
+introduce a second Reports section, a competing report engine, any SQL writer
+or a new database table. The operator chooses exactly one person from the
+currently displayed authenticated Administration roster page. The selection
+must remain the same in-memory source-row object and the administrator must
+retain a real, matching, authorized SQLCipher nonce/role. The screen remains
+read-only.
+
+The WPF adapter calls **only**
+`PersonnelReportService.ReportAsync({personId, attendancePage, movementPage,
+identityPage})`, using immutable `PersonId`, not person name or
+reusable service number (ع). The original report already reads effective
+historic attendance status/site snapshots, dated identity revisions,
+internal/external transfers, dismissal/return movements and their original
+executor attribution. It supports a bounded 100-row page for each of the
+three displayed streams. The native display shows historic attendance
+**name and number snapshots only when recorded**; missing source history is
+explicitly shown as `غير موثق تاريخيا` and never replaced with the
+person's current display identity.
+
+The first screen slice displays complete aggregated attendance-status
+counts and independently paged (up to 100 source rows at once) historical
+attendance, movement/return/dismissal facts and identity changes.
+Previous/Next only query the canonical service using the original
+page parameters. The returned `PersonId`, page indexes, 100-row bound,
+total counts, has-next flags and all visible rows are validated before
+display. No selected-row list is used as an attendance source or to
+reconstruct historic identity. Stale responses after logout, navigation,
+a roster refresh, role/session change, cancellation or changed selected
+person cannot publish an earlier person's report.
+
+**Not yet native:** the unified report's group mode, its XLSX export,
+site-history, monthly detail, revisions and full audit panes. These
+remain available in the original complete DesktopHost/WebView2
+implementation. Accordingly, `screen_025` is **not declared fully
+migrated** within the original 69-route matrix, and the customer
+x86/x64 Portable and Installer outputs still use the existing original
+production host. This is a guarded functional increment, not a launch
+or a claim of full UI parity.
+
+Seven focused C# xUnit tests were committed **before** the adapter and
+WPF UI implementation. They cover manager-only authorization, current
+row-reference selection, original immutable person identity, explicit
+missing historic identity evidence, forged identity/page rejection,
+100-row attendance pagination, logout-late results and closed state
+cleanup. A separate fail-closed Python structural negative-path guard is
+registered independently in both Windows Core and Windows Release.
+
+**Merge gates:** both Windows pipelines must pass on the identical final
+PR head SHA, including real SQLCipher and WPF/WebView2 E2E before
+packaging, the nine disjoint C# Release shards, x86/x64 Portable+Installer
+builds, all four customer package acceptance jobs and independent SHA-256
+audit. Real clean-machine UI/keyboard/accessibility validation at
+100/125/150% DPI remains a separate manual production gate.
+
+**Next slices:** extend the exact same report using the existing
+canonical SQLCipher service to show the remaining original individual
+history panels, then group mode and original XLSX report export, before
+claiming `screen_025` functional parity or changing the production host.
