@@ -15,7 +15,11 @@ public interface INativePersonnelReportReader
 public sealed record NativeIndividualReportPages(
     string PersonId, int AttendancePage = 1, int MovementPage = 1,
     int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1,
-    int AuditPage = 1, string DateFrom = "", string DateTo = "");
+    int AuditPage = 1, string DateFrom = "", string DateTo = "",
+    int MovementType = 0);
+
+/// <summary>Canonical numeric PersonnelMovements codes, zero means all.</summary>
+public sealed record NativeReportMovementTypeOption(int Value, string Title);
 
 public sealed record NativePersonnelReportStatusTotal(
     string StatusId, string StatusName, long Count);
@@ -100,4 +104,7 @@ public sealed record NativePersonnelReportSnapshot(
     // Older test fakes are intentionally unfiltered by default.
     public string DateFrom { get; init; } = "";
     public string DateTo { get; init; } = "";
+
+    // Source echo of movement-only history filter; zero leaves all movements.
+    public int MovementType { get; init; }
 }
