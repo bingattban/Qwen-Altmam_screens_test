@@ -16,10 +16,13 @@ public sealed record NativeIndividualReportPages(
     string PersonId, int AttendancePage = 1, int MovementPage = 1,
     int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1,
     int AuditPage = 1, string DateFrom = "", string DateTo = "",
-    int MovementType = 0);
+    int MovementType = 0, string SiteId = "", string StatusId = "");
 
 /// <summary>Canonical numeric PersonnelMovements codes, zero means all.</summary>
 public sealed record NativeReportMovementTypeOption(int Value, string Title);
+
+/// <summary>Immutable canonical ID and historical label. Names never identify a filter.</summary>
+public sealed record NativeReportFilterOption(string Id, string Title);
 
 public sealed record NativePersonnelReportStatusTotal(
     string StatusId, string StatusName, long Count);
@@ -107,4 +110,12 @@ public sealed record NativePersonnelReportSnapshot(
 
     // Source echo of movement-only history filter; zero leaves all movements.
     public int MovementType { get; init; }
+
+    public string SiteId { get; init; } = "";
+    public string StatusId { get; init; } = "";
+
+    // Full bounded, unfiltered lifetime choices from the original PersonId
+    // SQLCipher report. Never reconstruct these from one 100-row page.
+    public IReadOnlyList<NativeReportFilterOption> AvailableSites { get; init; } = [];
+    public IReadOnlyList<NativeReportFilterOption> AvailableStatuses { get; init; } = [];
 }
