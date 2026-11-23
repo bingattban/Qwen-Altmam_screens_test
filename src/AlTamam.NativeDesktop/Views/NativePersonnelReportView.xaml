@@ -40,7 +40,7 @@
                                TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير ومرشحات الموقع والحالة والحركة في مراحل لاحقة."
+                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير ومرشحات الموقع والحالة في مراحل لاحقة."
                                TextWrapping="Wrap" Foreground="#475569"/>
                     <TextBlock Text="تصفية الفترة الزمنية (شاملة يوم البداية والنهاية). اترك الحقل فارغا لعرض السجل دون حد."
                                TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,3"/>
@@ -65,6 +65,24 @@
                                Foreground="#0F2942" Margin="0,0,0,5"
                                AutomationProperties.Name="الفترة المطبقة على النتائج التاريخية"/>
                     <TextBlock Text="تنبيه: تصفية الفترة تشمل التحضير والتنقلات والتصحيحات وسجل العمليات؛ يبقى تاريخ تغيير هوية الفرد وانتسابه للمواقع كاملا للمراجعة."
+                               TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
+                    <WrapPanel Orientation="Horizontal" Margin="0,4,0,3"
+                               AutomationProperties.Name="مرشح نوع الحركة التاريخية للفرد">
+                        <TextBlock Text="نوع الحركة" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <ComboBox Width="195" MinHeight="34"
+                                  ItemsSource="{Binding MovementTypeOptions}"
+                                  DisplayMemberPath="Title" SelectedValuePath="Value"
+                                  SelectedValue="{Binding MovementTypeDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  AutomationProperties.Name="اختر نوع الحركة لتصفية سجل التنقلات فقط"/>
+                        <Button Content="تطبيق النوع" Command="{Binding ApplyMovementTypeFilterCommand}"
+                                Style="{StaticResource ReportAction}"/>
+                        <Button Content="جميع الحركات" Command="{Binding ClearMovementTypeFilterCommand}"
+                                Style="{StaticResource ReportAction}"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding AppliedMovementTypeLabel}" FontWeight="SemiBold"
+                               Foreground="#0F2942" Margin="0,0,0,3"
+                               AutomationProperties.Name="نوع الحركة المطبق حاليا"/>
+                    <TextBlock Text="مرشح نوع الحركة يغير سجل الحركات فقط؛ لا يغير التحضير أو الإجماليات الشهرية أو سجل الهوية والمواقع."
                                TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
                                FontWeight="SemiBold" TextWrapping="Wrap"
