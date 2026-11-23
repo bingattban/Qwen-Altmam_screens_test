@@ -35,6 +35,10 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeIndividualReportPages pages,
         CancellationToken ct = default)
     {
+        static bool IsCanonicalDate(string value) =>
+            value.Length == 0 || DateOnly.TryParseExact(
+                value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out _);
         if (pages is null || pages.PersonId is not { Length: >= 3 and <= 128 } ||
             pages.PersonId.Any(char.IsControl) ||
             pages.AttendancePage is < 1 or > 100000 ||
@@ -42,7 +46,11 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.IdentityPage is < 1 or > 100000 ||
             pages.SitePage is < 1 or > 100000 ||
             pages.RevisionPage is < 1 or > 100000 ||
-            pages.AuditPage is < 1 or > 100000)
+            pages.AuditPage is < 1 or > 100000 ||
+            pages.DateFrom is null || pages.DateTo is null ||
+            !IsCanonicalDate(pages.DateFrom) || !IsCanonicalDate(pages.DateTo) ||
+            (pages.DateFrom.Length > 0 && pages.DateTo.Length > 0 &&
+             string.CompareOrdinal(pages.DateFrom, pages.DateTo) > 0))
             throw new InvalidDataException("Invalid native individual report request.");
 
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
@@ -55,7 +63,9 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["identityPage"] = pages.IdentityPage,
                 ["sitePage"] = pages.SitePage,
                 ["revisionPage"] = pages.RevisionPage,
-                ["auditPage"] = pages.AuditPage
+                ["auditPage"] = pages.AuditPage,
+                ["dateFrom"] = pages.DateFrom,
+                ["dateTo"] = pages.DateTo
             }, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
@@ -69,8 +79,10 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredNumber(data, "identityPage") != pages.IdentityPage ||
             RequiredNumber(data, "sitePage") != pages.SitePage ||
             RequiredNumber(data, "revisionPage") != pages.RevisionPage ||
-            RequiredNumber(data, "auditPage") != pages.AuditPage)
-            throw new InvalidDataException("Original individual report identity or page mismatch.");
+            RequiredNumber(data, "auditPage") != pages.AuditPage ||
+            RequiredText(data, "dateFrom") != pages.DateFrom ||
+            RequiredText(data, "dateTo") != pages.DateTo)
+            throw new InvalidDataException("Original individual report identity, date filter or page mismatch.");
 
         var totals = RequiredArray(data, "statusTotals").Select(node =>
         {
@@ -187,7 +199,9 @@ public sealed class NativeSqlCipherDashboardReader(
             AuditTotal = RequiredNumber(data, "auditTotal"),
             AuditPage = pages.AuditPage,
             AuditHasNext = RequiredBoolean(data, "auditHasNext"),
-            Audit = audits
+            Audit = audits,
+            DateFrom = RequiredText(data, "dateFrom"),
+            DateTo = RequiredText(data, "dateTo")
         };
         if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
             report.Movements.Count > 100 || report.Identities.Count > 100 ||

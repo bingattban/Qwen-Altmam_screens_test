@@ -40,8 +40,32 @@
                                TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="يعرض هذا الجزء البيانات التاريخية الفعلية للفرد المحدد بمعرفه الثابت؛ التقارير الجماعية والتصدير واستكمال سجل التدقيق في مراحل لاحقة."
+                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير ومرشحات الموقع والحالة والحركة في مراحل لاحقة."
                                TextWrapping="Wrap" Foreground="#475569"/>
+                    <TextBlock Text="تصفية الفترة الزمنية (شاملة يوم البداية والنهاية). اترك الحقل فارغا لعرض السجل دون حد."
+                               TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,3"/>
+                    <WrapPanel Orientation="Horizontal" Margin="0,2,0,4"
+                               AutomationProperties.Name="حدود الفترة التاريخية الفردية">
+                        <TextBlock Text="من تاريخ" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="122" MaxLength="10" Height="32" Padding="7,4"
+                                 VerticalContentAlignment="Center" FlowDirection="LeftToRight"
+                                 Text="{Binding DateFromDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="تاريخ بداية التقرير بصيغة YYYY-MM-DD"/>
+                        <TextBlock Text="إلى تاريخ" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                        <TextBox Width="122" MaxLength="10" Height="32" Padding="7,4"
+                                 VerticalContentAlignment="Center" FlowDirection="LeftToRight"
+                                 Text="{Binding DateToDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="تاريخ نهاية التقرير بصيغة YYYY-MM-DD"/>
+                        <Button Content="تطبيق الفترة" Command="{Binding ApplyDateFiltersCommand}"
+                                Style="{StaticResource ReportAction}"/>
+                        <Button Content="مسح الفترة" Command="{Binding ClearDateFiltersCommand}"
+                                Style="{StaticResource ReportAction}"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding AppliedDateRangeLabel}" FontWeight="SemiBold"
+                               Foreground="#0F2942" Margin="0,0,0,5"
+                               AutomationProperties.Name="الفترة المطبقة على النتائج التاريخية"/>
+                    <TextBlock Text="تنبيه: تصفية الفترة تشمل التحضير والتنقلات والتصحيحات وسجل العمليات؛ يبقى تاريخ تغيير هوية الفرد وانتسابه للمواقع كاملا للمراجعة."
+                               TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
                                FontWeight="SemiBold" TextWrapping="Wrap"
                                AutomationProperties.LiveSetting="Polite"/>

@@ -1474,3 +1474,60 @@ x86 and x64 Portable/Installer builds, all four real package
 acceptance jobs and independent SHA-256 audit. Clean-machine
 Windows keyboard/DPI 100/125/150% manual acceptance remains a
 separate pre-production gate.
+
+
+## Phase 9 — slice 4: native individual historical date range filter
+
+Follows merged Phase 9 slice 3 (PR #40), adding **from/to inclusive
+Gregorian local business dates** to the SAME `screen_025` individual
+WPF report. No second report engine, new SQL, migration, write operation,
+date rewrite, or production host redirect was introduced.
+
+The RTL view has two explicit `YYYY-MM-DD` fields, an Apply action
+and a Clear action. Empty lower/upper bounds are supported. The native
+ViewModel rejects invalid/nonexistent Gregorian dates, non-ISO digits
+or date notation and inverted ranges **before** contacting the backend.
+Draft filters never masquerade as already applied report results:
+`AppliedDateRangeLabel` shows ONLY the original returned and verified
+date boundaries for the currently displayed history.
+
+Applying a valid range resets **all** separate individual history
+pagers to page 1, then requests a fresh original canonical
+`PersonnelReportService.ReportAsync` read by immutable `PersonId`.
+The original SQLCipher service applies date bounds (inclusive) to
+attendance, historic monthly/status totals, movements, audit events
+and attendance revisions according to their original effective-date
+semantics. The identity-change timeline and effective-dated site
+assignment history intentionally remain FULL lifetime context: the
+original canonical service does not apply the date filters to those
+two record streams, and the native UI states this distinction. WPF never filters only the displayed 100-row
+page or recomputes historical values. The adapter verifies live
+admin/role/session before/after query and exact original
+`dateFrom`/`dateTo` source response echoes, person ID and
+all independent pagination. The ViewModel verifies the same echoes,
+current selected roster row, month-total consistency and pagination
+counts before displaying the result. In-flight older range responses
+are cancelled/discarded by generation; logout and route changes
+invalidate any remaining response.
+
+Seven test-first xUnit methods (including theory variants) cover valid
+inclusive dates, open-ended and one-day ranges, invalid and reversed
+dates, reset of every individual pager, clearing the filter to issue a
+new real unbounded query, forged server echoes, stale in-flight reads,
+role revocation and source-row changes. A separate fail-closed
+structural negative-path guard runs in BOTH Windows Core and Release,
+in addition to all previously adopted xUnit/SQLCipher/WPF tests.
+
+**Not yet full screen_025 / 69-route native parity:** historical
+site/status/movement filters, full multi-person group report,
+original XLSX individual/group export and clean-machine WPF
+keyboard/DPI acceptance. The packaged customer x86/x64 Portable and
+Installer remain the existing complete DesktopHost/WebView2 product.
+The operator must use real Windows acceptance (100%/125%/150% DPI)
+before any change to the native production entry point.
+
+The branch shall merge into `main` only after both Windows Core
+and Windows Release pass at its exact head SHA, including nine
+disjoint C# test shards, real Windows WPF/WebView2 + SQLCipher
+pre-package E2E, four customer package acceptance jobs and
+independent customer artifact SHA-256 audit.
