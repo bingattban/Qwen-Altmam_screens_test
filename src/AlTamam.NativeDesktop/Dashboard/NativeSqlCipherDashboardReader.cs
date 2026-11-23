@@ -39,7 +39,9 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.PersonId.Any(char.IsControl) ||
             pages.AttendancePage is < 1 or > 100000 ||
             pages.MovementPage is < 1 or > 100000 ||
-            pages.IdentityPage is < 1 or > 100000)
+            pages.IdentityPage is < 1 or > 100000 ||
+            pages.SitePage is < 1 or > 100000 ||
+            pages.RevisionPage is < 1 or > 100000)
             throw new InvalidDataException("Invalid native individual report request.");
 
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
@@ -49,7 +51,9 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["personId"] = pages.PersonId,
                 ["attendancePage"] = pages.AttendancePage,
                 ["movementPage"] = pages.MovementPage,
-                ["identityPage"] = pages.IdentityPage
+                ["identityPage"] = pages.IdentityPage,
+                ["sitePage"] = pages.SitePage,
+                ["revisionPage"] = pages.RevisionPage
             }, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
@@ -60,7 +64,9 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredNumber(data, "pageSize") != 100 ||
             RequiredNumber(data, "attendancePage") != pages.AttendancePage ||
             RequiredNumber(data, "movementPage") != pages.MovementPage ||
-            RequiredNumber(data, "identityPage") != pages.IdentityPage)
+            RequiredNumber(data, "identityPage") != pages.IdentityPage ||
+            RequiredNumber(data, "sitePage") != pages.SitePage ||
+            RequiredNumber(data, "revisionPage") != pages.RevisionPage)
             throw new InvalidDataException("Original individual report identity or page mismatch.");
 
         var totals = RequiredArray(data, "statusTotals").Select(node =>
@@ -100,6 +106,30 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(item, "reason"));
         }).ToArray();
 
+        // These projections MUST come from the same canonical report read;
+        // no current-site lookup is allowed to reconstruct historical site names.
+        var sites = RequiredArray(data, "siteHistory").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportSite(
+                RequiredText(item, "siteId"), RequiredText(item, "siteName"),
+                RequiredText(item, "from"),
+                item["to"] is null ? null : RequiredText(item, "to"),
+                RequiredText(item, "createdAtUtc"));
+        }).ToArray();
+        var revisions = RequiredArray(data, "revisions").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportRevision(
+                RequiredText(item, "date"), RequiredText(item, "before"),
+                RequiredText(item, "after"),
+                item["reason"] is null ? null : RequiredText(item, "reason"),
+                RequiredText(item, "executedAtUtc"),
+                item["authorizationMethod"] is null
+                    ? null : RequiredText(item, "authorizationMethod"),
+                RequiredText(item, "executor"));
+        }).ToArray();
+
         var report = new NativePersonnelReportSnapshot(
             returnedId, RequiredText(person, "name"),
             RequiredText(person, "serviceNumberA"),
@@ -111,9 +141,20 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.AttendancePage, RequiredBoolean(data, "attendanceHasNext"),
             pages.MovementPage, RequiredBoolean(data, "movementHasNext"),
             pages.IdentityPage, RequiredBoolean(data, "identityHasNext"),
-            totals, attendance, moves, identities);
+            totals, attendance, moves, identities)
+        {
+            SitePage = pages.SitePage,
+            SiteTotal = RequiredNumber(data, "siteTotal"),
+            SiteHasNext = RequiredBoolean(data, "siteHasNext"),
+            Sites = sites,
+            RevisionPage = pages.RevisionPage,
+            RevisionTotal = RequiredNumber(data, "revisionTotal"),
+            RevisionHasNext = RequiredBoolean(data, "revisionHasNext"),
+            Revisions = revisions
+        };
         if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
             report.Movements.Count > 100 || report.Identities.Count > 100 ||
+            report.Sites.Count > 100 || report.Revisions.Count > 100 ||
             report.PersonId != pages.PersonId)
             throw new InvalidDataException("Original personnel report was truncated or forged.");
         return report;
