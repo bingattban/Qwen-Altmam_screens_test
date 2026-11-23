@@ -582,3 +582,40 @@ remaining 69-route parity and real Windows 100/125/150% keyboard/DPI
 and clean-machine UAT are still separate migration milestones. The
 four customer binaries continue packaging DesktopHost/WebView2; there
 is NO native production switch in this slice.
+
+
+## Phase 8 — slice 6: immutable canonical separation archive in native WPF
+
+Native **أرشيف الفصل** is a distinct manager-only read-only dialog in the
+personnel administration screen. Its source of truth is the ORIGINAL
+`PersonnelSeparationService.ArchiveAsync` and `DetailsAsync`, not
+current roster status or a mutable UI cache. Records preserve the
+historical name, number, source site, separation reason, effective local
+date, actual UTC commit time and auditor identity from SQLCipher.
+Search (name/number) and source-site filters use the original parameterized
+queries. Every page is bounded to 50 rows, and the exact page metadata,
+unique movement IDs, history fields and detail identity are verified.
+The native modal exposes no update, delete, restoration or reactivation
+button and issues no SQL or account mutation commands.
+
+Authorization is revalidated before and after each SQLCipher read using
+the exact original manager session nonce. Switching users or navigating
+away scrubs pending page/detail operations and the displayed snapshots.
+Results from an obsolete asynchronous read cannot leak into a new login
+or replace historical facts. The detail view cross-checks every
+immutable field, including the original separation reason and actor
+ID, against the selected archive row.
+
+Six test-first C# xUnit regressions cover forbidden roles/no session,
+historical snapshots and paging, filtered search/site, delayed reads
+on logout, forged detail payloads and malformed pages. A negative-path
+structural guard runs independently with immediate exit checks in BOTH
+Windows Core and Windows Release. The nine full Release shards,
+pre-package WPF/WebView2 E2E, all four real x86/x64 package acceptances
+and independent SHA-256 audit remain mandatory before merging.
+
+**Not included:** an action to return separated individuals to active
+service, which requires its own business-rule preview/commit review and
+test-first migration. Customer packages still use the existing DesktopHost
+WebView2 entrypoint. Native UI full route parity and clean-machine/DPI
+manual approval have not been certified.

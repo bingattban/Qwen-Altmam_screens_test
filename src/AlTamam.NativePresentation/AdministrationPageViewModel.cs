@@ -50,6 +50,12 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         Movement = new NativePersonnelTransferViewModel();
         Archive = new NativeMovementArchiveViewModel();
         Separation = new NativePersonnelSeparationViewModel();
+        SeparationArchive = new NativeSeparationArchiveViewModel();
+        OpenSeparationArchiveCommand = new NativeCommand(
+            _ => _ = SeparationArchive.OpenAsync(_sites),
+            _ => CanRead && _connected && !_loading && !_profileOpen &&
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
+                 !Separation.IsOpen && !SeparationArchive.IsOpen);
         OpenSeparationCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow row && CanOpenSeparation(row))
@@ -59,7 +65,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenMovementArchiveCommand = new NativeCommand(
             _ => _ = Archive.OpenAsync(),
             _ => CanRead && _connected && !_loading && !_profileOpen &&
-                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen);
         OpenInternalTransferCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow person && CanOpenMovement(person))
@@ -75,7 +81,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenCreateCommand = new NativeCommand(
             _ => { CloseProfile(); Mutation.OpenCreate(_sites); },
             _ => _connected && !_loading && CanRead && !_profileOpen &&
-                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen);
         OpenEditCommand = new NativeCommand(
             row => {
                 if (row is NativePersonnelDisplayRow person && CanOpenEdit(person))
@@ -94,7 +100,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public override string StatusMessage => _loading
         ? "جار قراءة سجل الأفراد المعتمد من قاعدة البيانات المشفرة..."
         : _connected
-            ? "سجل الأفراد من SQLCipher. الإضافة والتعديل والنقل والفصل تتطلب معاينة وتأكيداً؛ الاستعادة في المراحل التالية."
+            ? "سجل الأفراد من SQLCipher. الإضافة والتعديل والنقل والفصل تتطلب معاينة وتأكيداً؛ أرشيف الفصل متاح للقراءة، والاستعادة في المراحل التالية."
             : "إدارة الأفراد لم تتصل بالبيانات بعد أو لا تتوفر صلاحية الإدارة.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
@@ -126,6 +132,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public NativePersonnelTransferViewModel Movement { get; }
     public NativeMovementArchiveViewModel Archive { get; }
     public NativePersonnelSeparationViewModel Separation { get; }
+    public NativeSeparationArchiveViewModel SeparationArchive { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -140,6 +147,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand OpenExternalTransferCommand { get; }
     public ICommand OpenMovementArchiveCommand { get; }
     public ICommand OpenSeparationCommand { get; }
+    public ICommand OpenSeparationArchiveCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -173,6 +181,9 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                     _rows.Any(current => ReferenceEquals(current, row)));
             Separation.CommittedAndClosed += () => _ = RefreshAsync();
         }
+        if (reader is INativeSeparationArchiveBackend separationArchiveBackend)
+            SeparationArchive.AttachBackend(separationArchiveBackend,
+                () => _liveActor?.Invoke());
         UpdateCommands();
     }
 
@@ -201,6 +212,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         Movement.ForceCancel();
         Archive.Close();
         Separation.ForceCancel();
+        SeparationArchive.Close();
         _connected = false;
         _loading = false;
         _error = error;
@@ -369,7 +381,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         row.Revision >= 1 && _status == 1 && _site.Length > 0 &&
         _sites.Count(site => site.SiteId == _site && site.Name == row.SiteName) == 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         _reader is INativePersonnelSeparationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -382,7 +394,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _sites.Count(site => site.SiteId == _site &&
                              site.Name == row.SiteName) == 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         _reader is INativePersonnelMovementBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -391,7 +403,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     private bool CanOpenEdit(NativePersonnelDisplayRow? row) =>
         row is not null && row.Active && row.Revision >= 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         _reader is INativePersonnelMutationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -399,7 +411,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
 
     private bool CanOpenProfile(NativePersonnelDisplayRow? row) =>
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         _reader is not null && row is not null &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -529,7 +541,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             PreviousPageCommand, NextPageCommand, OpenProfileCommand,
             OpenCreateCommand, OpenEditCommand,
             OpenInternalTransferCommand, OpenExternalTransferCommand,
-            OpenMovementArchiveCommand, OpenSeparationCommand
+            OpenMovementArchiveCommand, OpenSeparationCommand, OpenSeparationArchiveCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
