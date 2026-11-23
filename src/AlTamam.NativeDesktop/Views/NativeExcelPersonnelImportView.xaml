@@ -37,6 +37,12 @@
                             <StackPanel>
                                 <TextBlock Text="ملف XLSX محلي حتى 160 كيلوبايت. يعرض الإصدار التجريبي جميع الإضافات الجديدة حتى 100 فرد في الدفعة. أي رقم (ع) موجود مسبقا أو مكرر في الملف يُرفض ولا يُدمج أو يُستبدل، ويُحفظ سبب الرفض. لا تعديل لأسماء أو أعمدة أو تحضير أفراد موجودين."
                                            Foreground="#334155" TextWrapping="Wrap"/>
+                                <CheckBox IsChecked="{Binding ImportAllSheets, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanSelect}" Margin="0,9,0,5"
+                                          AutomationProperties.Name="استيراد جميع أوراق Excel مع إلغاء الاعتمادات السابقة">
+                                    <TextBlock Text="استيراد جميع أوراق العمل (افتراضيا: الورقة الأولى فقط). سيعيد تغيير هذا الخيار المعاينة من الصفر ويلغي كل الموافقات. يجب عرض جميع الأفراد الجدد قبل اعتماد أي دفعة، بحد أقصى 100 فرد جديد عبر جميع الأوراق."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
                                 <Button Content="اختيار كشف Excel ومعاينته دون حفظ"
                                         IsEnabled="{Binding CanSelect}"
                                         Click="PickWorkbook_Click"
