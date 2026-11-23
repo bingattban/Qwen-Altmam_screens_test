@@ -15,7 +15,8 @@ public sealed class NativeMovementArchivePhase8Tests
             "الموقع السابق", "الموقع اللاحق", "2026-11-22", "2026-11-22T09:00:00Z");
 
     private static NativeMovementArchivePage Page(NativeMovementArchiveFilter filter,
-        bool hasNext = false) => new(filter, hasNext ? 51 : 1, hasNext, [Row()]);
+        bool hasNext = false) => new(filter, hasNext ? (long)filter.Page * filter.PageSize + 1
+            : (long)(filter.Page - 1) * filter.PageSize + 1, hasNext, [Row()]);
 
     private static NativeMovementArchiveDetail Detail() =>
         new("MOV-001", "PRN-1", "الاسم التاريخي", "012345", "داخلي",
