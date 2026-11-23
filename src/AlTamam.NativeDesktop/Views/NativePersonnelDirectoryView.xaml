@@ -88,6 +88,10 @@
                         Command="{Binding OpenSeparationCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فصل الفرد المحدد بعد مراجعة السبب والتأكيد"/>
+                <Button Content="أرشيف الفصل" Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding OpenSeparationArchiveCommand}"
+                        AutomationProperties.Name="عرض سجلات الفصل التاريخية للقراءة فقط"/>
                 <Button Content="أرشيف التنقلات" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenMovementArchiveCommand}"
@@ -198,7 +202,7 @@
                             </ItemsControl>
                             <TextBlock Margin="0,12,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل والاستعادة والتنقلات الجماعية ستُنقل لاحقا."/>
+                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ الاستعادة والتنقلات الجماعية ستُنقل لاحقا."/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -216,5 +220,8 @@
         <views:NativePersonnelSeparationView Grid.RowSpan="5"
                                              DataContext="{Binding Separation}"
                                              Panel.ZIndex="160"/>
+        <views:NativeSeparationArchiveView Grid.RowSpan="5"
+                                           DataContext="{Binding SeparationArchive}"
+                                           Panel.ZIndex="170"/>
     </Grid>
 </UserControl>
