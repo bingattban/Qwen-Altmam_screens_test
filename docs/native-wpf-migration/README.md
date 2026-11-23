@@ -377,3 +377,61 @@ and status CRUD, roster Excel import/export, users, reports, backups
 and settings, as well as full 69-route parity and real Windows clean
 machine keyboard/DPI approval. Customer binaries remain the original
 DesktopHost/WebView2 until parity is verified.
+
+ 
+## Phase 8 — slice 2: native personnel create and identity correction
+
+The WPF administration people list now has two authorized actions:
+**إضافة فرد** (new permanent PersonId) and **تعديل اسم أو رقم الفرد المحدد**.
+Both use a separate RTL preview/confirmation dialog. No WPF SQLite
+writer, direct SQL, replacement identity store or destructive edit
+path was introduced. Only the existing canonical audited services
+`ArchivedReturnService.PreviewAsync`,
+`PersonRosterService.PreviewPersonIdentityUpdateAsync`,
+`CreatePersonAsync` and `UpdatePersonIdentityAsync` are used.
+General/Ordinary Administration role and the exact live SQLCipher
+actor/nonce must pass before AND after every service operation.
+
+**Create:** The original archived-identity preview checks active-number
+uniqueness and all name/number collisions with transferred, separated
+and force-archived people; an existing active site is required.
+A missing/unspecified site is a distinct explicit choice.
+If even one archived identity candidate exists, native confirmation
+is blocked; the existing legacy identity-resolution/return route must
+be used, without pretending a new PersonId represents the same human.
+The canonical create transaction re-checks collisions and assigns a
+fresh PersonId with audit and immutable initial identity snapshot.
+
+**Edit:** The UI binds exactly the current canonical page row's
+PersonId/RowVersion, not the visible name as a key. The original
+preview checks identity number collisions and returns the old/new
+snapshots, a token and the effective local date. The separate human
+confirmation includes the reason, frozen row revision, date, and
+one immutable operationId. SQLCipher's original atomic edit preserves
+the previous identity-history interval, the original attendance and
+audited change reason. Stale revisions or changed page/role/nonce
+invalidate the approval.
+
+No save happens just by typing or previewing. Any input change
+revokes a previous preview. The UI sends the write only once and
+does NOT retry after an ambiguous error, logout or cancellation,
+because the canonical transaction may already have committed.
+The operator should inspect the roster and audit log before trying
+again; a different authenticated session is required to clear the
+ambiguous-write lock. Closing a successful receipt refreshes the
+canonical directory.
+
+Six test-first xUnit cases cover no-session/supervisor denial, no-write
+previews, archived collision fail-closed, stable PersonId/revision/
+reason confirmation, cancellation/nonces and no automatic retries.
+A separate static negative-path contract is executed in BOTH Core and
+Release before compiling, and the original test-first four-package
+x86/x64 Portable/Installer gate remains unchanged.
+
+**Limitations:** This slice intentionally does not migrate choosing
+same/different archived identity, dismissed-number reuse, restoring
+persons, external/internal transfers, separation, status/site CRUD,
+Excel personnel import, full reports or native configuration.
+The production packages continue to use DesktopHost/WebView2 until
+all 69 routes, keyboard/DPI testing and clean-machine acceptance
+are completed.
