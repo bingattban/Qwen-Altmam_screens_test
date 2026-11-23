@@ -19,13 +19,96 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
+      INativeImportOutcomeHistoryBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8 slice 15: exact owner-scoped, read-only outcome service.
+    // No native SQL, export, or import-plan replay. The original service
+    // filters CreatedByUserId=$actor AND Status='COMMITTED'.
+    public async Task<IReadOnlyList<NativeImportBatchRow>> ReadRecentAsync(
+        NativeIdentity actor, CancellationToken ct = default)
+    {
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new ExcelImportOutcomeService(database)
+            .QueryAsync(null, actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "ExcelImportOutcomeList(native)");
+        JsonArray batches = RequiredArray(data, "batches");
+        if (batches.Count > 30)
+            throw new InvalidDataException("Original import history exceeded 30 rows.");
+        NativeImportBatchRow[] items = batches.Select(node =>
+            ParseImportBatch(RequireObject(node))).ToArray();
+        if (items.Select(x => x.ImportBatchId)
+                .Distinct(StringComparer.Ordinal).Count() != items.Length)
+            throw new InvalidDataException("Duplicate import batch identities.");
+        return items;
+    }
+
+    public async Task<NativeImportBatchDetail> ReadBatchAsync(
+        NativeIdentity actor, string batchId, CancellationToken ct = default)
+    {
+        if (batchId is not { Length: >= 5 and <= 128 } ||
+            !batchId.StartsWith("IMP-", StringComparison.Ordinal) ||
+            batchId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid import batch key.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new ExcelImportOutcomeService(database)
+            .QueryAsync(new JsonObject { ["importBatchId"] = batchId },
+                actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "ExcelImportOutcomeDetails(native)");
+        NativeImportBatchRow batch = ParseImportBatch(
+            RequireObject(data["batch"]));
+        JsonArray rejected = RequiredArray(data, "issues");
+        if (batch.ImportBatchId != batchId || rejected.Count > 500 ||
+            rejected.Count != batch.RejectedRows)
+            throw new InvalidDataException("Incomplete or mismatched original import batch.");
+        var issues = rejected.Select(node =>
+        {
+            JsonObject row = RequireObject(node);
+            var issue = new NativeImportBatchIssue(
+                checked((int)RequiredNumber(row, "row")),
+                RequiredText(row, "serviceNumberA"),
+                RequiredText(row, "name"),
+                RequiredText(row, "siteName"),
+                RequiredText(row, "reason"));
+            if (issue.Row < 1 || issue.Reason.Length is < 1 or > 500 ||
+                issue.Name.Length > 180 || issue.SiteName.Length > 100 ||
+                issue.ServiceNumberA.Length > 70)
+                throw new InvalidDataException("Malformed saved import issue.");
+            return issue;
+        }).ToArray();
+        return new NativeImportBatchDetail(batch, issues);
+    }
+
+    private static NativeImportBatchRow ParseImportBatch(JsonObject data)
+    {
+        var row = new NativeImportBatchRow(
+            RequiredText(data, "importBatchId"),
+            RequiredText(data, "fileName"),
+            checked((int)RequiredNumber(data, "totalRows")),
+            checked((int)RequiredNumber(data, "acceptedRows")),
+            checked((int)RequiredNumber(data, "rejectedRows")),
+            RequiredText(data, "status"),
+            RequiredText(data, "committedAtUtc"));
+        if (row.ImportBatchId is not { Length: >= 5 and <= 128 } ||
+            !row.ImportBatchId.StartsWith("IMP-", StringComparison.Ordinal) ||
+            row.FileName.Length is < 1 or > 180 ||
+            row.Status != "COMMITTED" ||
+            row.TotalRows is < 1 or > 500 ||
+            row.AcceptedRows is < 0 or > 500 ||
+            row.RejectedRows is < 0 or > 500 ||
+            row.AcceptedRows + row.RejectedRows != row.TotalRows ||
+            !DateTimeOffset.TryParse(row.CommittedAtUtc, out _))
+            throw new InvalidDataException("Malformed original import batch.");
+        return row;
+    }
 
     // Phase 8: canonical XLSX preview and additive-only, one-use import commit.
     // File bytes stay local and bounded; no workbook path ever reaches SQLCipher.
