@@ -26,6 +26,12 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     private string _dateFromDraft = "";
     private string _dateToDraft = "";
     private int _movementTypeDraft;
+    private string _siteIdDraft = "";
+    private string _statusIdDraft = "";
+    private IReadOnlyList<NativeReportFilterOption> _siteFilterOptions =
+        [new("", "جميع المواقع")];
+    private IReadOnlyList<NativeReportFilterOption> _statusFilterOptions =
+        [new("", "جميع الحالات")];
 
     public NativePersonnelReportViewModel()
     {
@@ -48,6 +54,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             _ => _ = ApplyMovementTypeFilterAsync(), _ => CanApplyMovementTypeFilter);
         ClearMovementTypeFilterCommand = new NativeCommand(
             _ => _ = ClearMovementTypeFilterAsync(), _ => CanApplyMovementTypeFilter);
+        ApplySiteStatusFiltersCommand = new NativeCommand(
+            _ => _ = ApplySiteStatusFiltersAsync(), _ => CanApplySiteStatusFilters);
+        ClearSiteStatusFiltersCommand = new NativeCommand(
+            _ => _ = ClearSiteStatusFiltersAsync(), _ => CanApplySiteStatusFilters);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -81,6 +91,36 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         : $"الفترة المطبقة: {(_report.DateFrom.Length == 0 ? "من البداية" : _report.DateFrom)} — {(_report.DateTo.Length == 0 ? "حتى النهاية" : _report.DateTo)}";
     public bool CanApplyDateFilters => CanRead && _pages is not null;
     public bool CanApplyMovementTypeFilter => CanRead && _pages is not null;
+    public bool CanApplySiteStatusFilters => CanRead && _pages is not null;
+
+    // Choices come only from original full-lifetime PersonId histories.
+    // "All" is a UI sentinel, never a historical database ID.
+    public IReadOnlyList<NativeReportFilterOption> SiteFilterOptions => _siteFilterOptions;
+    public IReadOnlyList<NativeReportFilterOption> StatusFilterOptions => _statusFilterOptions;
+    public string SiteIdDraft
+    {
+        get => _siteIdDraft;
+        set
+        {
+            if (_siteIdDraft == value) return;
+            _siteIdDraft = value ?? "";
+            Changed();
+        }
+    }
+    public string StatusIdDraft
+    {
+        get => _statusIdDraft;
+        set
+        {
+            if (_statusIdDraft == value) return;
+            _statusIdDraft = value ?? "";
+            Changed();
+        }
+    }
+    public string AppliedSiteStatusLabel => _report is null
+        ? "لا توجد نتائج معتمدة لموقـع أو حالة حاليا."
+        : "الموقع: " + _siteFilterOptions.FirstOrDefault(x => x.Id == _report.SiteId)?.Title +
+          " — الحالة: " + _statusFilterOptions.FirstOrDefault(x => x.Id == _report.StatusId)?.Title;
 
     public IReadOnlyList<NativeReportMovementTypeOption> MovementTypeOptions { get; } =
     [
@@ -153,6 +193,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public ICommand ClearDateFiltersCommand { get; }
     public ICommand ApplyMovementTypeFilterCommand { get; }
     public ICommand ClearMovementTypeFilterCommand { get; }
+    public ICommand ApplySiteStatusFiltersCommand { get; }
+    public ICommand ClearSiteStatusFiltersCommand { get; }
 
     private bool CanRead => _open && _backend is not null &&
         _actor is { } actor && _liveActor?.Invoke() == actor &&
@@ -210,6 +252,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanRead) { Close(); return; }
             Validate(result, request);
+            _siteFilterOptions = [new("", "جميع المواقع"), ..result.AvailableSites];
+            _statusFilterOptions = [new("", "جميع الحالات"), ..result.AvailableStatuses];
             _report = result;
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
@@ -304,6 +348,43 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         return ApplyMovementTypeFilterAsync(ct);
     }
 
+    public async Task ApplySiteStatusFiltersAsync(CancellationToken ct = default)
+    {
+        if (!CanRead || _pages is not { } pages)
+        {
+            Close();
+            return;
+        }
+        string siteId = _siteIdDraft, statusId = _statusIdDraft;
+        // Validate against the immutable IDs supplied by the original service,
+        // not against mutable site/status display labels or visible 100 rows.
+        if (siteId.Length > 128 || statusId.Length > 128 ||
+            siteId.Any(char.IsControl) || statusId.Any(char.IsControl) ||
+            !_siteFilterOptions.Any(x => x.Id == siteId) ||
+            !_statusFilterOptions.Any(x => x.Id == statusId))
+        {
+            _error = "الموقع أو الحالة غير صالحين للسجل التاريخي لهذا الفرد.";
+            Changed();
+            return;
+        }
+        // Site limits attendance, movements and revisions; status limits
+        // attendance and revisions only. Other lifetime streams remain intact.
+        _pages = pages with
+        {
+            SiteId = siteId, StatusId = statusId,
+            AttendancePage = 1, MovementPage = 1, RevisionPage = 1
+        };
+        await LoadAsync(ct);
+    }
+
+    public Task ClearSiteStatusFiltersAsync(CancellationToken ct = default)
+    {
+        _siteIdDraft = "";
+        _statusIdDraft = "";
+        Changed();
+        return ApplySiteStatusFiltersAsync(ct);
+    }
+
     public Task NextAttendanceAsync(CancellationToken ct = default) =>
         ChangePageAsync(CanNextAttendance, "attendance", +1, ct);
     public Task PreviousAttendanceAsync(CancellationToken ct = default) =>
@@ -356,6 +437,10 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         _dateFromDraft = "";
         _dateToDraft = "";
         _movementTypeDraft = 0;
+        _siteIdDraft = "";
+        _statusIdDraft = "";
+        _siteFilterOptions = [new("", "جميع المواقع")];
+        _statusFilterOptions = [new("", "جميع الحالات")];
         _open = false;
         _busy = false;
         _report = null;
@@ -380,6 +465,24 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             report.DateTo != requested.DateTo ||
             report.MovementType != requested.MovementType ||
             report.MovementType is < 0 or > 4 ||
+            report.SiteId != requested.SiteId ||
+            report.StatusId != requested.StatusId ||
+            report.AvailableSites is null || report.AvailableStatuses is null ||
+            report.AvailableSites.Count > 500 || report.AvailableStatuses.Count > 500 ||
+            report.AvailableSites.Any(x => x is null || x.Id is not { Length: >= 1 and <= 128 } ||
+                x.Id.Any(char.IsControl) || x.Title is not { Length: >= 1 and <= 240 } ||
+                x.Title.Any(char.IsControl)) ||
+            report.AvailableStatuses.Any(x => x is null || x.Id is not { Length: >= 1 and <= 128 } ||
+                x.Id.Any(char.IsControl) || x.Title is not { Length: >= 1 and <= 240 } ||
+                x.Title.Any(char.IsControl)) ||
+            report.AvailableSites.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() !=
+                report.AvailableSites.Count ||
+            report.AvailableStatuses.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() !=
+                report.AvailableStatuses.Count ||
+            (requested.SiteId.Length > 0 &&
+                !report.AvailableSites.Any(x => x.Id == requested.SiteId)) ||
+            (requested.StatusId.Length > 0 &&
+                !report.AvailableStatuses.Any(x => x.Id == requested.StatusId)) ||
             report.AttendanceTotal < 0 || report.MovementTotal < 0 || report.IdentityTotal < 0 ||
             report.SiteTotal < 0 || report.RevisionTotal < 0 ||
             report.AuditTotal < 0 ||
@@ -454,6 +557,9 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             nameof(AppliedDateRangeLabel), nameof(CanApplyDateFilters),
             nameof(MovementTypeOptions), nameof(MovementTypeDraft),
             nameof(AppliedMovementTypeLabel), nameof(CanApplyMovementTypeFilter),
+            nameof(SiteFilterOptions), nameof(StatusFilterOptions),
+            nameof(SiteIdDraft), nameof(StatusIdDraft),
+            nameof(AppliedSiteStatusLabel), nameof(CanApplySiteStatusFilters),
             nameof(AttendancePageLabel), nameof(MovementsPageLabel),
             nameof(IdentitiesPageLabel), nameof(SitesPageLabel),
             nameof(RevisionsPageLabel), nameof(AuditPageLabel),
@@ -474,7 +580,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             NextRevisionsCommand, PreviousRevisionsCommand,
             NextAuditCommand, PreviousAuditCommand,
             ApplyDateFiltersCommand, ClearDateFiltersCommand,
-            ApplyMovementTypeFilterCommand, ClearMovementTypeFilterCommand
+            ApplyMovementTypeFilterCommand, ClearMovementTypeFilterCommand,
+            ApplySiteStatusFiltersCommand, ClearSiteStatusFiltersCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }

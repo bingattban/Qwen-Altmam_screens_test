@@ -48,6 +48,10 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.RevisionPage is < 1 or > 100000 ||
             pages.AuditPage is < 1 or > 100000 ||
             pages.MovementType is < 0 or > 4 ||
+            pages.SiteId is null || pages.StatusId is null ||
+            pages.SiteId.Length > 128 || pages.StatusId.Length > 128 ||
+            pages.SiteId.Any(char.IsControl) ||
+            pages.StatusId.Any(char.IsControl) ||
             pages.DateFrom is null || pages.DateTo is null ||
             !IsCanonicalDate(pages.DateFrom) || !IsCanonicalDate(pages.DateTo) ||
             (pages.DateFrom.Length > 0 && pages.DateTo.Length > 0 &&
@@ -67,7 +71,9 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["auditPage"] = pages.AuditPage,
                 ["dateFrom"] = pages.DateFrom,
                 ["dateTo"] = pages.DateTo,
-                ["movementType"] = pages.MovementType
+                ["movementType"] = pages.MovementType,
+                ["siteId"] = pages.SiteId,
+                ["statusId"] = pages.StatusId
             }, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
@@ -84,8 +90,37 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredNumber(data, "auditPage") != pages.AuditPage ||
             RequiredText(data, "dateFrom") != pages.DateFrom ||
             RequiredText(data, "dateTo") != pages.DateTo ||
-            RequiredNumber(data, "movementType") != pages.MovementType)
+            RequiredNumber(data, "movementType") != pages.MovementType ||
+            RequiredText(data, "siteId") != pages.SiteId ||
+            RequiredText(data, "statusId") != pages.StatusId)
             throw new InvalidDataException("Original individual report identity, filter or page mismatch.");
+
+        // Selectors originate from the SAME original encrypted individual
+        // history response. No native SQL, and never infer complete lists
+        // from the current 100-row attendance or assignment page.
+        static IReadOnlyList<NativeReportFilterOption> ParseChoices(
+            JsonArray source, string scope)
+        {
+            if (source.Count > 500)
+                throw new InvalidDataException("Unbounded canonical " + scope + " history selectors.");
+            var choices = source.Select(node =>
+            {
+                JsonObject item = RequireObject(node);
+                string id = RequiredText(item, "id"), title = RequiredText(item, "title");
+                if (id.Length is < 1 or > 128 || id.Any(char.IsControl) ||
+                    title.Length is < 1 or > 240 || title.Any(char.IsControl))
+                    throw new InvalidDataException("Invalid canonical " + scope + " history selector.");
+                return new NativeReportFilterOption(id, title);
+            }).ToArray();
+            if (choices.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != choices.Length)
+                throw new InvalidDataException("Duplicate canonical " + scope + " ID.");
+            return choices;
+        }
+        var filterSites = ParseChoices(RequiredArray(data, "filterSites"), "site");
+        var filterStatuses = ParseChoices(RequiredArray(data, "filterStatuses"), "status");
+        if ((pages.SiteId.Length > 0 && !filterSites.Any(x => x.Id == pages.SiteId)) ||
+            (pages.StatusId.Length > 0 && !filterStatuses.Any(x => x.Id == pages.StatusId)))
+            throw new InvalidDataException("Requested historical filter is not owned by this PersonId.");
 
         var totals = RequiredArray(data, "statusTotals").Select(node =>
         {
@@ -205,7 +240,11 @@ public sealed class NativeSqlCipherDashboardReader(
             Audit = audits,
             DateFrom = RequiredText(data, "dateFrom"),
             DateTo = RequiredText(data, "dateTo"),
-            MovementType = checked((int)RequiredNumber(data, "movementType"))
+            MovementType = checked((int)RequiredNumber(data, "movementType")),
+            SiteId = RequiredText(data, "siteId"),
+            StatusId = RequiredText(data, "statusId"),
+            AvailableSites = filterSites,
+            AvailableStatuses = filterStatuses
         };
         if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
             report.Movements.Count > 100 || report.Identities.Count > 100 ||

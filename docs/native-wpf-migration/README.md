@@ -1587,3 +1587,62 @@ Windows Release, Release nine xUnit test shards, actual Windows
 SQLCipher/WPF/WebView2 pre-package E2E, all x86/x64 Portable and
 Installer acceptance checks plus the independent four-package
 SHA-256 audit. Manual clean-machine acceptance remains independent.
+
+
+## Phase 9 — slice 6: immutable person site and attendance-status filters
+
+This extends merged slices #41–#43 using the SAME read-only original
+`screen_025` historical report and canonical SQLCipher
+`PersonnelReportService.ReportAsync`. No schema migration, second
+report writer, new route, permissions change, or production host switch.
+
+The native report now has dropdowns for **historic site** and
+**historic attendance status**, as well as Apply/Clear. The choices are
+issued by the original source, exclusively for immutable `PersonId`,
+and contain stable `SiteId` / `StatusId` keys with a remembered
+display-name snapshot. No names are used as identity. The source looks
+at the FULL lifetime of original attendance, assignments, movement
+and attendance-correction evidence, independently of date/site/status
+filters and 100-row pagination. Site choices also include locations
+present only in movement source/destination records; status choices
+include before/after correction snapshots. This avoids losing a
+legitimate archived choice when filtering to a period with zero
+matching attendance.
+
+Each selector is bounded to at most 500 distinct IDs, and the canonical
+service rejects requests that would require truncation instead of
+silently concealing historic options. The native adapter requires
+all original arrays and their PersonId scope, validates unique
+nonempty IDs and bounded historical labels, matches the original
+source echoes of both requested filters, and re-verifies current
+manager/admin authorization before and after the canonical read.
+The VM additionally checks that the requested IDs belong to the
+supplied person-scoped lists, prevents stale/forged replies and resets
+attendance, movement and correction pagers on filter changes.
+
+The **site** predicate applies to historical attendance, movements
+and attendance revisions. The **status** predicate applies to
+attendance and attendance revisions, but **not** to movements.
+Source status/monthly totals naturally follow the attendance filters.
+Identity history, site membership history and the audit trail remain
+unaltered by the site/status selectors, in accordance with original
+service semantics. Date and movement-type filters remain active when
+site/status filters are applied or cleared.
+
+C# xUnit tests were committed before implementation for accepted
+canonical IDs, unknown/poisoned IDs, clearing to a real unfiltered
+service read, preserving dates and movement type, independent
+pagination, stale in-flight replies, forged response echo, duplicate
+source choices, live-role denial and original roster selection.
+A separate fail-closed source-contract guard runs in **both** Windows
+Core and Windows Release, before any customer packaging.
+
+**Still remaining:** full group report WPF flows, individual/group
+XLSX exports, route-by-route native functional acceptance and actual
+clean Windows machine (100/125/150% DPI, keyboard, RTL) acceptance.
+The four current customer packages remain the complete original
+DesktopHost/WebView2 production app; native WPF remains a pilot until
+all 69-route parity and independent manual acceptance are proved.
+The branch merges only after both current-head Windows pipelines,
+nine distinct Release test shards, real E2E, x86/x64 Portable+Installer
+acceptance and independent four-package SHA-256 audit pass.

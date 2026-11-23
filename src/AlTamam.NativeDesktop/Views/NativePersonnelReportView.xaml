@@ -40,7 +40,7 @@
                                TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير ومرشحات الموقع والحالة في مراحل لاحقة."
+                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير إلى Excel في مراحل لاحقة."
                                TextWrapping="Wrap" Foreground="#475569"/>
                     <TextBlock Text="تصفية الفترة الزمنية (شاملة يوم البداية والنهاية). اترك الحقل فارغا لعرض السجل دون حد."
                                TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,3"/>
@@ -104,6 +104,34 @@
                                 <TextBlock Text="{Binding Report.FirstRecordedDate}"/>
                             </WrapPanel>
                         </Border>
+                        <TextBlock Text="مرشحات الموقع والحالة التاريخيين (المعرفات ثابتة حتى عند تغيير الأسماء). تطبق على السجلات الأصلية ولا تنشئ سجلات جديدة."
+                                   TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,3"/>
+                        <WrapPanel Orientation="Horizontal" Margin="0,2,0,4"
+                                   AutomationProperties.Name="مرشحات الموقع والحالة التاريخية">
+                            <TextBlock Text="الموقع" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                            <ComboBox Width="190" MinHeight="34"
+                                      ItemsSource="{Binding SiteFilterOptions}"
+                                      DisplayMemberPath="Title" SelectedValuePath="Id"
+                                      SelectedValue="{Binding SiteIdDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="الموقع التاريخي للبحث بمعرف ثابت"/>
+                            <TextBlock Text="الحالة" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <ComboBox Width="175" MinHeight="34"
+                                      ItemsSource="{Binding StatusFilterOptions}"
+                                      DisplayMemberPath="Title" SelectedValuePath="Id"
+                                      SelectedValue="{Binding StatusIdDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="حالة التحضير التاريخية بمعرف ثابت"/>
+                            <Button Content="تطبيق الموقع والحالة"
+                                    Command="{Binding ApplySiteStatusFiltersCommand}"
+                                    Style="{StaticResource ReportAction}"/>
+                            <Button Content="مسح الموقع والحالة"
+                                    Command="{Binding ClearSiteStatusFiltersCommand}"
+                                    Style="{StaticResource ReportAction}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding AppliedSiteStatusLabel}"
+                                   Foreground="#0F2942" FontWeight="SemiBold" Margin="0,0,0,4"
+                                   AutomationProperties.Name="الموقع والحالة المطبقان على السجلات"/>
+                        <TextBlock Text="الموقع يقيّد التحضير والحركات والتصحيحات؛ الحالة تقيّد التحضير والتصحيحات فقط. أما سجل الهوية والانتساب للمواقع وسجل التدقيق فيظل كاملا وفق الخدمة الأصلية."
+                                   TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
                         <TextBlock Text="إجماليات حالات التحضير التاريخية" Style="{StaticResource ReportSection}"/>
                         <DataGrid ItemsSource="{Binding Report.StatusTotals}" AutoGenerateColumns="False"
                                   Height="130" IsReadOnly="True" CanUserAddRows="False"

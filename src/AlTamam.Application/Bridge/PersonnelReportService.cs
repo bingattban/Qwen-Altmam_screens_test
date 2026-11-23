@@ -285,6 +285,89 @@ public sealed class PersonnelReportService
                 ["active"]=r.GetInt32(5)==1
             };
         }
+        // Filter selectors must be the individual's FULL immutable-key lifetime
+        // evidence, independent of the requested dates/site/status/pagination.
+        // Historical names are labels only; SQL continues to match stable IDs.
+        // Include movements and assignments: a person can have a site history
+        // without a committed attendance record for that site.
+        var filterSites = new JsonArray();
+        using(var choices=conn.CreateCommand())
+        {
+            choices.CommandText="""
+                SELECT SiteId, MAX(SiteName) FROM (
+                    SELECT SiteIdAtEffectiveDate AS SiteId,
+                           SiteNameSnapshot AS SiteName
+                    FROM AttendanceRecords WHERE PersonId=$id
+                    UNION ALL
+                    SELECT a.SiteId,
+                           COALESCE((
+                             SELECT h.VisibleNameSnapshot FROM SiteNameHistory h
+                             WHERE h.SiteId=a.SiteId
+                               AND h.ValidFromLocalDate<=a.ValidFromLocalDate
+                               AND (h.ValidToLocalDate IS NULL
+                                    OR h.ValidToLocalDate>a.ValidFromLocalDate)
+                             ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                             'غير موثق تاريخيا')
+                    FROM PersonAssignments a WHERE a.PersonId=$id
+                    UNION ALL
+                    SELECT SourceSiteId,SourceSiteNameSnapshot
+                    FROM PersonnelMovements WHERE PersonId=$id
+                    UNION ALL
+                    SELECT DestinationSiteId,DestinationSiteNameSnapshot
+                    FROM PersonnelMovements WHERE PersonId=$id
+                ) WHERE SiteId IS NOT NULL AND SiteId<>''
+                GROUP BY SiteId ORDER BY SiteId LIMIT 501;
+                """;
+            choices.Parameters.AddWithValue("$id",personId);
+            using var reader=await choices.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                if(filterSites.Count==500)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                        "تعذر تقديم جميع المواقع التاريخية دون اقتطاع؛ راجع عدد المواقع.");
+                string label=reader.IsDBNull(1)?"غير موثق تاريخيا":reader.GetString(1);
+                filterSites.Add(new JsonObject
+                {
+                    ["id"]=reader.GetString(0),
+                    ["title"]=string.IsNullOrWhiteSpace(label)
+                        ?"غير موثق تاريخيا":label
+                });
+            }
+        }
+        // A status may only exist in a correction's BEFORE snapshot. Keep
+        // such archived statuses selectable even if not in current attendance.
+        var filterStatuses = new JsonArray();
+        using(var choices=conn.CreateCommand())
+        {
+            choices.CommandText="""
+                SELECT StatusId,MAX(StatusName) FROM (
+                    SELECT StatusId,StatusNameSnapshot AS StatusName
+                    FROM AttendanceRecords WHERE PersonId=$id
+                    UNION ALL
+                    SELECT BeforeStatusId,BeforeStatusNameSnapshot
+                    FROM AttendanceRevisions WHERE PersonId=$id
+                    UNION ALL
+                    SELECT AfterStatusId,AfterStatusNameSnapshot
+                    FROM AttendanceRevisions WHERE PersonId=$id
+                ) WHERE StatusId IS NOT NULL AND StatusId<>''
+                GROUP BY StatusId ORDER BY StatusId LIMIT 501;
+                """;
+            choices.Parameters.AddWithValue("$id",personId);
+            using var reader=await choices.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                if(filterStatuses.Count==500)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                        "تعذر تقديم جميع الحالات التاريخية دون اقتطاع؛ راجع عدد الحالات.");
+                string label=reader.IsDBNull(1)?"غير موثق تاريخيا":reader.GetString(1);
+                filterStatuses.Add(new JsonObject
+                {
+                    ["id"]=reader.GetString(0),
+                    ["title"]=string.IsNullOrWhiteSpace(label)
+                        ?"غير موثق تاريخيا":label
+                });
+            }
+        }
         // Today's display identity never retroactively changes saved events.
         using var status=conn.CreateCommand();
         status.CommandText="""
@@ -600,6 +683,7 @@ public sealed class PersonnelReportService
         {
             ["customColumns"]=customColumns,
             ["person"]=identity,["dateFrom"]=filters.From,["dateTo"]=filters.To,
+            ["filterSites"]=filterSites,["filterStatuses"]=filterStatuses,
             ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
             ["movementType"]=filters.MovementType,
             ["siteHistory"]=sites,["siteTotal"]=totalSites,

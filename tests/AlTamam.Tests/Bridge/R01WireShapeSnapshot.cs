@@ -29,6 +29,33 @@ internal static class R01WireShapeSnapshot
 
     private static string Describe(JsonElement value, string? field = null)
     {
+        // A source-scoped filter selector is a bounded list of immutable IDs
+        // and historical labels. Its cardinality (including empty arrays)
+        // varies with the selected person, but its exact item contract must
+        // remain strict across every individual-report legacy alias.
+        if ((field == "filterSites" || field == "filterStatuses") &&
+            value.ValueKind == JsonValueKind.Array)
+        {
+            Assert.InRange(value.GetArrayLength(), 0, 500);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var choice in value.EnumerateArray())
+            {
+                Assert.Equal(JsonValueKind.Object, choice.ValueKind);
+                Assert.Equal(2, choice.EnumerateObject().Count());
+                var idField = choice.GetProperty("id");
+                var titleField = choice.GetProperty("title");
+                Assert.Equal(JsonValueKind.String, idField.ValueKind);
+                Assert.Equal(JsonValueKind.String, titleField.ValueKind);
+                string id = idField.GetString()!;
+                string title = titleField.GetString()!;
+                Assert.InRange(id.Length, 1, 128);
+                Assert.InRange(title.Length, 1, 240);
+                Assert.True(!id.Any(char.IsControl), "Historical filter ID has control characters");
+                Assert.True(!title.Any(char.IsControl), "Historical filter title has control characters");
+                Assert.True(ids.Add(id), "Duplicate historical site/status filter ID");
+            }
+            return "array<canonicalFilterOption>";
+        }
         // Monthly days is an ISO-date-keyed map, not a set of fixed DTO fields.
         // Validate the key contract without pinning snapshots to a calendar day.
         if (field == "days" && value.ValueKind == JsonValueKind.Object)
