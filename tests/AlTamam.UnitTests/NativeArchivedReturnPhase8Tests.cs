@@ -80,6 +80,7 @@ public sealed class NativeArchivedReturnPhase8Tests
         vm.SelectedSiteId = "SITE-RETURN";
         await vm.PreviewAsync();
         Assert.Equal(2, vm.Preview!.Candidates.Count);
+        Assert.False(vm.HasNumberConflict);
         Assert.False(vm.CanConfirm);
         vm.IdentityConfirmed = true;
         Assert.True(vm.CanConfirm);
@@ -87,6 +88,24 @@ public sealed class NativeArchivedReturnPhase8Tests
         Assert.Null(vm.Preview);
         Assert.False(vm.CanConfirm);
         Assert.False(vm.IdentityConfirmed);
+        Assert.Equal(0, backend.Writes);
+    }
+
+    [Fact]
+    public async Task Duplicate_archived_number_must_be_resolved_before_any_return_commit()
+    {
+        var backend = new FakeBackend { DuplicateNumber = true };
+        var row = Archived();
+        var vm = Create(backend, () => Manager, r => ReferenceEquals(r, row));
+        vm.Open(row, Sites);
+        vm.SelectedSiteId = "SITE-RETURN";
+        await vm.PreviewAsync();
+        Assert.True(vm.HasNumberConflict);
+        Assert.Equal(2, vm.Preview!.Candidates.Count);
+        vm.IdentityConfirmed = true;
+        Assert.False(vm.CanConfirm);
+        Assert.NotEmpty(vm.Error);
+        await vm.ConfirmAsync();
         Assert.Equal(0, backend.Writes);
     }
 
@@ -176,7 +195,7 @@ public sealed class NativeArchivedReturnPhase8Tests
     private sealed class FakeBackend : INativeArchivedReturnBackend
     {
         public int Previews, Writes;
-        public bool OtherCandidate, Forge, LostReply;
+        public bool OtherCandidate, DuplicateNumber, Forge, LostReply;
         public Task<NativeArchivedReturnPreview>? Pending;
         public readonly List<NativeArchivedReturnDraft> Drafts = [];
         public readonly List<string> OperationIds = [];
@@ -189,9 +208,13 @@ public sealed class NativeArchivedReturnPhase8Tests
                 Forge ? draft.Revision + 1 : draft.Revision,
                 draft.OrganizationalStatus, "2026-11-20", "الموقع القديم",
                 "فصل", true, true);
-            IReadOnlyList<NativeArchivedReturnCandidate> candidates = OtherCandidate
-                ? [candidate, candidate with { PersonId = "OTHER", Revision = 1 }]
-                : [candidate];
+            IReadOnlyList<NativeArchivedReturnCandidate> candidates = DuplicateNumber
+                ? [candidate, candidate with { PersonId = "DUPLICATE-NUMBER", Revision = 1 }]
+                : OtherCandidate
+                    ? [candidate, candidate with {
+                        PersonId = "OTHER", Revision = 1,
+                        ServiceNumberA = "98765", NumberMatch = false }]
+                    : [candidate];
             return new NativeArchivedReturnPreview(
                 draft, DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM-dd"),
                 new string('a', 64), true, candidates);
