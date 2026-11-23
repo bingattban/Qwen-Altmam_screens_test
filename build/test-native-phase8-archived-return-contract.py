@@ -96,6 +96,7 @@ def verify(data):
         "ValidatePreview(result, draft)",
         "SelectedCandidate(preview, draft)",
         "IdentityConfirmed", "_identityConfirmed",
+        "HasNumberConflict", "!HasNumberConflict",
         "_attempted = true", "Guid.NewGuid().ToString(\"N\")",
         "CommitReturnAsync(", "_uncertainActor = actor",
         "receipt.PersonId != preview.Draft.PersonId",
@@ -135,14 +136,15 @@ def verify(data):
         "Only_current_archived_row_and_manager_can_start_return",
         "Exact_destination_and_current_identity_precede_nonwriting_preview",
         "Identity_confirmation_is_explicit_even_when_multiple_candidates_match",
+        "Duplicate_archived_number_must_be_resolved_before_any_return_commit",
         "Stale_candidate_revision_or_wrong_person_never_enables_confirm",
         "Logout_or_source_page_change_drops_late_preview",
         "Explicit_same_human_confirmation_commits_once_without_new_identity",
         "Lost_write_receipt_never_resends_and_blocks_same_session_retry"
     ):
         requires("tests", test)
-    if data["tests"].count("[Fact]") < 7:
-        problems.append("tests: seven C# regressions are required")
+    if data["tests"].count("[Fact]") < 8:
+        problems.append("tests: eight C# regressions are required")
 
     for key in ("core", "release"):
         lines = data[key].splitlines()
