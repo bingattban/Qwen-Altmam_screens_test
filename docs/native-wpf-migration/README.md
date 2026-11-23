@@ -665,9 +665,9 @@ write receipt does not auto-resend, and that same authenticated session
 cannot reopen the workflow; operators must first examine the roster,
 movement archive and operations audit.
 
-Seven C# xUnit test-first cases cover role/session denial; archived
+Eight C# xUnit test-first cases cover role/session denial; archived
 selection; explicit destination; nonmutating preview; multiple
-candidate disclosure and same-person checkbox; forged row revision;
+candidate disclosure and same-person checkbox; duplicate archived number refusal; forged row revision;
 stale responses; one successful write; and uncertain-response
 no-retry. A dedicated negative-path source/XAML contract with an
 immediately checked error status is added to BOTH Windows Core and
