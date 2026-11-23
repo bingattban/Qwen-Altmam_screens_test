@@ -12,7 +12,7 @@ WORKFLOWS = (
 )
 TEST_LINE = re.compile(r"^\s*node\s+build/(test-[\w-]+\.js)\s*$")
 SELF_LINE = re.compile(r"^\s*python\s+build/test-ci-exit-guards\.py\s*$")
-PY_CONTRACT_LINE = re.compile(r"^\s*python\s+build/(?:validate-ui-shell|test-ci-performance-contract|test-release-artifact-provenance|test-webview-selfcheck-contract|test-local-reminders-contract)\.py\s*$")
+PY_CONTRACT_LINE = re.compile(r"^\s*python\s+build/(?:validate-ui-shell|test-ci-performance-contract|test-release-artifact-provenance|test-webview-selfcheck-contract|test-local-reminders-contract|test-native-[\w-]+)\.py\s*$")
 EXIT_CHECK = re.compile(r"^\s*if\s*\(\$LASTEXITCODE\s+-ne\s+0\)\s*\{\s*throw\b.+\}\s*$")
 
 
@@ -69,6 +69,25 @@ def self_test() -> None:
         "the validator must accept individually guarded tests"
     )
     assert any("omitted" in s for s in validate(safe, {"test-a.js", "test-b.js", "test-c.js"}, "fixture"))
+    # Regression: a later successful native WPF contract may never mask
+    # a previous Phase 7/8 contract failure in either Windows workflow.
+    native_mask = [
+        "          python build/test-ci-exit-guards.py",
+        "          if ($LASTEXITCODE -ne 0) { throw 'self validator failed' }",
+        "          python build/test-native-phase7-monthly-roster-contract.py",
+        "          python build/test-native-phase8-personnel-directory-contract.py",
+        "          if ($LASTEXITCODE -ne 0) { throw 'last native contract failed' }",
+    ]
+    assert any("fixture-native:3:" in s for s in validate(native_mask, set(), "fixture-native")), (
+        "native contracts must reject masked earlier Python failures"
+    )
+    guarded_native = native_mask[:3] + [
+        "          if ($LASTEXITCODE -ne 0) { throw 'monthly contract failed' }",
+    ] + native_mask[3:]
+    assert not validate(guarded_native, set(), "fixture-native"), (
+        "individually guarded native contracts must be accepted"
+    )
+
 
 
 def main() -> None:
