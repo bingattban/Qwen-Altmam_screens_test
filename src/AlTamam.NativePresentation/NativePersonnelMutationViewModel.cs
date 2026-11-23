@@ -41,6 +41,8 @@ public sealed class NativePersonnelMutationViewModel : INotifyPropertyChanged
     public bool IsCreate => _create;
     public bool IsEdit => _open && !_create;
     public bool IsBusy => _busy;
+    public bool HasPreview => _preview is not null;
+    public bool HasReceipt => _receipt is not null;
     public bool HasUnverifiedCommit => _unverified;
     public bool CanConfirm => _open && !_busy && !_writeAttempted &&
         _preview is { RequiresIdentityResolution: false, CandidateCount: 0 } &&
@@ -372,7 +374,8 @@ public sealed class NativePersonnelMutationViewModel : INotifyPropertyChanged
     {
         Changed(nameof(IsOpen), nameof(IsCreate), nameof(IsEdit),
             nameof(IsBusy), nameof(CanEdit), nameof(CanPreview), nameof(CanConfirm),
-            nameof(HasUnverifiedCommit), nameof(Header), nameof(Error),
+            nameof(HasUnverifiedCommit), nameof(HasPreview), nameof(HasReceipt),
+            nameof(Header), nameof(Error),
             nameof(Preview), nameof(Receipt), nameof(ConfirmationNote),
             nameof(CompletionNote), nameof(SiteOptions),
             nameof(FormName), nameof(FormNumber),
