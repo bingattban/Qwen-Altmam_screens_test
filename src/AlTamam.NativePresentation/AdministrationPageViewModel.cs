@@ -48,6 +48,11 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         CloseProfileCommand = new NativeCommand(_ => CloseProfile(), _ => _profileOpen);
         Mutation = new NativePersonnelMutationViewModel();
         Movement = new NativePersonnelTransferViewModel();
+        Archive = new NativeMovementArchiveViewModel();
+        OpenMovementArchiveCommand = new NativeCommand(
+            _ => _ = Archive.OpenAsync(),
+            _ => CanRead && _connected && !_loading && !_profileOpen &&
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen);
         OpenInternalTransferCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow person && CanOpenMovement(person))
@@ -63,7 +68,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenCreateCommand = new NativeCommand(
             _ => { CloseProfile(); Mutation.OpenCreate(_sites); },
             _ => _connected && !_loading && CanRead && !_profileOpen &&
-                 !Mutation.IsOpen && !Movement.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen);
         OpenEditCommand = new NativeCommand(
             row => {
                 if (row is NativePersonnelDisplayRow person && CanOpenEdit(person))
@@ -112,6 +117,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public NativePersonnelProfile? SelectedProfile => _profile;
     public NativePersonnelMutationViewModel Mutation { get; }
     public NativePersonnelTransferViewModel Movement { get; }
+    public NativeMovementArchiveViewModel Archive { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -124,6 +130,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand OpenEditCommand { get; }
     public ICommand OpenInternalTransferCommand { get; }
     public ICommand OpenExternalTransferCommand { get; }
+    public ICommand OpenMovementArchiveCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -147,6 +154,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                     _rows.Any(current => ReferenceEquals(current, row)));
             Movement.CommittedAndClosed += () => _ = RefreshAsync();
         }
+        if (reader is INativeMovementArchiveBackend archiveBackend)
+            Archive.AttachBackend(archiveBackend, () => _liveActor?.Invoke());
         UpdateCommands();
     }
 
@@ -173,6 +182,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         CloseProfile();
         Mutation.ForceCancel();
         Movement.ForceCancel();
+        Archive.Close();
         _connected = false;
         _loading = false;
         _error = error;
@@ -343,7 +353,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _sites.Count(site => site.SiteId == _site &&
                              site.Name == row.SiteName) == 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
         _reader is INativePersonnelMovementBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -352,7 +362,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     private bool CanOpenEdit(NativePersonnelDisplayRow? row) =>
         row is not null && row.Active && row.Revision >= 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
         _reader is INativePersonnelMutationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -360,7 +370,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
 
     private bool CanOpenProfile(NativePersonnelDisplayRow? row) =>
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
         _reader is not null && row is not null &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
