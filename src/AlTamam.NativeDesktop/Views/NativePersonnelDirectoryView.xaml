@@ -74,6 +74,11 @@
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenStatusCatalogCommand}"
                         AutomationProperties.Name="فتح إضافة وتعديل وتعطيل حالات التحضير الأصلية"/>
+                <Button Content="استيراد كشف الأفراد من Excel"
+                        Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding OpenExcelImportCommand}"
+                        AutomationProperties.Name="استيراد كشف أفراد جدد بصيغة XLSX بعد معاينة وموافقة مستقلة"/>
                 <Button Content="إدارة المواقع" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenSiteCatalogCommand}"
@@ -223,7 +228,7 @@
                             </ItemsControl>
                             <TextBlock Margin="0,12,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ النقل الجماعي الداخلي متاح لأفراد الصفحة الحالية المحددين صراحة بعد المعاينة؛ النقل الجماعي الخارجي يتطلب إقرارا منفصلا بتعليق الحسابات المرتبطة وإلغاء جلساتها."/>
+                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ النقل الجماعي الداخلي متاح لأفراد الصفحة الحالية المحددين صراحة بعد المعاينة؛ النقل الجماعي الخارجي يتطلب إقرارا منفصلا بتعليق الحسابات المرتبطة وإلغاء جلساتها؛ واستيراد XLSX ينشئ أفرادا جددا فقط بعد مراجعة الصفوف المستبعدة والمواقع الجديدة."/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -259,5 +264,8 @@
         <views:NativeStatusCatalogView Grid.RowSpan="5"
                                        DataContext="{Binding StatusCatalog}"
                                        Panel.ZIndex="200"/>
+        <views:NativePersonnelExcelImportView Grid.RowSpan="5"
+                                              DataContext="{Binding ExcelImport}"
+                                              Panel.ZIndex="220"/>
     </Grid>
 </UserControl>
