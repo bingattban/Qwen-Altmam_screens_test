@@ -65,6 +65,11 @@
                         VerticalAlignment="Bottom" Command="{Binding ClearSearchCommand}"/>
                 <Button Content="تحديث" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom" Command="{Binding RefreshCommand}"/>
+                <Button Content="التقرير التاريخي للفرد المحدد"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenPersonnelReportCommand}"
+                        CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
+                        AutomationProperties.Name="فتح التقرير التاريخي للهوية الثابتة للفرد المحدد"/>
                 <Button Content="عرض ملف الفرد المحدد"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenProfileCommand}"
@@ -273,5 +278,8 @@
         <views:NativeImportOutcomeHistoryView Grid.RowSpan="5"
                                               DataContext="{Binding ImportHistory}"
                                               Panel.ZIndex="225"/>
+        <views:NativePersonnelReportView Grid.RowSpan="5"
+                                         DataContext="{Binding ReportHistory}"
+                                         Panel.ZIndex="230"/>
     </Grid>
 </UserControl>

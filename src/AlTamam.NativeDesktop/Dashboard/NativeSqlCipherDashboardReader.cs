@@ -20,13 +20,104 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
-      INativeImportOutcomeHistoryBackend
+      INativeImportOutcomeHistoryBackend, INativePersonnelReportReader
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 9: the ORIGINAL immutable PersonId-keyed historical report.
+    // WPF presents selected 100-row pages only; the backend never clones SQL
+    // or writes/exports a second independent personnel report.
+    public async Task<NativePersonnelReportSnapshot> ReadIndividualAsync(
+        NativeIdentity actor, NativeIndividualReportPages pages,
+        CancellationToken ct = default)
+    {
+        if (pages is null || pages.PersonId is not { Length: >= 3 and <= 128 } ||
+            pages.PersonId.Any(char.IsControl) ||
+            pages.AttendancePage is < 1 or > 100000 ||
+            pages.MovementPage is < 1 or > 100000 ||
+            pages.IdentityPage is < 1 or > 100000)
+            throw new InvalidDataException("Invalid native individual report request.");
+
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse original = await new PersonnelReportService(database)
+            .ReportAsync(new JsonObject
+            {
+                ["personId"] = pages.PersonId,
+                ["attendancePage"] = pages.AttendancePage,
+                ["movementPage"] = pages.MovementPage,
+                ["identityPage"] = pages.IdentityPage
+            }, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+
+        JsonObject data = RequiredObject(original, "PersonnelReport(native)");
+        JsonObject person = RequireObject(data["person"]);
+        string returnedId = RequiredText(person, "personId");
+        if (returnedId != pages.PersonId ||
+            RequiredNumber(data, "pageSize") != 100 ||
+            RequiredNumber(data, "attendancePage") != pages.AttendancePage ||
+            RequiredNumber(data, "movementPage") != pages.MovementPage ||
+            RequiredNumber(data, "identityPage") != pages.IdentityPage)
+            throw new InvalidDataException("Original individual report identity or page mismatch.");
+
+        var totals = RequiredArray(data, "statusTotals").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportStatusTotal(
+                RequiredText(item, "statusId"),
+                RequiredText(item, "statusName"),
+                RequiredNumber(item, "count"));
+        }).ToArray();
+        var attendance = RequiredArray(data, "attendance").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportAttendance(
+                RequiredText(item, "date"), RequiredText(item, "statusName"),
+                RequiredText(item, "site"), RequiredText(item, "source"),
+                item["name"] is null ? null : RequiredText(item, "name"),
+                item["serviceNumberA"] is null ? null : RequiredText(item, "serviceNumberA"),
+                RequiredNumber(item, "revision"));
+        }).ToArray();
+        var moves = RequiredArray(data, "movements").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportMovement(
+                RequiredText(item, "type"), RequiredText(item, "source"),
+                RequiredText(item, "destination"), RequiredText(item, "date"),
+                RequiredText(item, "name"), RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "executor"));
+        }).ToArray();
+        var identities = RequiredArray(data, "identityHistory").Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            return new NativePersonnelReportIdentity(
+                RequiredText(item, "name"), RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "from"),
+                item["to"] is null ? null : RequiredText(item, "to"),
+                RequiredText(item, "reason"));
+        }).ToArray();
+
+        var report = new NativePersonnelReportSnapshot(
+            returnedId, RequiredText(person, "name"),
+            RequiredText(person, "serviceNumberA"),
+            RequiredText(person, "firstRecordedDate"),
+            RequiredBoolean(person, "active"),
+            RequiredNumber(data, "attendanceTotal"),
+            RequiredNumber(data, "movementTotal"),
+            RequiredNumber(data, "identityTotal"), 100,
+            pages.AttendancePage, RequiredBoolean(data, "attendanceHasNext"),
+            pages.MovementPage, RequiredBoolean(data, "movementHasNext"),
+            pages.IdentityPage, RequiredBoolean(data, "identityHasNext"),
+            totals, attendance, moves, identities);
+        if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
+            report.Movements.Count > 100 || report.Identities.Count > 100 ||
+            report.PersonId != pages.PersonId)
+            throw new InvalidDataException("Original personnel report was truncated or forged.");
+        return report;
+    }
 
     // Phase 8 slice 15: exact owner-scoped, read-only outcome service.
     // No native SQL, export, or import-plan replay. The original service
