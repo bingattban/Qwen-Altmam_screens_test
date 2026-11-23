@@ -41,16 +41,17 @@ public sealed class NativeSqlCipherDashboardReader(
             draft.SourceSiteId.Length > 128 || draft.SourceSiteId.Any(char.IsControl) ||
             string.IsNullOrWhiteSpace(draft.SourceSiteName) ||
             draft.SourceSiteName.Length > 150 ||
-            draft.IsExternal
-                ? draft.ExternalDestinationName is null ||
-                  draft.ExternalDestinationName.Length is < 2 or > 150 ||
+            draft.DestinationSiteId is null ||
+            draft.ExternalDestinationName is null ||
+            (draft.IsExternal
+                ? draft.ExternalDestinationName.Length is < 2 or > 150 ||
                   draft.ExternalDestinationName.Any(char.IsControl) ||
                   draft.DestinationSiteId.Length != 0
                 : string.IsNullOrWhiteSpace(draft.DestinationSiteId) ||
                   draft.DestinationSiteId.Length > 128 ||
                   draft.DestinationSiteId.Any(char.IsControl) ||
                   draft.DestinationSiteId == draft.SourceSiteId ||
-                  draft.ExternalDestinationName.Length != 0)
+                  draft.ExternalDestinationName.Length != 0))
             throw new InvalidDataException("Invalid transfer intent.");
         _ = CanonicalNumber(draft.ServiceNumberA);
     }
