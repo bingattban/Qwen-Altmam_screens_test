@@ -136,7 +136,8 @@ public sealed class NativeMovementArchivePhase8Tests
 
     private sealed class FakeBackend : INativeMovementArchiveBackend
     {
-        public int PageReads, DetailReads, Writes;
+        public int PageReads, DetailReads;
+        public int Writes => 0; // Read-only interface deliberately exposes no mutation operation.
         public bool HasNext, ForgedDetail;
         public Task<NativeMovementArchivePage>? DelayedPage;
         public readonly List<NativeMovementArchiveFilter> Filters = [];
