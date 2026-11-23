@@ -216,11 +216,11 @@ public sealed class NativePersonnelExcelImportPhase8Tests
                 new NativePersonnelExcelCandidate("الورقة الأولى", 3, "فرد ثان",
                     "00002", "غير محدد")
             };
-            var issues = HasIssues ?
-                new[] { new NativePersonnelExcelIssue("الورقة الأولى", 4,
-                    "00001", "فرد مكرر", "غير محدد", "الرقم (ع) مكرر") } : [];
-            var sites = HasNewSite ?
-                new[] { new NativePersonnelExcelSite("الموقع الجديد", 2) } : [];
+            NativePersonnelExcelIssue[] issues = HasIssues ?
+                [new NativePersonnelExcelIssue("الورقة الأولى", 4,
+                    "00001", "فرد مكرر", "غير محدد", "الرقم (ع) مكرر")] : [];
+            NativePersonnelExcelSite[] sites = HasNewSite ?
+                [new NativePersonnelExcelSite("الموقع الجديد", 2)] : [];
             int total = HasIssues ? 3 : 2;
             return new NativePersonnelExcelImportPreview(
                 Forge == "file" ? "other.xlsx" : "people.xlsx",
