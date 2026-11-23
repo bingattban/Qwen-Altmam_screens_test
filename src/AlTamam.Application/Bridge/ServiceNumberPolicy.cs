@@ -7,7 +7,7 @@ namespace AlTamam.Application.Bridge;
 /// ordinary row serial number in printed attendance rosters.
 /// Store ASCII digits in SQLCipher to keep duplicate checks unambiguous.
 /// </summary>
-internal static class ServiceNumberPolicy
+public static class ServiceNumberPolicy
 {
     public static bool TryCanonicalize(string? input, out string value)
     {
