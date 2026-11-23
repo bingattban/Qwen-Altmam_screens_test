@@ -14,7 +14,8 @@ public interface INativePersonnelReportReader
 
 public sealed record NativeIndividualReportPages(
     string PersonId, int AttendancePage = 1, int MovementPage = 1,
-    int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1);
+    int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1,
+    int AuditPage = 1);
 
 public sealed record NativePersonnelReportStatusTotal(
     string StatusId, string StatusName, long Count);
@@ -55,6 +56,16 @@ public sealed record NativePersonnelReportRevision(
     string ExecutedAtUtc, string? AuthorizationMethod,
     string ExecutorSnapshot);
 
+/// <summary>Source monthly status aggregates; not recalculated from a single UI page.</summary>
+public sealed record NativePersonnelReportMonthSummary(
+    string Period, string StatusId, string StatusName, long Count);
+
+/// <summary>Saved original AuditEvents actor snapshots and immutable operation detail.</summary>
+public sealed record NativePersonnelReportAuditRecord(
+    string Operation, string UsernameSnapshot, string FullNameSnapshot,
+    string? EffectiveDate, string ExecutedAtUtc,
+    string Description, string? Reason);
+
 public sealed record NativePersonnelReportSnapshot(
     string PersonId, string Name, string ServiceNumberA,
     string FirstRecordedDate, bool Active,
@@ -78,4 +89,10 @@ public sealed record NativePersonnelReportSnapshot(
     public int RevisionPage { get; init; } = 1;
     public bool RevisionHasNext { get; init; }
     public IReadOnlyList<NativePersonnelReportRevision> Revisions { get; init; } = [];
+
+    public IReadOnlyList<NativePersonnelReportMonthSummary> MonthlyTotals { get; init; } = [];
+    public long AuditTotal { get; init; }
+    public int AuditPage { get; init; } = 1;
+    public bool AuditHasNext { get; init; }
+    public IReadOnlyList<NativePersonnelReportAuditRecord> Audit { get; init; } = [];
 }
