@@ -340,3 +340,40 @@ the original DesktopHost/WebView2 application. Native WPF export relies
 on the currently configured local reports directory; a complete native
 output-directory settings UI, remaining 69-route parity and real
 Windows keyboard/DPI acceptance must precede switching production.
+
+ 
+## Phase 8 — slice 1: Native WPF administration personnel register (read-only)
+
+The Administration placeholder is replaced by a real RTL WPF **سجل الأفراد**
+bound to the ORIGINAL SQLCipher `PersonRosterService.QueryPersonsAsync`
+and `GetPersonSummaryAsync`. The list supports current organization status
+(active, externally transferred, separated, archived or all), current site,
+name/service number search, bounded 100-person pages, stable PersonId,
+rank/custom columns, site and status. When a manager selects a person, a
+separate read-only dialog presents their current name and service number
+plus up to 50 saved historical identity revisions. Archived users are
+only included when an explicit organization-state filter requests them.
+
+Only the original role policy's General/Ordinary Administration roles can
+navigate to the native management page or read its canonical data.
+`NativeSqlCipherDashboardReader` checks the SQLCipher nonce and role
+BEFORE and AFTER every read. The view model rejects stale PersonId
+references, mismatched page filters, altered row revisions, canceled
+reads, invalid role changes, forged service echoes and duplicate ids.
+Logout immediately scrubs rows and profile data. No independent SQL,
+fake roster, direct import, create, edit, restore, separation or
+transfer execution exists in this first native slice.
+
+Six test-first xUnit cases cover unauthenticated/supervisor denial,
+real rank/service-number/site projection, search/site/status/page
+behavior, forged/stale PersonId and nonce changes, immutable historical
+profile review and async logout/malformed data. A dedicated Phase 8
+static negative-path guard runs in BOTH Windows Core and Release
+before C# compilation and all four customer package jobs.
+
+**Not yet converted:** personnel create/update/delete and their audited
+preview/confirm flows, internal/external moves, dismissal/return, site
+and status CRUD, roster Excel import/export, users, reports, backups
+and settings, as well as full 69-route parity and real Windows clean
+machine keyboard/DPI approval. Customer binaries remain the original
+DesktopHost/WebView2 until parity is verified.
