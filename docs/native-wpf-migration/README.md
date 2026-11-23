@@ -684,3 +684,54 @@ customer installers and portable binaries continue using the original
 DesktopHost/WebView2. Native WPF is NOT yet production-approved;
 independent physical 100/125/150% DPI, accessibility, keyboard,
 clean-machine and authenticated return UAT remain required.
+
+
+## Phase 8 — slice 8: native manager site listing, creation and name history
+
+The native **إدارة المواقع** dialog now uses the original
+`BridgeSharedServices.ListSitesAsync(includeInactive:true)` to display
+both active and retired site IDs, names and optimistic RowVersion.
+The system-protected `SITE-UNSPECIFIED` cannot be renamed. A site row
+can only be selected from the **current live** authenticated catalogue;
+forged row references or stale page results are never trusted.
+
+**Create:** the manager enters a validated 2–100 character name,
+reviews a separate local, explicitly non-writing summary, and only a
+distinct confirm press calls the canonical
+`AdminConfigurationService.CreateSiteAsync`.
+**Rename:** a current active site row provides immutable SiteId and
+RowVersion; the new name goes through the same explicit review, then
+calls original `AdminConfigurationService.RenameSiteAsync` with
+`expectedRevision`. This is a local UI review and NOT a server-issued
+preview token: the original canonical SQLCipher transaction is the
+authoritative decision about duplicate names, protected sites, name
+history collision within a day, stale row versions, and audit history.
+Both actions use one operationId, matching audit receipts, server-side
+session + manager role checks before and after the original service.
+An ambiguous write is never auto retried, and the manager must consult
+the catalogue and operations journal before any subsequent attempt.
+Successful completion refreshes the administration roster catalogue.
+
+No direct native SQLite/SQLCipher writer is introduced. Site deletion,
+deactivation, automatic reassignment and historical movement rewriting
+are expressly NOT implemented in this slice. The original
+`RemoveSiteAndReassignCurrentPersonsAsync` remains unchanged until a
+separate safety review and test-first implementation. Attendance
+statuses, bulk personnel movement, Excel import and other native admin
+routes remain future slices.
+
+Eight test-first C# xUnit regressions cover the manager-only opening,
+actual active/retired rows, protected site, new-site validation and
+nonwriting review, exact original SiteId and revision on rename, changed
+input invalidation, delayed read after logout, forged commit receipt
+and no retry after unknown outcome. A negative-path fail-closed guard
+runs before expensive Windows jobs in BOTH Windows Core and Windows
+Release; all nine Release shards, real WPF/WebView2 E2E, all four
+x86/x64 Portable/Installer package acceptance jobs and SHA256
+provenance audit remain mandatory before merging.
+
+**Production limitation:** the four customer binaries continue to
+ship the ORIGINAL DesktopHost/WebView2 executable. Manual Windows
+clean-machine, keyboard/accessibility and DPI 100/125/150% acceptance
+and complete native 69-route parity remain required before any native
+package switch.
