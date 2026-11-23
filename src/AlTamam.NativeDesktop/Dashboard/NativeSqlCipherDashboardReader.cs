@@ -26,7 +26,7 @@ public sealed class NativeSqlCipherDashboardReader(
     // Phase 8: personnel administration reads only the original roster
     // service, with the same permanent PersonId and current custom fields.
     // Both the verified session and manager-only authorization are required.
-    public async Task<NativePersonnelCatalogue> ReadCatalogueAsync(
+    public async Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
