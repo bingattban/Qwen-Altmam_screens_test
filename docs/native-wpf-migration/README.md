@@ -1131,7 +1131,7 @@ After reconciling competing PRs #33 and #34, **#33 is the sole
 approved native import implementation**, merged into main at
 `29f14b594d23a9f185acd8bf4bc2a9c049492cac`. Do not merge PR #34
 unchanged: it offers a tempting 500-addition approval while displaying
-only the first 100 accepted identities, and duplicates the original
+only the first 500 accepted identities, and duplicates the original
 import modal/view model/adapter. Its multi-worksheet option is ported
 here as an incremental change to the existing original SQLCipher
 import, **without** introducing another importer.
@@ -1155,11 +1155,11 @@ belong to a selected worksheet.
 **The critical limit is on accepted people, not merely Excel rows.**
 At most 500 source rows are inspected, with every rejected row/issue
 visible. But **no import can be approved if the original analysis
-contains more than 100 new accepted individuals**, because the
-canonical `acceptedPreview` lists at most 100. All 1–100 accepted
+contains more than 500 new accepted individuals**, because the
+canonical `acceptedPreview` lists at most 500. All 1–500 accepted
 people — across ALL selected worksheets — must appear with immutable
 name, number (ع), site, worksheet and row. Never approve 500
-additions based on a 100-person display; an over-limit file must be
+additions based on a 500-person display; an over-limit file must be
 split into smaller reviewed files or handled through the original
 production importer. The single original SQLCipher transaction
 continues to enforce `updateExistingCustomFields:false` and
@@ -1188,5 +1188,20 @@ Exact final-head success is mandatory for BOTH Windows workflows;
 nine disjoint Release test shards and real WPF/WebView2 E2E BEFORE
 building x86/x64 Portable and Installer; all four package acceptance
 jobs and independent SHA-256 provenance audit. Manual clean-machine
-Windows, keyboard/accessibility and 100/125/150% DPI evidence remains
+Windows, keyboard/accessibility and 500/125/150% DPI evidence remains
 a separate production-gate requirement.
+
+
+### Clarification — 23 November 2026: import limit
+
+The native WPF importer accepts **up to 500 rows/names in one local XLSX**,
+including an explicitly selected multi-worksheet workbook. The canonical SQLCipher
+preview now returns **every accepted new identity**, not only the first 100,
+so a manager can verify all names, service numbers, worksheets and sites before
+individually approving creation. A workbook with 501 or more rows is rejected
+without writes. Existing identities, rejected rows, and audit/idempotency
+protections remain unchanged. The required first-test regressions include 500
+accepted/committed atomically, 501 rejected, and a forged truncated 500-row
+preview denied. This change does not relax the separate name-collision hint
+safety gate: when complete collision evidence is unavailable, import is denied
+rather than allowing an unseen approval.
