@@ -1,0 +1,110 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativePersonnelSeparationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" FontFamily="Segoe UI">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="SeparationVisible"/>
+        <Style x:Key="SeparationButton" TargetType="Button">
+            <Setter Property="Background" Value="#0D9488"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="MinHeight" Value="37"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid Visibility="{Binding IsOpen, Converter={StaticResource SeparationVisible}}"
+          Background="#B80F172A">
+        <Border Background="#FFFFFF" BorderBrush="#CBD5E1"
+                BorderThickness="1" CornerRadius="10" Padding="18"
+                Width="600" MaxHeight="680"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <DockPanel LastChildFill="True">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                    <TextBlock Text="فصل فرد — مراجعة معتمدة"
+                               FontSize="19" FontWeight="Bold" Foreground="#0F2942"
+                               VerticalAlignment="Center" DockPanel.Dock="Right"/>
+                    <Button Content="إغلاق" Command="{Binding CloseCommand}"
+                            Style="{StaticResource SeparationButton}"
+                            AutomationProperties.Name="إغلاق مراجعة الفصل دون اعتماد"/>
+                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="الفصل لا يحذف البيانات أو التحضير السابق. اختر فردا نشطا من كشف موقع محدد، ثم راجع سبب الفصل قبل الاعتماد."
+                                   Foreground="#475569" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <ProgressBar Height="5" IsIndeterminate="True"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource SeparationVisible}}"/>
+                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <Grid Margin="0,6,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="الفرد المحدد" FontWeight="Bold" Foreground="#64748B"/>
+                                <TextBlock Text="{Binding SelectedPersonName}"
+                                           Foreground="#0F2942" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding SelectedPersonNumber}"
+                                           Foreground="#475569" FlowDirection="LeftToRight"
+                                           HorizontalAlignment="Right"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="الموقع المصدر" FontWeight="Bold" Foreground="#64748B"/>
+                                <TextBlock Text="{Binding SourceSiteName}"
+                                           Foreground="#0F2942" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="سبب الفصل — إلزامي (5–1000 حرف)"
+                                   FontWeight="Bold" Foreground="#0F2942" Margin="0,4,0,5"/>
+                        <TextBox MinHeight="94" MaxHeight="145" TextWrapping="Wrap"
+                                 AcceptsReturn="True" MaxLength="1000"
+                                 VerticalScrollBarVisibility="Auto"
+                                 Padding="8,6"
+                                 IsEnabled="{Binding CanEdit}"
+                                 Text="{Binding FormReason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="السبب الرسمي للفصل"/>
+                        <Button Content="معاينة الفصل دون حفظ"
+                                Style="{StaticResource SeparationButton}"
+                                Command="{Binding PreviewCommand}"
+                                AutomationProperties.Name="معاينة الفصل الرسمي دون حفظ"/>
+                        <Border BorderBrush="#E2E8F0" BorderThickness="1"
+                                Background="#F8FAFC" CornerRadius="6"
+                                Margin="0,8" Padding="12"
+                                Visibility="{Binding HasPreview, Converter={StaticResource SeparationVisible}}">
+                            <StackPanel>
+                                <TextBlock Text="تفاصيل المعاينة المعتمدة"
+                                           Foreground="#0F2942" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding ReviewMessage}"
+                                           TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,6"/>
+                                <TextBlock Text="{Binding Preview.BusinessDate}"
+                                           FlowDirection="LeftToRight" HorizontalAlignment="Right"
+                                           Foreground="#0F2942"/>
+                                <TextBlock Text="مهلة أمان إلزامية: انتظر 5 ثوانٍ بعد المعاينة قبل تأكيد الفصل."
+                                           Foreground="#BE123C" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="لم تنته مهلة المراجعة البالغة 5 ثوانٍ بعد."
+                                   Visibility="{Binding WaitingForConfirmation, Converter={StaticResource SeparationVisible}}"
+                                   Foreground="#BE123C" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
+                        <Button Content="تأكيد فصل الفرد واعتماد السجل"
+                                Style="{StaticResource SeparationButton}"
+                                Command="{Binding ConfirmCommand}"
+                                AutomationProperties.Name="تأكيد الفصل بعد المعاينة ومهلة الأمان"/>
+                        <TextBlock Text="{Binding CompletionMessage}"
+                                   Foreground="#0D9488" FontWeight="Bold" TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Polite" Margin="0,8,0,0"/>
+                        <TextBlock Text="تنبيه: قد يؤدي الفصل إلى تعليق حسابات الفرد المرتبطة به. إن فقدت نتيجة التأكيد، افتح سجل الفصل والعمليات قبل أي إجراء آخر؛ لا يعيد التطبيق الإرسال تلقائيا."
+                                   Foreground="#64748B" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,12,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
