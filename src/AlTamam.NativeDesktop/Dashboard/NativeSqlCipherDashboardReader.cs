@@ -47,6 +47,7 @@ public sealed class NativeSqlCipherDashboardReader(
             pages.SitePage is < 1 or > 100000 ||
             pages.RevisionPage is < 1 or > 100000 ||
             pages.AuditPage is < 1 or > 100000 ||
+            pages.MovementType is < 0 or > 4 ||
             pages.DateFrom is null || pages.DateTo is null ||
             !IsCanonicalDate(pages.DateFrom) || !IsCanonicalDate(pages.DateTo) ||
             (pages.DateFrom.Length > 0 && pages.DateTo.Length > 0 &&
@@ -65,7 +66,8 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["revisionPage"] = pages.RevisionPage,
                 ["auditPage"] = pages.AuditPage,
                 ["dateFrom"] = pages.DateFrom,
-                ["dateTo"] = pages.DateTo
+                ["dateTo"] = pages.DateTo,
+                ["movementType"] = pages.MovementType
             }, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
@@ -81,8 +83,9 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredNumber(data, "revisionPage") != pages.RevisionPage ||
             RequiredNumber(data, "auditPage") != pages.AuditPage ||
             RequiredText(data, "dateFrom") != pages.DateFrom ||
-            RequiredText(data, "dateTo") != pages.DateTo)
-            throw new InvalidDataException("Original individual report identity, date filter or page mismatch.");
+            RequiredText(data, "dateTo") != pages.DateTo ||
+            RequiredNumber(data, "movementType") != pages.MovementType)
+            throw new InvalidDataException("Original individual report identity, filter or page mismatch.");
 
         var totals = RequiredArray(data, "statusTotals").Select(node =>
         {
@@ -201,7 +204,8 @@ public sealed class NativeSqlCipherDashboardReader(
             AuditHasNext = RequiredBoolean(data, "auditHasNext"),
             Audit = audits,
             DateFrom = RequiredText(data, "dateFrom"),
-            DateTo = RequiredText(data, "dateTo")
+            DateTo = RequiredText(data, "dateTo"),
+            MovementType = checked((int)RequiredNumber(data, "movementType"))
         };
         if (report.StatusTotals.Count > 500 || report.Attendance.Count > 100 ||
             report.Movements.Count > 100 || report.Identities.Count > 100 ||
