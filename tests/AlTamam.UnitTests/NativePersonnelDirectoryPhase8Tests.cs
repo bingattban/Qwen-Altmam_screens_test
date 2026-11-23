@@ -153,7 +153,7 @@ public sealed class NativePersonnelDirectoryPhase8Tests
         public Task<NativePersonnelSnapshot>? Pending;
         public readonly List<NativePersonnelFilter> Requests = [];
 
-        public Task<NativePersonnelCatalogue> ReadCatalogueAsync(
+        public Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(
             NativeIdentity actor, CancellationToken ct = default) =>
             Task.FromResult(new NativePersonnelCatalogue(
                 [new NativeDashboardSite("SITE-A", "المركز")]));
