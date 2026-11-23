@@ -6,8 +6,8 @@ using Xunit;
 namespace AlTamam.UnitTests;
 
 /// <summary>
-/// Test FIRST: preserving the original 100-accepted-person full-review gate
-/// while enabling canonical multi-worksheet parsing, never hidden 101..500 writes.
+/// Test FIRST: permit at most 500 accepted names only when every name is
+/// visible in the canonical review; no truncated preview can be committed.
 /// </summary>
 public sealed class NativeSafeMultisheetImportPhase8Tests
 {
@@ -90,16 +90,50 @@ public sealed class NativeSafeMultisheetImportPhase8Tests
     }
 
     [Fact]
-    public async Task All_worksheets_above_100_accepted_people_are_rejected_even_if_first_100_are_visible()
+    public async Task Exactly_500_accepted_people_are_individually_visible_and_committed_once()
     {
-        var backend = new FakeBackend { NewAccepted = 101 };
+        var backend = new FakeBackend { NewAccepted = 500 };
+        var vm = Make(backend, () => Manager);
+        vm.Open();
+        vm.ImportAllSheets = true;
+        await vm.LoadWorkbookAsync("multi.xlsx", Workbook());
+        Assert.Equal(500, vm.Review?.NewCount);
+        Assert.Equal(500, vm.Review?.NewPeople.Count);
+        Assert.Equal(500, vm.Review!.NewPeople.Select(p => p.ServiceNumberA).Distinct().Count());
+        Assert.False(vm.CanCommit);
+        vm.ReviewedPeopleAndIssues = true;
+        Assert.True(vm.CanCommit);
+        await vm.ConfirmAsync();
+        Assert.Equal(500, vm.Receipt?.CreatedCount);
+        Assert.Equal(1, backend.Commits);
+    }
+
+    [Fact]
+    public async Task Truncated_500_person_preview_cannot_be_approved()
+    {
+        var backend = new FakeBackend { NewAccepted = 500, TruncatePreview = true };
+        var vm = Make(backend, () => Manager);
+        vm.Open();
+        vm.ImportAllSheets = true;
+        await vm.LoadWorkbookAsync("multi.xlsx", Workbook());
+        Assert.Null(vm.Review);
+        vm.ReviewedPeopleAndIssues = true;
+        await vm.ConfirmAsync();
+        Assert.False(vm.CanCommit);
+        Assert.Equal(0, backend.Commits);
+    }
+
+    [Fact]
+    public async Task All_worksheets_above_500_accepted_people_are_rejected_even_if_first_500_are_visible()
+    {
+        var backend = new FakeBackend { NewAccepted = 501 };
         var vm = Make(backend, () => Manager);
         vm.Open();
         vm.ImportAllSheets = true;
         await vm.LoadWorkbookAsync("multi.xlsx", Workbook());
         Assert.Null(vm.Review);
         Assert.False(vm.CanCommit);
-        Assert.Contains("100", vm.Error);
+        Assert.Contains("500", vm.Error);
         vm.ReviewedPeopleAndIssues = true;
         await vm.ConfirmAsync();
         Assert.Equal(0, backend.Commits);
@@ -168,13 +202,13 @@ public sealed class NativeSafeMultisheetImportPhase8Tests
     {
         public readonly List<bool> Modes = [];
         public int Commits, NewAccepted = 2;
-        public bool CorruptCount, CustomUpdate, HasNewSites, HasCollisions;
+        public bool CorruptCount, CustomUpdate, HasNewSites, HasCollisions, TruncatePreview;
         public Task<NativeExcelImportReview>? Pending;
 
         public NativeExcelImportReview Make(string file, bool allSheets)
         {
             int total = allSheets ? NewAccepted : 1;
-            var people = Enumerable.Range(1, Math.Min(total, 100))
+            var people = Enumerable.Range(1, Math.Min(total, TruncatePreview ? 100 : 500))
                 .Select(i => new NativeExcelImportPerson(
                     i % 2 == 1 ? "الورقة الأولى" : "الورقة الثانية",
                     2 + i, "الفرد رقم " + i, (10000 + i).ToString("D5"),
