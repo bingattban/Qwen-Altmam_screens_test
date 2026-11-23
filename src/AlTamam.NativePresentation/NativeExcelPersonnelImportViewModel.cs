@@ -7,8 +7,8 @@ namespace AlTamam.NativePresentation;
 
 /// <summary>
 /// Additive native XLSX import. Original SQLCipher service owns ALL parsing,
-/// duplicate rejection, site creation and atomic audit. Max 100 visible
-/// additions here, so every new person can be reviewed before commitment.
+/// duplicate rejection, site creation and atomic audit. All accepted rows,
+/// up to 500, must be shown before the operator can approve one transaction.
 /// </summary>
 public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
 {
@@ -176,14 +176,12 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
                 actor, fileName, workbook, _allSheets, linked.Token);
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanReadOriginalActor(actor)) { ForceCancel(); return; }
-            // Original previews display at most 100 accepted people. Never
-            // authorize the undisplayed 101st...500th even when allSheets
-            // is selected. The operator must divide the XLSX into safe batches.
-            if (preview is { NewCount: > 100 })
+            // The signed canonical preview must contain every accepted row.
+            // Never authorize 501+ people, regardless of worksheet mode.
+            if (preview is { NewCount: > 500 })
             {
-                _error = "الكشف يحتوي على أكثر من 100 فرد جديد مقبول. " +
-                    "لم يُحفظ أي تغيير؛ قسّم الكشف إلى دفعات من 100 فرد " +
-                    "حتى تتمكن من مراجعة هوية كل فرد قبل الاعتماد.";
+                _error = "الحد الأقصى للاستيراد 500 اسم في الملف الواحد. " +
+                    "لم يُحفظ أي تغيير؛ قسّم الكشف إلى ملفات لا تتجاوز 500 اسما.";
                 return;
             }
             ValidateCanonicalReview(preview, fileName);
@@ -304,7 +302,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             review.PreviewToken is not { Length: 64 } ||
             review.PreviewToken.Any(c => !char.IsAsciiHexDigit(c)) ||
             review.TotalRows is < 1 or > 500 ||
-            review.NewCount is < 0 or > 100 ||
+            review.NewCount is < 0 or > 500 ||
             review.RejectedCount < 0 || review.CustomUpdateCount != 0 ||
             review.NewCount + review.RejectedCount != review.TotalRows ||
             review.NewPeople is null || review.Issues is null ||
@@ -313,7 +311,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
             review.Collisions.Count > 40 ||
             review.NewPeople.Count != review.NewCount ||
             review.Issues.Count != review.RejectedCount ||
-            review.NewSites.Count > 100 ||
+            review.NewSites.Count > 500 ||
             review.SimilarNameCount is < 0 or > 500 ||
             review.NewPeople.Any(p => p is null ||
                 p.Row < 2 ||
@@ -327,7 +325,7 @@ public sealed class NativeExcelPersonnelImportViewModel : INotifyPropertyChanged
                 string.IsNullOrWhiteSpace(x.Reason)) ||
             review.NewSites.Any(x => x is null ||
                 x.Name is not { Length: >= 2 and <= 100 } ||
-                x.PersonCount is < 1 or > 100))
+                x.PersonCount is < 1 or > 500))
             throw new InvalidDataException("Invalid, abbreviated or write-enabled canonical import preview.");
     }
 
