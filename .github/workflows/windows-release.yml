@@ -149,6 +149,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 separation audit/confirmation contract failed' }
           python build/test-native-phase8-separation-archive-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 immutable separation archive contract failed' }
+          python build/test-native-phase8-archived-return-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 8 original archived return identity contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
