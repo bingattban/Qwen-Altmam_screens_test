@@ -64,6 +64,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         Administration.Separation.ForceCancel();
                         Administration.SeparationArchive.Close();
                         Administration.Return.ForceCancel();
+                        Administration.SiteCatalog.ForceCancel();
                          Administration.Archive.Close();
                     }
                     CurrentPage = _pages[screen];
