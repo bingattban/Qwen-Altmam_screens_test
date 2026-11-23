@@ -29,9 +29,14 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8: canonical XLSX preview and additive-only, one-use import commit.
     // File bytes stay local and bounded; no workbook path ever reaches SQLCipher.
+    public Task<NativeExcelImportReview> StageAndPreviewAsync(
+        NativeIdentity actor, string fileName, byte[] workbook,
+        CancellationToken ct = default) =>
+        StageAndPreviewAsync(actor, fileName, workbook, false, ct);
+
     public async Task<NativeExcelImportReview> StageAndPreviewAsync(
         NativeIdentity actor, string fileName, byte[] workbook,
-        CancellationToken ct = default)
+        bool allSheets, CancellationToken ct = default)
     {
         if (fileName is not { Length: >= 6 and <= 180 } ||
             !fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
@@ -48,12 +53,23 @@ public sealed class NativeSqlCipherDashboardReader(
         {
             ["fileName"] = fileName,
             ["base64"] = base64,
+            ["allSheets"] = allSheets,
             ["updateExistingCustomFields"] = false
         }, actor.UserId, ct).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         JsonObject source = RequiredObject(selected, "ExcelImportSelect(native)");
         string workbookToken = RequiredText(source, "workbookToken");
         long sourceRows = RequiredNumber(source, "rowCount");
+        JsonArray selectedWorksheets = RequiredArray(source, "selectedWorksheets");
+        var permittedSheets = selectedWorksheets.Select(node =>
+            node?.GetValue<string>() ?? "").ToArray();
+        if (permittedSheets.Length is < 1 or > 50 ||
+            (!allSheets && permittedSheets.Length != 1) ||
+            permittedSheets.Any(x => x.Length is < 1 or > 100 ||
+                x.Any(char.IsControl)) ||
+            permittedSheets.Distinct(StringComparer.Ordinal).Count() !=
+                permittedSheets.Length)
+            throw new InvalidDataException("Untrusted workbook worksheet selection.");
         if (workbookToken is not { Length: 64 } ||
             workbookToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
             RequiredText(source, "fileName") != fileName ||
@@ -155,6 +171,14 @@ public sealed class NativeSqlCipherDashboardReader(
                 RequiredText(x, "serviceNumberA"), matching);
         }).ToArray();
 
+        // The signed canonical staging token must refer only to the
+        // explicitly selected worksheets, including rejected rows and
+        // same-name advisories. A truncated member list is never approved.
+        var allowed = permittedSheets.ToHashSet(StringComparer.Ordinal);
+        if (people.Any(p => !allowed.Contains(p.Worksheet)) ||
+            errors.Any(e => !allowed.Contains(e.Worksheet)) ||
+            hints.Any(h => !allowed.Contains(h.Worksheet)))
+            throw new InvalidDataException("Unexpected worksheet in canonical import.");
         if (people.Select(p => p.ServiceNumberA)
                 .Distinct(StringComparer.Ordinal).Count() != people.Length ||
             sites.Select(s => s.Name)
