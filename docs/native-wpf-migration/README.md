@@ -488,3 +488,45 @@ and remaining functionality still require migration. All customer
 installer/portable packages remain the approved DesktopHost/WebView2
 product until full native 69-route parity and physical Windows
 keyboard/DPI/clean-machine acceptance.
+
+
+## Phase 8 — slice 4: native read-only historical movement archive
+
+The existing native administration directory offers **أرشيف التنقلات**
+as a separate authenticated, Arabic RTL modal. This slice is read-only.
+The original `PersonnelMovementService.ArchiveAsync` and
+`DetailsAsync` remain the sole source for historically saved movement
+snapshots, sorted and paged in SQLCipher. Type filters are `all`
+(internal, external and return), `internal`, `external` and `return`;
+search by historical name/service number is applied on the server, with
+a hard bound of 50 movements per page. Separation remains in the
+original separate archive and is **not** incorrectly included.
+
+Each archive listing/detail call revalidates the exact SQLCipher
+General/Ordinary Administration actor and session nonce both before and
+after invoking the original canonical service. The WPF view checks the
+original immutable movement ID, PersonId, dated name, number, origin,
+destination, type and UTC commit timestamp against the selected row.
+Forged or stale responses, unexpected pages, unauthorized sessions and
+late asynchronous replies fail closed. Closing the archive, logout,
+navigation and a personnel directory refresh discard pending reads and
+erase historical rows. No SQLite writer, audit mutation, schema change,
+new index, copy of the historical data, or alternate archive source
+is introduced.
+
+Six C# xUnit regressions were committed **before** implementation,
+including read authorization, exact bounded pages and history, filters,
+invalid input, logout cancellation and forged detail rejection.
+A separate Python source/XAML negative-path contract runs with its own
+immediate exit-code guard in BOTH Windows Core and Windows Release. The
+existing nine full Release shards, real Windows WPF/WebView2 tests,
+x86/x64 Portable and Installer packaging/acceptance and independent
+SHA-256 audit remain mandatory on the exact final source SHA.
+
+**Still not native:** batch transfer (up to 100), personnel separation,
+archived-person identity resolution/return, site/status CRUD, full
+settings, historical reports and the remaining 69-route parity. The
+four customer packages still use the original complete
+DesktopHost/WebView2, not this experimental WPF pilot. Real Windows
+keyboard/DPI checks at 100%, 125%, 150% and independent clean-machine
+acceptance remain necessary before any production switch.
