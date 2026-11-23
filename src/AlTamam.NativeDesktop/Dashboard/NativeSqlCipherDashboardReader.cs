@@ -19,7 +19,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativePersonnelExcelImportBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -884,6 +884,188 @@ public sealed class NativeSqlCipherDashboardReader(
                 candidate.SourceAssignmentId is not { Length: >= 3 and <= 128 })
                 throw new InvalidDataException("Stale or forged external exit identity.");
         }
+    }
+
+    // Phase 8 XLSX import: no second ZIP parser or SQL writer.
+    // Selection, signed plan, identity de-duplication, site creation and audit
+    // belong exclusively to original ExcelPersonnelImportService.
+    public async Task<NativePersonnelExcelWorkbookSelection> StageWorkbookAsync(
+        NativeIdentity actor, string filename, byte[] bytes, bool allSheets,
+        CancellationToken ct = default)
+    {
+        if (filename is null || filename.Length is < 6 or > 180 ||
+            filename != Path.GetFileName(filename) ||
+            !filename.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            filename.Any(char.IsControl) ||
+            bytes is null || bytes.Length is < 1 or > 160 * 1024)
+            throw new InvalidDataException("Original import rejects XLSX file name/size.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
+        // The canonical UI default is first sheet only. An explicit switch
+        // stages all workbook sheets, with the original parser's 500-row cap.
+        string base64 = Convert.ToBase64String(bytes);
+        try
+        {
+            BridgeResponse response = await new ExcelPersonnelImportService(database)
+                .SelectAsync(new JsonObject
+                {
+                    ["fileName"] = filename,
+                    ["base64"] = base64,
+                    ["allSheets"] = allSheets,
+                    ["updateExistingCustomFields"] = false
+                }, actor.UserId, ct).ConfigureAwait(false);
+            await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+            JsonObject data = RequiredObject(response, "SelectExcelImportFile(native)");
+            string token = RequiredText(data, "workbookToken");
+            string returnedFile = RequiredText(data, "fileName");
+            long total = RequiredNumber(data, "rowCount");
+            JsonArray sheets = RequiredArray(data, "selectedWorksheets");
+            var names = sheets.Select(node => node?.GetValue<string>() ??
+                throw new InvalidDataException("Malformed selected XLSX sheet.")).ToArray();
+            if (token is not { Length: 64 } ||
+                token.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+                returnedFile != filename || total is < 1 or > 500 ||
+                RequiredNumber(data, "maxRows") != 500 ||
+                names.Length is < 1 or > 50 ||
+                names.Any(n => n.Length is < 1 or > 100 || n.Any(char.IsControl)))
+                throw new InvalidDataException("Malformed canonical XLSX staging receipt.");
+            return new NativePersonnelExcelWorkbookSelection(
+                filename, token, checked((int)total), names);
+        }
+        finally
+        {
+            // base64 is transient and NOT stored in native VM or local logs.
+            base64 = "";
+        }
+    }
+
+    public async Task<NativePersonnelExcelImportPreview> PreviewWorkbookAsync(
+        NativeIdentity actor, NativePersonnelExcelWorkbookSelection selection,
+        CancellationToken ct = default)
+    {
+        ValidateNativeWorkbookSelection(selection);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new ExcelPersonnelImportService(database)
+            .PreviewAsync(new JsonObject
+            {
+                ["workbookToken"] = selection.WorkbookToken
+            }, actor.UserId, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PreviewExcelImport(native)");
+        string token = RequiredText(data, "previewToken");
+        long accepted = RequiredNumber(data, "newCount");
+        long issuesCount = RequiredNumber(data, "issueCount");
+        long customs = RequiredNumber(data, "customUpdateCount");
+        long similar = RequiredNumber(data, "similarNameCount");
+        JsonArray acceptedItems = RequiredArray(data, "acceptedPreview");
+        JsonArray issues = RequiredArray(data, "issues");
+        JsonArray newSites = RequiredArray(data, "newSites");
+        if (token is not { Length: 64 } ||
+            token.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            !RequiredBoolean(data, "requiresExplicitConfirmation") ||
+            customs != 0 || accepted is < 0 or > 500 ||
+            issuesCount is < 0 or > 500 ||
+            accepted + issuesCount != selection.RowCount ||
+            similar is < 0 or > 10000 ||
+            acceptedItems.Count != Math.Min(accepted, 100) ||
+            issues.Count != issuesCount ||
+            newSites.Count > 500)
+            throw new InvalidDataException("Canonical XLSX preview inconsistent.");
+
+        var rows = acceptedItems.Select(node =>
+        {
+            var item = RequireObject(node);
+            return new NativePersonnelExcelCandidate(
+                RequiredText(item, "worksheet"),
+                checked((int)RequiredNumber(item, "row")),
+                RequiredText(item, "name"),
+                RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "siteName"));
+        }).ToArray();
+        var rejected = issues.Select(node =>
+        {
+            var item = RequireObject(node);
+            return new NativePersonnelExcelIssue(
+                RequiredText(item, "worksheet"),
+                checked((int)RequiredNumber(item, "row")),
+                RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "name"),
+                RequiredText(item, "siteName"),
+                RequiredText(item, "reason"));
+        }).ToArray();
+        var proposed = newSites.Select(node =>
+        {
+            var item = RequireObject(node);
+            return new NativePersonnelExcelSite(
+                RequiredText(item, "name"),
+                checked((int)RequiredNumber(item, "personCount")));
+        }).ToArray();
+        var snapshot = new NativePersonnelExcelImportPreview(
+            selection.FileName, selection.WorkbookToken, token,
+            selection.RowCount, checked((int)accepted), checked((int)issuesCount),
+            checked((int)customs), checked((int)similar),
+            rows, rejected, proposed, true);
+        return snapshot;
+    }
+
+    public async Task<NativePersonnelExcelImportReceipt> CommitWorkbookAsync(
+        NativeIdentity actor, NativePersonnelExcelImportPreview preview,
+        string operationId, CancellationToken ct = default)
+    {
+        if (preview is null || !preview.RequiresExplicitConfirmation ||
+            preview.PreviewToken is not { Length: 64 } ||
+            preview.PreviewToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            preview.NewCount is < 0 or > 500 ||
+            preview.IssueCount is < 0 or > 500 ||
+            preview.NewCount + preview.IssueCount != preview.TotalCount ||
+            preview.CustomUpdateCount != 0 ||
+            !Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Unconfirmed or changed original Excel import.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
+        // Single original transaction: immutable new PersonIds and assignments,
+        // audited new sites, preserved rejected-row evidence and no updates.
+        BridgeResponse response = await new ExcelPersonnelImportService(database)
+            .CommitAsync(new JsonObject
+            {
+                ["previewToken"] = preview.PreviewToken,
+                ["operationId"] = operationId,
+                ["approveCustomUpdates"] = false
+            }, actor.UserId, actor.Username, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "CommitExcelImport(native)");
+        long added = RequiredNumber(data, "createdCount");
+        long rejected = RequiredNumber(data, "rejectedCount");
+        long custom = RequiredNumber(data, "customUpdatedCount");
+        long sites = RequiredNumber(data, "createdSitesCount");
+        string batchId = RequiredText(data, "importBatchId");
+        string committedAt = RequiredText(data, "committedAtUtc");
+        if (batchId is not { Length: >= 5 and <= 128 } ||
+            !batchId.StartsWith("IMP-", StringComparison.Ordinal) ||
+            added != preview.NewCount ||
+            rejected != preview.IssueCount ||
+            custom != 0 || sites != preview.NewSites.Count ||
+            !DateTimeOffset.TryParse(committedAt, CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out _))
+            throw new InvalidDataException("Canonical import receipt changed.");
+        return new NativePersonnelExcelImportReceipt(batchId,
+            checked((int)added), checked((int)rejected),
+            checked((int)sites), checked((int)custom), committedAt);
+    }
+
+    private static void ValidateNativeWorkbookSelection(
+        NativePersonnelExcelWorkbookSelection selection)
+    {
+        if (selection is null ||
+            selection.FileName is not { Length: >= 6 and <= 180 } ||
+            !selection.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            selection.WorkbookToken is not { Length: 64 } ||
+            selection.WorkbookToken.Any(ch => !char.IsAsciiHexDigit(ch)) ||
+            selection.RowCount is < 1 or > 500 ||
+            selection.SelectedWorksheets is null ||
+            selection.SelectedWorksheets.Count is < 1 or > 50)
+            throw new InvalidDataException("Invalid signed XLSX workbook staging.");
     }
 
     // Phase 8: one ORIGINAL transactional multi-person internal transfer.
