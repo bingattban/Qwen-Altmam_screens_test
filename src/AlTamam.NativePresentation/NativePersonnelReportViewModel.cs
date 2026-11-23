@@ -23,6 +23,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     private string _error = "";
     private NativePersonnelReportSnapshot? _report;
     private NativeIndividualReportPages? _pages;
+    private string _dateFromDraft = "";
+    private string _dateToDraft = "";
 
     public NativePersonnelReportViewModel()
     {
@@ -39,6 +41,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         PreviousRevisionsCommand = new NativeCommand(_ => _ = PreviousRevisionsAsync(), _ => CanPreviousRevisions);
         NextAuditCommand = new NativeCommand(_ => _ = NextAuditAsync(), _ => CanNextAudit);
         PreviousAuditCommand = new NativeCommand(_ => _ = PreviousAuditAsync(), _ => CanPreviousAudit);
+        ApplyDateFiltersCommand = new NativeCommand(_ => _ = ApplyDateFiltersAsync(), _ => CanApplyDateFilters);
+        ClearDateFiltersCommand = new NativeCommand(_ => _ = ClearDateFiltersAsync(), _ => CanApplyDateFilters);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -46,6 +50,31 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public bool IsLoading => _busy;
     public string ErrorMessage => _error;
     public NativePersonnelReportSnapshot? Report => _report;
+    public string DateFromDraft
+    {
+        get => _dateFromDraft;
+        set
+        {
+            if (_dateFromDraft == value) return;
+            _dateFromDraft = value ?? "";
+            Changed();
+        }
+    }
+    public string DateToDraft
+    {
+        get => _dateToDraft;
+        set
+        {
+            if (_dateToDraft == value) return;
+            _dateToDraft = value ?? "";
+            Changed();
+        }
+    }
+    // Always describes the SOURCE-VERIFIED displayed result, not unsubmitted inputs.
+    public string AppliedDateRangeLabel => _report is null
+        ? "لا توجد نتائج تاريخية معتمدة حاليا."
+        : $"الفترة المطبقة: {(_report.DateFrom.Length == 0 ? "من البداية" : _report.DateFrom)} — {(_report.DateTo.Length == 0 ? "حتى النهاية" : _report.DateTo)}";
+    public bool CanApplyDateFilters => CanRead && _pages is not null;
     public string AttendancePageLabel => _report is null ? "—" :
         $"صفحة التحضير {_report.AttendancePage} — إجمالي {_report.AttendanceTotal}";
     public string MovementsPageLabel => _report is null ? "—" :
@@ -89,6 +118,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
     public ICommand PreviousRevisionsCommand { get; }
     public ICommand NextAuditCommand { get; }
     public ICommand PreviousAuditCommand { get; }
+    public ICommand ApplyDateFiltersCommand { get; }
+    public ICommand ClearDateFiltersCommand { get; }
 
     private bool CanRead => _open && _backend is not null &&
         _actor is { } actor && _liveActor?.Invoke() == actor &&
@@ -168,6 +199,47 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         }
     }
 
+    private static bool ValidDateRange(string from, string to)
+    {
+        static bool IsIsoDate(string text) => DateOnly.TryParseExact(
+            text, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out _);
+        return (from.Length == 0 || IsIsoDate(from)) &&
+               (to.Length == 0 || IsIsoDate(to)) &&
+               (from.Length == 0 || to.Length == 0 ||
+                string.CompareOrdinal(from, to) <= 0);
+    }
+
+    public async Task ApplyDateFiltersAsync(CancellationToken ct = default)
+    {
+        if (!CanRead || _pages is not { } pages)
+        {
+            Close();
+            return;
+        }
+        string from = _dateFromDraft;
+        string to = _dateToDraft;
+        if (!ValidDateRange(from, to))
+        {
+            _error = "أدخل التاريخ بصيغة YYYY-MM-DD، ويجب ألا يتجاوز تاريخ البداية تاريخ النهاية.";
+            Changed();
+            return;
+        }
+        // An application of a range is one new original service query:
+        // all six independent history streams reset to first page.
+        _pages = new NativeIndividualReportPages(
+            pages.PersonId, DateFrom: from, DateTo: to);
+        await LoadAsync(ct);
+    }
+
+    public Task ClearDateFiltersAsync(CancellationToken ct = default)
+    {
+        _dateFromDraft = "";
+        _dateToDraft = "";
+        Changed();
+        return ApplyDateFiltersAsync(ct);
+    }
+
     public Task NextAttendanceAsync(CancellationToken ct = default) =>
         ChangePageAsync(CanNextAttendance, "attendance", +1, ct);
     public Task PreviousAttendanceAsync(CancellationToken ct = default) =>
@@ -217,6 +289,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         _actor = null;
         _sourceRow = null;
         _pages = null;
+        _dateFromDraft = "";
+        _dateToDraft = "";
         _open = false;
         _busy = false;
         _report = null;
@@ -237,6 +311,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             report.SitePage != requested.SitePage ||
             report.RevisionPage != requested.RevisionPage ||
             report.AuditPage != requested.AuditPage ||
+            report.DateFrom != requested.DateFrom ||
+            report.DateTo != requested.DateTo ||
             report.AttendanceTotal < 0 || report.MovementTotal < 0 || report.IdentityTotal < 0 ||
             report.SiteTotal < 0 || report.RevisionTotal < 0 ||
             report.AuditTotal < 0 ||
@@ -307,6 +383,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         foreach (string name in new[]
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage), nameof(Report),
+            nameof(DateFromDraft), nameof(DateToDraft),
+            nameof(AppliedDateRangeLabel), nameof(CanApplyDateFilters),
             nameof(AttendancePageLabel), nameof(MovementsPageLabel),
             nameof(IdentitiesPageLabel), nameof(SitesPageLabel),
             nameof(RevisionsPageLabel), nameof(AuditPageLabel),
@@ -325,7 +403,8 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             NextIdentitiesCommand, PreviousIdentitiesCommand,
             NextSitesCommand, PreviousSitesCommand,
             NextRevisionsCommand, PreviousRevisionsCommand,
-            NextAuditCommand, PreviousAuditCommand
+            NextAuditCommand, PreviousAuditCommand,
+            ApplyDateFiltersCommand, ClearDateFiltersCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
