@@ -254,7 +254,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
                 x.Before is not { Length: >= 1 and <= 180 } ||
                 x.After is not { Length: >= 1 and <= 180 } ||
                 x.ExecutedAtUtc is not { Length: >= 10 } ||
-                x.ExecutorSnapshot is null)
+                x.ExecutorSnapshot is null))
             throw new InvalidDataException("Incomplete or forged canonical personnel report.");
     }
 
