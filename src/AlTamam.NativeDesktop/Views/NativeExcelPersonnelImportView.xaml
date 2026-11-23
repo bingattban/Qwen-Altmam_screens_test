@@ -1,0 +1,171 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeExcelPersonnelImportView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" FontFamily="Segoe UI">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ImportVisible"/>
+        <Style x:Key="ImportButton" TargetType="Button">
+            <Setter Property="Background" Value="#0D9488"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid Background="#D50F172A"
+          Visibility="{Binding IsOpen, Converter={StaticResource ImportVisible}}">
+        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+                CornerRadius="9" Padding="16" Width="950" MaxHeight="780"
+                Margin="12" VerticalAlignment="Center"
+                HorizontalAlignment="Center">
+            <DockPanel LastChildFill="True">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,9">
+                    <Button DockPanel.Dock="Left" Content="إغلاق"
+                            Style="{StaticResource ImportButton}"
+                            Command="{Binding CloseCommand}"
+                            AutomationProperties.Name="إغلاق استيراد Excel"/>
+                    <TextBlock Text="استيراد كشوف الأفراد من Excel — إضافة جديدة فقط"
+                               Foreground="#0F2942" FontSize="19"
+                               FontWeight="Bold" VerticalAlignment="Center"/>
+                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <Border Background="#F8FAFC" BorderBrush="#CBD5E1"
+                                BorderThickness="1" CornerRadius="6" Padding="10">
+                            <StackPanel>
+                                <TextBlock Text="ملف XLSX محلي حتى 160 كيلوبايت. يعرض الإصدار التجريبي جميع الإضافات الجديدة حتى 100 فرد في الدفعة. أي رقم (ع) موجود مسبقا أو مكرر في الملف يُرفض ولا يُدمج أو يُستبدل، ويُحفظ سبب الرفض. لا تعديل لأسماء أو أعمدة أو تحضير أفراد موجودين."
+                                           Foreground="#334155" TextWrapping="Wrap"/>
+                                <Button Content="اختيار كشف Excel ومعاينته دون حفظ"
+                                        IsEnabled="{Binding CanSelect}"
+                                        Click="PickWorkbook_Click"
+                                        Style="{StaticResource ImportButton}"
+                                        AutomationProperties.Name="اختيار ملف XLSX محلي للتحليل والمعاينة الآمنة"/>
+                            </StackPanel>
+                        </Border>
+                        <ProgressBar Height="4" IsIndeterminate="True"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource ImportVisible}}"/>
+                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                                   TextWrapping="Wrap" Margin="0,8,0,8"
+                                   FontWeight="SemiBold"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <Border Visibility="{Binding HasReview, Converter={StaticResource ImportVisible}}"
+                                Background="#FFFFFF" Margin="0,6,0,6">
+                            <StackPanel>
+                                <TextBlock Text="{Binding ReviewSummary}"
+                                           Foreground="#0F2942" FontWeight="Bold"
+                                           TextWrapping="Wrap" Margin="0,0,0,7"/>
+                                <TextBlock Text="الأفراد الجدد المقبولون — يعرض الكشف كل الأفراد الذين ستُنشأ لهم هويات جديدة"
+                                           Foreground="#0F2942" FontWeight="SemiBold"
+                                           Margin="0,0,0,4"/>
+                                <DataGrid ItemsSource="{Binding Review.NewPeople}"
+                                          AutoGenerateColumns="False" IsReadOnly="True"
+                                          CanUserAddRows="False" CanUserDeleteRows="False"
+                                          HeadersVisibility="Column" Height="180"
+                                          AlternatingRowBackground="#F8FAFC">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="الورقة" Binding="{Binding Worksheet}" Width="*"/>
+                                        <DataGridTextColumn Header="الصف" Binding="{Binding Row}" Width="55"/>
+                                        <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="2*"/>
+                                        <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="*"/>
+                                        <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="الصفوف المرفوضة وأسباب الاستبعاد (لا تُضاف)"
+                                           Foreground="#9A3412" FontWeight="SemiBold"
+                                           Margin="0,9,0,5"/>
+                                <DataGrid ItemsSource="{Binding Review.Issues}"
+                                          AutoGenerateColumns="False" IsReadOnly="True"
+                                          CanUserAddRows="False" CanUserDeleteRows="False"
+                                          HeadersVisibility="Column" MaxHeight="140"
+                                          AlternatingRowBackground="#FFFBEB">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="الورقة" Binding="{Binding Worksheet}" Width="*"/>
+                                        <DataGridTextColumn Header="الصف" Binding="{Binding Row}" Width="55"/>
+                                        <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="2*"/>
+                                        <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="*"/>
+                                        <DataGridTextColumn Header="سبب الرفض" Binding="{Binding Reason}" Width="3*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="مواقع جديدة سيُنشئها الاستيراد فقط بعد الاعتماد"
+                                           Foreground="#0F2942" FontWeight="SemiBold"
+                                           Margin="0,9,0,5"/>
+                                <ItemsControl ItemsSource="{Binding Review.NewSites}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                <TextBlock Text=" — أفراد جدد: "/>
+                                                <TextBlock Text="{Binding PersonCount}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="أسماء مشابهة لأفراد موجودين: تنبيه فقط، لا تسمح بالمطابقة أو الدمج التلقائي"
+                                           Foreground="#9A3412" FontWeight="SemiBold"
+                                           Margin="0,9,0,4" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding Review.Collisions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,3">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text=" — "/>
+                                                    <TextBlock Text="{Binding ServiceNumberA}"/>
+                                                </StackPanel>
+                                                <ItemsControl ItemsSource="{Binding Matches}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal" Margin="10,1">
+                                                                <TextBlock Text="سجل موجود: " Foreground="#9A3412"/>
+                                                                <TextBlock Text="{Binding Name}"/>
+                                                                <TextBlock Text=" — "/>
+                                                                <TextBlock Text="{Binding ServiceNumberA}"/>
+                                                                <TextBlock Text=" — "/>
+                                                                <TextBlock Text="{Binding PersonId}" Foreground="#64748B"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <CheckBox IsChecked="{Binding ReviewedPeopleAndIssues, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanSelect}" Margin="0,12,0,4"
+                                          AutomationProperties.Name="أقر بمراجعة الأفراد والصفوف المرفوضة">
+                                    <TextBlock Text="راجعت أسماء وأرقام جميع الأفراد الجدد وأسباب رفض الصفوف الأخرى، وأوافق على إضافة الأفراد الجدد فقط."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding ApproveCreatingSites, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanSelect}" Margin="0,4"
+                                          AutomationProperties.Name="أوافق على إنشاء المواقع المبينة في المعاينة">
+                                    <TextBlock Text="أوافق صراحة على إنشاء المواقع الجديدة الموضحة أعلاه داخل معاملة الاستيراد (إذا وُجدت)."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding AcknowledgeSimilarNames, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanSelect}" Margin="0,4"
+                                          AutomationProperties.Name="راجعت تشابه الأسماء دون دمج هويات">
+                                    <TextBlock Text="راجعت الأسماء المشابهة الظاهرة أعلاه، وأفهم أن التشابه لا يعني الشخص نفسه ولا يسمح بأي دمج تلقائي (إذا وُجد تشابه)."
+                                               TextWrapping="Wrap"/>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+                        <Button Content="اعتماد إضافة الأفراد الجدد بعد المراجعة"
+                                Command="{Binding CommitCommand}"
+                                Style="{StaticResource ImportButton}"
+                                AutomationProperties.Name="تنفيذ إضافة Excel المعتمدة مرة واحدة فقط"/>
+                        <TextBlock Text="{Binding ReceiptSummary}"
+                                   Foreground="#0D9488" FontWeight="Bold"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <TextBlock Text="إذا فقدنا استجابة الحفظ، راجع دفعات الاستيراد والسجل الأصلي قبل أي محاولة أخرى. لا تُكرر الدفعة تلقائيا. ملفات أكبر من حدود المعاينة التجريبية تستورد من الواجهة الأصلية."
+                                   Foreground="#64748B" TextWrapping="Wrap" FontSize="12"
+                                   Margin="0,8,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
