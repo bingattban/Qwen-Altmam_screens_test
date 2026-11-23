@@ -619,3 +619,68 @@ service, which requires its own business-rule preview/commit review and
 test-first migration. Customer packages still use the existing DesktopHost
 WebView2 entrypoint. Native UI full route parity and clean-machine/DPI
 manual approval have not been certified.
+
+
+## Phase 8 — slice 7: audited native archived-person return (explicit SAME identity)
+
+The native WPF personnel directory exposes **إعادة الفرد المؤرشف للخدمة**
+only for one CURRENT SQLCipher roster row whose canonical state is
+externally transferred (2), separated (3) or force-archived (4) with
+ActiveFlag=false, RowVersion>=1 and a manager-only exact session nonce.
+It NEVER activates a current active individual. The archived row's
+immutable `PersonId`, name, service number, last-known organization
+status and revision are frozen; selecting a different UI row cannot
+change the intended identity. An explicit destination site is required,
+and the original service checks that the destination remains active.
+
+The WPF dialog calls **only** the original
+`ArchivedReturnService.PreviewAsync` and shows the complete original
+candidate list (up to 50) returned for the archived name and service
+number, including each person's previous site, exit category and date.
+The preview must contain exactly the selected person's existing
+PersonId, name, number, version, organizational status and both
+normalized name/number match indicators. No local or server-side guess
+from a matching NAME alone is sufficient. A *separate unchecked
+checkbox* requires the operator to certify this is the SAME person
+before the confirmation button is enabled. A changed destination
+invalidates the preview and clears the attestation.
+
+Only that human-confirmed, one-time action calls original
+`ArchivedReturnService.CommitReturnAsync` with the original
+actor-bound preview token, the **same** PersonId, explicit `decision:
+"same"` and a unique operationId. The canonical service revalidates
+archived row version/status, historical assignment closure, future-day
+continuity, day/month locks, conflicting active/archived numbers,
+site activity, overlapping movements/assignments, and token ownership.
+Its SQLCipher transaction appends a dated RETURN movement and audit
+record, opens the new assignment and reuses the original PersonId. Old
+attendance, identity and exit history are preserved; no duplicate
+person or schema is created.
+
+Both previews and writes revalidate the live General/Ordinary
+Administration SQLCipher principal and session nonce before and after
+the original service. A logout, route change or changed page invalidates
+pending previews and hides stale responses. A missing or uncertain
+write receipt does not auto-resend, and that same authenticated session
+cannot reopen the workflow; operators must first examine the roster,
+movement archive and operations audit.
+
+Eight C# xUnit test-first cases cover role/session denial; archived
+selection; explicit destination; nonmutating preview; multiple
+candidate disclosure and same-person checkbox; duplicate archived number refusal; forged row revision;
+stale responses; one successful write; and uncertain-response
+no-retry. A dedicated negative-path source/XAML contract with an
+immediately checked error status is added to BOTH Windows Core and
+Windows Release. The nine Release shards, WPF/WebView2 E2E, two x86
+and two x64 customer packages, real four-package acceptance and
+independent SHA-256 provenance remain merge prerequisites.
+
+**Production limitations:** This is ONE PERSON per action, NOT an
+automatic resurrection of archived accounts or historical attendance
+and NOT the identity correction/new-person feature. Full account
+management, bulk moves, site/status CRUD, import/export,
+reports/settings and 69-route parity are separate work. The shipped
+customer installers and portable binaries continue using the original
+DesktopHost/WebView2. Native WPF is NOT yet production-approved;
+independent physical 100/125/150% DPI, accessibility, keyboard,
+clean-machine and authenticated return UAT remain required.

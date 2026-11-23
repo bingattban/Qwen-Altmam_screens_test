@@ -83,6 +83,11 @@
                         Command="{Binding OpenInternalTransferCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="نقل الفرد المحدد داخليا بعد اختيار الموقع المصدر"/>
+                <Button Content="إعادة الفرد المؤرشف للخدمة"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenArchivedReturnCommand}"
+                        CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
+                        AutomationProperties.Name="طلب إعادة نفس الفرد المؤرشف مع معاينة الهوية والتأكيد"/>
                 <Button Content="فصل الفرد المحدد"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenSeparationCommand}"
@@ -202,7 +207,7 @@
                             </ItemsControl>
                             <TextBlock Margin="0,12,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ الاستعادة والتنقلات الجماعية ستُنقل لاحقا."/>
+                                       Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ التنقلات الجماعية ستُنقل لاحقا."/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -223,5 +228,8 @@
         <views:NativeSeparationArchiveView Grid.RowSpan="5"
                                            DataContext="{Binding SeparationArchive}"
                                            Panel.ZIndex="170"/>
+        <views:NativeArchivedReturnView Grid.RowSpan="5"
+                                        DataContext="{Binding Return}"
+                                        Panel.ZIndex="180"/>
     </Grid>
 </UserControl>
