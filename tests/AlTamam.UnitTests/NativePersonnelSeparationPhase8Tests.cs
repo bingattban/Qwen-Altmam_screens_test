@@ -26,6 +26,14 @@ public sealed class NativePersonnelSeparationPhase8Tests
         return vm;
     }
 
+    private static async Task WaitForApprovalAsync(NativePersonnelSeparationViewModel vm)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+        while (!vm.CanConfirm && DateTimeOffset.UtcNow < deadline)
+            await Task.Delay(75);
+        Assert.True(vm.CanConfirm);
+    }
+
     [Fact]
     public async Task Supervisor_missing_session_and_unselected_source_are_denied()
     {
@@ -84,7 +92,7 @@ public sealed class NativePersonnelSeparationPhase8Tests
         Assert.False(vm.CanConfirm);
         await vm.ConfirmAsync();
         Assert.Equal(0, backend.Writes);
-        await Task.Delay(TimeSpan.FromMilliseconds(5200));
+        await WaitForApprovalAsync(vm);
         Assert.True(vm.CanConfirm);
         await vm.ConfirmAsync();
         Assert.Equal(1, backend.Writes);
@@ -149,7 +157,7 @@ public sealed class NativePersonnelSeparationPhase8Tests
         await vm.PreviewAsync();
         await vm.ConfirmAsync();
         Assert.Equal(0, backend.Writes);
-        await Task.Delay(TimeSpan.FromMilliseconds(5200));
+        await WaitForApprovalAsync(vm);
         Assert.True(vm.CanConfirm);
         await vm.ConfirmAsync();
         Assert.Equal(1, backend.Writes);
