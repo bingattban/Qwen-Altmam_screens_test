@@ -10,6 +10,11 @@ public interface INativeImportOutcomeHistoryBackend
         NativeIdentity actor, CancellationToken ct = default);
     Task<NativeImportBatchDetail> ReadBatchAsync(
         NativeIdentity actor, string batchId, CancellationToken ct = default);
+    // Optional backward-compatible native export. Existing read-only test
+    // backends and callers must fail closed instead of silently creating files.
+    Task<NativeImportIssuesExportReceipt> ExportIssuesAsync(
+        NativeIdentity actor, string batchId, CancellationToken ct = default) =>
+        throw new NotSupportedException("Original saved import issue export unavailable.");
 }
 
 public sealed record NativeImportBatchRow(
@@ -21,3 +26,8 @@ public sealed record NativeImportBatchIssue(
 
 public sealed record NativeImportBatchDetail(
     NativeImportBatchRow Batch, IReadOnlyList<NativeImportBatchIssue> Issues);
+
+/// <summary>Original verified XLSX receipt. File paths are backend output only.</summary>
+public sealed record NativeImportIssuesExportReceipt(
+    string ImportBatchId, string FileName, string FilePath,
+    int IssueCount, string Format);

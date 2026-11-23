@@ -87,6 +87,43 @@ public sealed class NativeSqlCipherDashboardReader(
         return new NativeImportBatchDetail(batch, issues);
     }
 
+    // Phase 8 slice 16: ONLY the original owner-scoped, non-overwriting
+    // rejected-row XLSX writer with preconfigured and validated output folder.
+    // The UI never supplies any filesystem path or report filename.
+    public async Task<NativeImportIssuesExportReceipt> ExportIssuesAsync(
+        NativeIdentity actor, string batchId, CancellationToken ct = default)
+    {
+        if (batchId is not { Length: >= 5 and <= 128 } ||
+            !batchId.StartsWith("IMP-", StringComparison.Ordinal) ||
+            batchId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid import issue export batch.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new ExcelImportOutcomeService(database)
+            .ExportIssuesAsync(new JsonObject { ["importBatchId"] = batchId },
+                actor.UserId, ct).ConfigureAwait(false);
+        // If the session expired after the file was written, the client receives
+        // no success receipt and must treat the result as uncertain.
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject original = RequiredObject(response, "ExcelImportIssuesExport(native)");
+        var receipt = new NativeImportIssuesExportReceipt(
+            RequiredText(original, "importBatchId"),
+            RequiredText(original, "fileName"),
+            RequiredText(original, "filePath"),
+            checked((int)RequiredNumber(original, "issueCount")),
+            RequiredText(original, "format"));
+        if (receipt.ImportBatchId != batchId ||
+            receipt.IssueCount is < 1 or > 500 || receipt.Format != "xlsx" ||
+            receipt.FileName is not { Length: >= 6 and <= 180 } ||
+            !receipt.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            receipt.FileName.Any(char.IsControl) ||
+            receipt.FilePath is not { Length: >= 8 and <= 2048 } ||
+            !Path.IsPathFullyQualified(receipt.FilePath) ||
+            !string.Equals(Path.GetFileName(receipt.FilePath), receipt.FileName,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Canonical issues export returned forged path or count.");
+        return receipt;
+    }
+
     private static NativeImportBatchRow ParseImportBatch(JsonObject data)
     {
         var row = new NativeImportBatchRow(

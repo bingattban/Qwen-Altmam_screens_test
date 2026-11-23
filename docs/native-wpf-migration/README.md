@@ -1246,3 +1246,54 @@ Next slice: expose the original `ExcelImportOutcomeService.ExportIssuesAsync`
 only behind an explicit audited export action, with verified local output
 directory and no retry after uncertain file-write results. Then continue
 native screen/69-route parity before switching production hosts.
+
+
+## Phase 8 — slice 16: export committed Excel rejection evidence as XLSX
+
+This increment completes the next route after slice 15 without replacing any
+legacy production screen. The existing Arabic RTL WPF **سجل دفعات استيراد Excel**
+modal displays a new explicit **تصدير الصفوف المرفوضة إلى Excel XLSX** action
+only inside the reviewed details of a committed import batch owned by the
+currently authenticated manager. A separate unchecked acknowledgement of
+the rejected evidence is mandatory. There is no automatic file generation
+while browsing the history, selecting a row, or opening details.
+
+The native MVVM sends **only the verified original batch identifier**,
+never a chosen report filename, directory or workbook body, through
+`INativeImportOutcomeHistoryBackend.ExportIssuesAsync`. Its SQLCipher adapter
+checks the live authenticated role/session before and after the operation
+and calls ONLY the already-existing
+`ExcelImportOutcomeService.ExportIssuesAsync`. That service independently
+verifies `CreatedByUserId=$actor AND Status='COMMITTED'`, loads the actual
+persisted rejected rows, and uses the configured and validated output
+directory from settings. The canonical XLSX writer uses inline strings to
+avoid formula injection, a non-overwriting new .part file, verified flush,
+and a final atomic move. The original 500-name import limit and existing
+person/attendance data are unchanged.
+
+The returned receipt is accepted only when the exact selected batch,
+rejected-row count, XLSX format, and an absolute output path with a matching
+filename agree. A missing, late, cancelled, mismatched or failed response
+is treated as **uncertain**, never retried automatically; the same manager
+session must inspect the configured report directory before any new export
+attempt. Closing, refresh, navigation, or logout revoke any in-progress
+acknowledgement and stale UI result. A session that became uncertain
+cannot silently retry merely by reopening the native modal. Output files
+are not uploaded or placed inside GitHub.
+
+The slice retains the current visual treatment and RTL layout. Seven C#
+xUnit regressions were committed ahead of UI integration for authorization,
+no export-on-read, mandatory explicit approval, no empty report,
+exactly-one invocation, mismatched receipt, logout late results and
+lost-response no replay. A dedicated fail-closed structural guard runs in
+**both** Windows Core and Windows Release, on top of the full native and
+original SQLCipher tests. Before merge: both workflows must be green for
+the **exact PR head**, with all nine disjoint Release test shards and real
+WPF/WebView2 E2E before the x86/x64 Portable and Installer packaging,
+then all four packaged acceptance jobs and independent SHA-256 audit.
+The separate clean-machine DPI 100/125/150%, keyboard and accessibility
+manual UAT is still required before switching the customer DesktopHost.
+
+**Next:** continue mapping original remaining routes and screen behaviors
+into native C#/WPF in small test-first increments. Do not switch the
+production entry point until all 69 routes and manual UAT are satisfied.
