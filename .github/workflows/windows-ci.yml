@@ -113,6 +113,7 @@ jobs:
           python build/test-native-phase7-monthly-roster-contract.py
           python build/test-native-phase8-personnel-directory-contract.py
           python build/test-native-phase8-personnel-write-contract.py
+          python build/test-native-phase8-personnel-movement-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 7 archived monthly SQLCipher / session contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
