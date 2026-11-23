@@ -735,3 +735,69 @@ ship the ORIGINAL DesktopHost/WebView2 executable. Manual Windows
 clean-machine, keyboard/accessibility and DPI 100/125/150% acceptance
 and complete native 69-route parity remain required before any native
 package switch.
+
+
+## Phase 8 — slice 9: native attendance-status catalogue (create, edit, deactivate)
+
+An Arabic RTL WPF **إدارة حالات التحضير** overlay is attached to the
+authenticated administration page. The status list delegates **only** to the
+original `BridgeSharedServices.ListActiveStatusesAsync` and shows canonical
+`StatusId`, name, symbol, `#RRGGBB` color, `RowVersion` and the canonical
+count used TODAY. It does not invent an inactive-status report or copy the
+historical attendance definitions into native storage.
+
+All three actions are explicitly reviewed locally before any write:
+**Create** requires a 2–75-character name, a 1–5-character symbol and a
+6-hex-digit color; a distinct confirmation calls the original
+`AdminConfigurationService.CreateStatusAsync` with one operationId.
+**Update** freezes the actual selected live row's immutable StatusId and
+base revision; changes to name, symbol or color cancel a prior review;
+confirmation calls original `UpdateStatusAsync` with
+`expectedRevision`. The SQLCipher service independently rejects duplicate
+normalized name/symbol, stale row, and same-day historical name-interval
+overlaps and appends a dated snapshot/audit event.
+
+**Deactivate** is logical, not destructive: only a live selected active
+status can be reviewed; the summary includes today's canonical usage count.
+An additional **unchecked checkbox** certifies the operator understands
+the action removes the status from future options but does not delete
+past AttendanceRecords or immutable snapshots. Confirmation calls only
+original `AdminConfigurationService.DeactivateStatusAsync` with the exact
+StatusId, base revision and operationId. The original SQLCipher transaction
+independently **forbids deactivating the default automatic attendance
+status**, revalidates version and writes the audited deactivation while
+preserving existing historical records. The canonical deactivate receipt
+does not expose a RowVersion; the WPF adapter reports the revision implied
+by the successful version-checked original UPDATE, not a fabricated
+server version field.
+
+No write occurs on opening, typing, reviewing, navigation or changing
+the selected item. Both read and write calls validate the exact live
+General/Ordinary Administration role, SQLCipher session nonce and principal
+before/after the original service. Closing, logout or switching pages
+removes stale data and cancels previews. Uncertain write results, stale
+identity or malformed receipts cause a same-session write lock; **no
+automatic retry** is attempted. The operator must inspect the original
+status catalogue and operations audit first.
+
+Nine C# xUnit test-first cases cover no-session/supervisor refusal,
+canonical active status projections including today's count, nonmutating
+create review, exact original StatusId/version update, explicit logical
+deactivation, changed field invalidation, duplicate/forged rows,
+late response after logout, and forged/uncertain write response no-retry.
+Both Windows Core AND Windows Release execute an immediate fail-closed
+negative-path contract prior to the full C# tests. Merge still requires
+nine deterministic Release shards + real WPF/WebView2 pre-package E2E,
+followed by genuine x86/x64 Portable/Installer packages, four independent
+package acceptance jobs and SHA256 audit **all on the final head SHA**.
+
+**Limitations:** The native pilot deliberately does not expose raw status
+deletion, a second SQLite writer, retroactive edits to any attendance
+history, or protected-default bypass. Inactive status history and any
+advanced status reactivation are separate future work. Remaining native
+features include site retirement and personnel reassignments, batch
+transfers, Excel personnel import, native reports, backups and settings,
+plus remaining 69-route parity and independent Windows keyboard,
+accessibility, clean-machine and 100/125/150% DPI UAT. The **four shipped
+customer variants still use original DesktopHost/WebView2** until this
+full production parity gate is explicitly approved.
