@@ -19,13 +19,117 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8 sites: canonical SQLCipher catalogue and original audit writer.
+    // No native site SQL, deletion, reassignment or role/nonce shortcuts.
+    public async Task<IReadOnlyList<NativeSiteRow>> ReadSitesAsync(
+        NativeIdentity actor, CancellationToken ct = default)
+    {
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await services.ListSitesAsync(
+            includeInactive: true, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var sites = RequiredArray(response, "QuerySites(native)")
+            .Select(node =>
+            {
+                JsonObject row = RequireObject(node);
+                return new NativeSiteRow(
+                    RequiredText(row, "siteId"),
+                    RequiredText(row, "name"),
+                    RequiredBoolean(row, "active"),
+                    RequiredNumber(row, "rowVersion"));
+            }).ToArray();
+        if (sites.Length > 10001 ||
+            sites.Any(row => row.SiteId.Length is < 1 or > 128 ||
+                row.SiteId.Any(char.IsControl) ||
+                row.Name.Length is < 1 or > 200 ||
+                row.Name.Any(char.IsControl) || row.Revision < 1) ||
+            sites.Select(x => x.SiteId).Distinct(StringComparer.Ordinal).Count()
+                != sites.Length)
+            throw new InvalidDataException("Invalid native site catalogue.");
+        return sites;
+    }
+
+    public async Task<NativeSiteMutationReceipt> CreateSiteAsync(
+        NativeIdentity actor, string name, string operationId,
+        CancellationToken ct = default)
+    {
+        ValidateSiteEdit(name, operationId);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new AdminConfigurationService(database)
+            .CreateSiteAsync(new JsonObject
+            {
+                ["name"] = name, ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "CreateSite(native)");
+        string id = RequiredText(data, "siteId");
+        if (id.Length is < 6 or > 128 ||
+            !id.StartsWith("SITE-", StringComparison.Ordinal) ||
+            id == "SITE-UNSPECIFIED" ||
+            RequiredText(data, "name") != name ||
+            RequiredNumber(data, "rowVersion") != 1 ||
+            string.IsNullOrWhiteSpace(RequiredText(data, "auditEventId")))
+            throw new InvalidDataException("Site create receipt mismatch.");
+        return new NativeSiteMutationReceipt(id, name, 1);
+    }
+
+    public async Task<NativeSiteMutationReceipt> RenameSiteAsync(
+        NativeIdentity actor, string siteId, long revision,
+        string name, string operationId, CancellationToken ct = default)
+    {
+        ValidateSiteEdit(name, operationId);
+        if (siteId is not { Length: >= 1 and <= 128 } ||
+            siteId == "SITE-UNSPECIFIED" ||
+            siteId.Any(char.IsControl) || revision < 1)
+            throw new InvalidDataException("Invalid original site version.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var principal = await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new AdminConfigurationService(database)
+            .RenameSiteAsync(new JsonObject
+            {
+                ["siteId"] = siteId, ["expectedRevision"] = revision,
+                ["name"] = name, ["operationId"] = operationId
+            }, principal, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "RenameSite(native)");
+        if (RequiredText(data, "siteId") != siteId ||
+            RequiredNumber(data, "rowVersion") != revision + 1 ||
+            string.IsNullOrWhiteSpace(RequiredText(data, "auditEventId")))
+            throw new InvalidDataException("Site rename receipt mismatch.");
+        return new NativeSiteMutationReceipt(siteId, name, revision + 1);
+    }
+
+    private async Task<BridgePrincipal> ResolveSitesPrincipalAsync(
+        NativeIdentity actor, CancellationToken ct)
+    {
+        var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
+            .ConfigureAwait(false) ??
+            throw new UnauthorizedAccessException("Site manager session expired.");
+        if (principal.UserId != actor.UserId ||
+            principal.Username != actor.Username ||
+            principal.Role != actor.Role ||
+            principal.SessionNonce != actor.SessionNonce)
+            throw new UnauthorizedAccessException("Site manager actor changed.");
+        return principal;
+    }
+
+    private static void ValidateSiteEdit(string name, string operationId)
+    {
+        if (name is not { Length: >= 2 and <= 100 } ||
+            name != name.Trim() || name == "غير محدد" ||
+            name.Any(char.IsControl) ||
+            !Guid.TryParseExact(operationId, "N", out _))
+            throw new InvalidDataException("Invalid site name or operation ID.");
+    }
 
     // Phase 8: archived return reuses the SAME stable PersonId.
     // The original ArchivedReturnService is the only preview/commit writer.
