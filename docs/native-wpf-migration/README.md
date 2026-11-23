@@ -1204,3 +1204,45 @@ accepted/committed atomically, 501 rejected, and a forged truncated 500-row
 preview denied. This change does not relax the separate name-collision hint
 safety gate: when complete collision evidence is unavailable, import is denied
 rather than allowing an unseen approval.
+
+## Phase 8 — slice 15: read-only XLSX import outcomes and rejected-row review
+
+The native Administration window now provides a separate RTL WPF modal
+**سجل دفعات استيراد Excel** after the original, unchanged import action.
+It reads only the existing `ExcelImportOutcomeService.QueryAsync` and the
+original encrypted SQLCipher tables. The canonical service restricts each
+list and detail query to committed import batches whose `CreatedByUserId`
+is the actual server-authenticated user. Consequently, this screen shows
+the most recent 30 batches belonging to the currently signed-in manager;
+it is not a global cross-account audit view. A selected batch displays its
+saved rejected rows and Arabic reasons without reconstructing them from
+the source workbook or from a transient import preview.
+
+The adapter verifies the real manager's SQLCipher session/nonce and role
+before and after each read. It checks canonical batch counts, committed
+status, dates, distinct identifiers and the exact number of saved issues.
+The MVVM requires that selection come from the currently displayed list,
+matches the fetched immutable batch to the selection and fails closed on
+truncated or mismatched evidence. Refresh, navigation, logout, cancellation
+and changes to the active identity invalidate any in-flight list/detail read
+and clear cached personnel/import evidence. No new database schema, ad-hoc
+SQL, export, import-plan replay, or writes are introduced. Existing 500-row
+XLSX import, complete approval preview and historical person integrity
+remain unaffected.
+
+Seven independent test-first xUnit regressions cover anonymous/supervisor
+denial, original owner-scoped list and detail, forged batch mismatches,
+duplicate batches, stale async results after logout and refresh/close
+cancellation. The canonical `ExcelImportOutcomeIntegrationTests` continue
+to exercise the original SQLite owner filter and rejected-row evidence.
+A dedicated negative-path structural guard is required independently by
+**both** Windows Core and Windows Release. The standard nine Release shards,
+real WPF/WebView2 E2E, 32/64-bit Portable+Installer packaging, all four
+package acceptance jobs and SHA-256 audit must pass on the exact PR SHA
+before merge. Manual clean-machine 100/125/150% DPI and keyboard UAT still
+blocks any claim that the experimental WPF shell is production ready.
+
+Next slice: expose the original `ExcelImportOutcomeService.ExportIssuesAsync`
+only behind an explicit audited export action, with verified local output
+directory and no retry after uncertain file-write results. Then continue
+native screen/69-route parity before switching production hosts.
