@@ -201,7 +201,12 @@ public sealed class NativeExcelPersonnelImportPhase8Tests
                 fileName, new string('a', 64), new string('b', 64),
                 count + RejectedRows, count, RejectedRows, 0,
                 NewSites ? [new NativeExcelImportSite("الموقع الأول", 1)] : [],
-                SimilarNames ? 1 : 0, items, issues);
+                SimilarNames ? 1 : 0, items, issues,
+                SimilarNames ?
+                    [new NativeExcelImportCollision("الورقة الأولى", 2,
+                        "محمد سالم باعلي", "01234",
+                        [new NativeExcelImportMatch("PRN-OLD", "محمد سالم باعلي",
+                            "00001", true)])] : []);
         }
         public Task<NativeExcelImportReview> StageAndPreviewAsync(
             NativeIdentity actor, string fileName, byte[] workbook,
