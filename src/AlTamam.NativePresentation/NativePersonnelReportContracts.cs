@@ -15,7 +15,7 @@ public interface INativePersonnelReportReader
 public sealed record NativeIndividualReportPages(
     string PersonId, int AttendancePage = 1, int MovementPage = 1,
     int IdentityPage = 1, int SitePage = 1, int RevisionPage = 1,
-    int AuditPage = 1);
+    int AuditPage = 1, string DateFrom = "", string DateTo = "");
 
 public sealed record NativePersonnelReportStatusTotal(
     string StatusId, string StatusName, long Count);
@@ -95,4 +95,9 @@ public sealed record NativePersonnelReportSnapshot(
     public int AuditPage { get; init; } = 1;
     public bool AuditHasNext { get; init; }
     public IReadOnlyList<NativePersonnelReportAuditRecord> Audit { get; init; } = [];
+
+    // Source-echoed inclusive ISO dates. Empty denotes unbounded search.
+    // Older test fakes are intentionally unfiltered by default.
+    public string DateFrom { get; init; } = "";
+    public string DateTo { get; init; } = "";
 }
