@@ -33,7 +33,8 @@ public sealed class NativeMonthlyHistoryAndAuditPhase9Tests
              new NativePersonnelReportAttendance("2026-10-01", "حاضر",
                 "الموقع التاريخي", "MANUAL", "اسم محفوظ", "900", 1),
              new NativePersonnelReportAttendance("2026-10-02", "حاضر",
-                "الموقع التاريخي", "MANUAL", "اسم محفوظ", "900", 1)])
+                "الموقع التاريخي", "MANUAL", "اسم محفوظ", "900", 1)],
+            [], [])
         {
             SitePage = pages.SitePage, RevisionPage = pages.RevisionPage,
             MonthlyTotals =
@@ -182,10 +183,11 @@ public sealed class NativeMonthlyHistoryAndAuditPhase9Tests
                 "audit-rows" => report with { Audit = [] },
                 "audit-actor" => report with
                 {
-                    Audit = [new NativePersonnelReportAuditRecord(
-                        "اعتماد", null!, "موظف منفذ",
-                        "2026-11-01", "2026-11-01T15:00:00Z",
-                        "حفظ عملية معتمدة", null)]
+                    Audit = Enumerable.Range(1, 100)
+                        .Select(_ => new NativePersonnelReportAuditRecord(
+                            "اعتماد", null!, "موظف منفذ",
+                            "2026-11-01", "2026-11-01T15:00:00Z",
+                            "حفظ عملية معتمدة", null)).ToArray()
                 },
                 "monthly-period" => report with
                 {
