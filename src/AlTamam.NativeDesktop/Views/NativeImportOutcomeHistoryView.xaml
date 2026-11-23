@@ -87,6 +87,30 @@
                         <TextBlock DockPanel.Dock="Top"
                                    Text="{Binding SelectedDetail.Batch.ImportBatchId}"
                                    Foreground="#475569" Margin="2,0,2,5"/>
+                        <StackPanel DockPanel.Dock="Top" Margin="2,0,2,8">
+                            <TextBlock Text="يمكن تصدير الصفوف المرفوضة فقط بصيغة XLSX إلى مجلد التقارير المحدد مسبقا في الإعدادات؛ لا يمكن اختيار مسار بديل أو استبدال ملف موجود."
+                                       Foreground="#475569" TextWrapping="Wrap" Margin="0,3,0,5"/>
+                            <CheckBox IsChecked="{Binding AcknowledgeSavedIssues, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,4,0,5"
+                                      AutomationProperties.Name="أوافق على تصدير أسباب رفض الصفوف المحفوظة">
+                                <TextBlock Text="راجعت الدفعة والصفوف المرفوضة وأوافق صراحة على إنشاء تقرير أخطاء Excel"
+                                           TextWrapping="Wrap"/>
+                            </CheckBox>
+                            <Button Content="تصدير الصفوف المرفوضة إلى Excel XLSX"
+                                    Command="{Binding ExportIssuesCommand}"
+                                    Style="{StaticResource OutcomeButton}"
+                                    HorizontalAlignment="Right"
+                                    AutomationProperties.Name="تصدير تقرير أخطاء دفعة الاستيراد المختارة"/>
+                            <ProgressBar Height="4" IsIndeterminate="True"
+                                         Visibility="{Binding IsExportBusy, Converter={StaticResource OutcomeVisible}}"/>
+                            <TextBlock Text="{Binding ExportError}"
+                                       Foreground="#BE123C" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" Margin="0,4"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="{Binding ExportStateSummary}"
+                                       Foreground="#334155" TextWrapping="Wrap" Margin="0,4"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                        </StackPanel>
                         <DataGrid ItemsSource="{Binding SelectedDetail.Issues}"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
