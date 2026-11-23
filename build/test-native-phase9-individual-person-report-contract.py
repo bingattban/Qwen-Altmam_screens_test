@@ -32,7 +32,7 @@ REQUIRED = {
                  "NativeIndividualReportPages(", "NativePersonnelReportSnapshot(",
                  "NativePersonnelReportAttendance(", "HistoricalNameDisplay",
                  "غير موثق تاريخيا"),
-    "vm": ("CanAccessUsersManagement", "ReferenceEquals",
+    "vm": ("CanAccessUsersManagement", "_isCurrentRow?.Invoke(selected) != true",
            "_liveActor?.Invoke() == actor", "version != _generation || linked.IsCancellationRequested",
            "if (!CanRead) { Close(); return; }", "_pending?.Cancel();",
            "report.PersonId != requested.PersonId", "ValidPageCount(",
