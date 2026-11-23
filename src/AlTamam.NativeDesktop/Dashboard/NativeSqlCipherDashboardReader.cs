@@ -19,13 +19,89 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend
+      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 8: only the original SQLCipher personnel separation archive owns
+    // historical separation queries; every read rechecks exact manager nonce.
+    public async Task<NativeSeparationArchivePage> ReadSeparationsAsync(
+        NativeIdentity actor, NativeSeparationArchiveFilter filter,
+        CancellationToken ct = default)
+    {
+        if (filter is null || filter.Page is < 1 or > 100000 ||
+            filter.PageSize != 50 || filter.SearchTerm is null ||
+            filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl) ||
+            filter.SiteId is null || filter.SiteId.Length > 128 ||
+            filter.SiteId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid separation archive filter.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelSeparationService(database)
+            .ArchiveAsync(new JsonObject
+            {
+                ["page"] = filter.Page,
+                ["pageSize"] = filter.PageSize,
+                ["term"] = filter.SearchTerm,
+                ["siteId"] = filter.SiteId
+            }, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelSeparationArchive");
+        if (RequiredNumber(data, "page") != filter.Page ||
+            RequiredNumber(data, "pageSize") != filter.PageSize)
+            throw new InvalidDataException("Canonical separation archive page mismatch.");
+        var items = RequiredArray(data, "items");
+        if (items.Count > filter.PageSize)
+            throw new InvalidDataException("Unbounded separation archive response.");
+        var rows = items.Select(node =>
+        {
+            JsonObject entry = RequireObject(node);
+            return new NativeSeparationArchiveRow(
+                RequiredText(entry, "movementId"),
+                RequiredText(entry, "personId"),
+                RequiredText(entry, "name"),
+                RequiredText(entry, "serviceNumberA"),
+                RequiredText(entry, "siteName"),
+                RequiredText(entry, "reason"),
+                RequiredText(entry, "date"),
+                RequiredText(entry, "committedAtUtc"),
+                RequiredText(entry, "actorUserId"),
+                RequiredText(entry, "actorDisplay"));
+        }).ToArray();
+        return new NativeSeparationArchivePage(filter,
+            RequiredNumber(data, "total"),
+            RequiredBoolean(data, "hasNext"), rows);
+    }
+
+    public async Task<NativeSeparationArchiveDetail> ReadSeparationDetailsAsync(
+        NativeIdentity actor, string movementId,
+        CancellationToken ct = default)
+    {
+        if (movementId is null || movementId.Length is < 3 or > 128 ||
+            movementId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid separation movement id.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelSeparationService(database)
+            .DetailsAsync(new JsonObject { ["movementId"] = movementId }, ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject data = RequiredObject(response, "PersonnelSeparationDetails");
+        if (RequiredText(data, "movementId") != movementId)
+            throw new InvalidDataException("Canonical separation detail id changed.");
+        return new NativeSeparationArchiveDetail(
+            RequiredText(data, "movementId"),
+            RequiredText(data, "personId"),
+            RequiredText(data, "name"),
+            RequiredText(data, "serviceNumberA"),
+            RequiredText(data, "siteName"),
+            RequiredText(data, "reason"),
+            RequiredText(data, "date"),
+            RequiredText(data, "committedAtUtc"),
+            RequiredText(data, "actorUserId"));
+    }
 
     // Phase 8: original canonical PersonnelSeparationService owns all
     // dismissal previews, five-second approval delays, transactions and audit.
