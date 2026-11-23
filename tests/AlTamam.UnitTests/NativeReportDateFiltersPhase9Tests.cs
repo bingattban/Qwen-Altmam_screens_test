@@ -201,6 +201,22 @@ public sealed class NativeReportDateFiltersPhase9Tests
         Assert.Equal(1, reader.Reads);
     }
 
+    [Fact]
+    public async Task Changing_date_filter_keeps_the_same_immutable_person_identity()
+    {
+        var original = Person();
+        var backend = new FakeReader();
+        var vm = Make(backend, () => Manager,
+            row => ReferenceEquals(row, original));
+        await vm.OpenAsync(original);
+        vm.DateFromDraft = "2026-11-01";
+        await vm.ApplyDateFiltersAsync();
+        Assert.Equal("PER-DATES", backend.Last!.PersonId);
+        Assert.Equal("PER-DATES", vm.Report!.PersonId);
+        Assert.Equal("الاسم الحالي", vm.Report.Name);
+        Assert.Equal(2, backend.Reads);
+    }
+
     private sealed class FakeReader : INativePersonnelReportReader
     {
         public int Reads;
