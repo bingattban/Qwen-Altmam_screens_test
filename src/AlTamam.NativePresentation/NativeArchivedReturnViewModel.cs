@@ -43,9 +43,13 @@ public sealed class NativeArchivedReturnViewModel : INotifyPropertyChanged
     public bool CanEdit => _open && !_busy && !_attempted;
     public bool HasPreview => _preview is not null;
     public bool HasUnverifiedCommit => _uncertain;
+    public bool HasNumberConflict => _preview is { } preview &&
+        preview.Candidates.Any(x =>
+            x.PersonId != preview.Draft.PersonId && x.NumberMatch);
     public bool CanPreview => CanEdit && _backend is not null &&
         CurrentDraft() is not null;
     public bool CanConfirm => CanEdit && _identityConfirmed &&
+        !HasNumberConflict &&
         _preview is not null && _approvedDraft is not null &&
         CurrentDraft() == _approvedDraft &&
         SelectedCandidate(_preview, _approvedDraft) is not null;
@@ -161,6 +165,8 @@ public sealed class NativeArchivedReturnViewModel : INotifyPropertyChanged
             _approvedDraft = draft;
             _preview = result;
             _identityConfirmed = false;
+            if (HasNumberConflict)
+                _error = "يوجد فرد مؤرشف آخر يستخدم الرقم (ع) نفسه. يجب حل تعارض الهوية قبل اعتماد العودة.";
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
         catch
@@ -361,7 +367,8 @@ public sealed class NativeArchivedReturnViewModel : INotifyPropertyChanged
         foreach (string property in new[]
         {
             nameof(IsOpen), nameof(IsBusy), nameof(CanEdit), nameof(HasPreview),
-            nameof(HasUnverifiedCommit), nameof(CanPreview), nameof(CanConfirm),
+            nameof(HasUnverifiedCommit), nameof(HasNumberConflict),
+            nameof(CanPreview), nameof(CanConfirm),
             nameof(Error), nameof(Preview), nameof(Receipt), nameof(PersonName),
             nameof(ServiceNumberA), nameof(PersonStatus), nameof(OriginalPersonId),
             nameof(SelectedDestinationName), nameof(SiteOptions),
