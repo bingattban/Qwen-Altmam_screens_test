@@ -1034,3 +1034,96 @@ keyboard/accessibility and 100/125/150% Windows DPI gate remains
 separate from GitHub CI. The four production customer variants
 continue shipping the original DesktopHost/WebView2 executable
 until complete native 69-route parity and manual approval.
+
+
+## Phase 8 — slice 13: native XLSX import of NEW personnel only
+
+A dedicated Arabic RTL WPF `استيراد كشف الأفراد من Excel` overlay
+uses the EXISTING `ExcelPersonnelImportService`. It never creates
+a second XLSX parser, SQLCipher writer, migration, or separate person
+identity policy. The user explicitly picks a `.xlsx` file through
+the native Windows file chooser; the file can be at most **160 KiB**,
+with a maximum of **500** canonical rows. The default is **the first
+worksheet only**; the user may explicitly opt into all worksheets
+before file selection. Changing that option destroys any previous
+staging/preview in the WPF view. The on-disk path is never sent to the
+backend or written to application data. File bytes are read only
+after a local UI click and are overwritten in memory immediately
+after staging. Only filename and the original actor-bound preview
+tokens survive inside the UI view model.
+
+The canonical `SelectAsync` stages verified XLSX rows and worksheet
+names using the original ZIP/XML parsing and signed workbook token.
+Native `PreviewWorkbookAsync` calls ONLY original
+`ExcelPersonnelImportService.PreviewAsync`; the read-only signed plan
+discloses the count of brand-new people, rejected rows with reason
+and source worksheet/row, proposed new site names and per-site counts,
+and the count of identity/name collision hints. The first 100 accepted
+people are shown by name and number (ع), with the full total stated
+clearly. All rejected rows are listed up to the original 500-row
+limit. No write occurs at file selection, parsing, preview, or when
+the user selects another worksheet mode.
+
+The native pilot intentionally sets `updateExistingCustomFields:false`
+and `approveCustomUpdates:false` in the ORIGINAL service. A
+non-zero `customUpdateCount` in a preview is rejected outright.
+This early slice **only** imports new, unambiguous PersonIds:
+an existing or archived number (ع) cannot be replaced, merged,
+reactivated or updated from XLSX. The original SQLCipher plan performs
+deduplication within the workbook and against all historical
+personnel identities. An ambiguous or archived number remains an
+import issue, never a user-selected identity.
+
+A human review is mandatory before commit. The user must first
+approve the accepted list, then **separately** acknowledge rejected
+rows when present, the automatic creation of any proposed missing
+sites when present, and potential similar-name collisions when
+present. All four controls default unchecked, and `CanConfirm`
+requires the relevant individual approvals and the original
+selected workbook token. `CommitWorkbookAsync` sends just one
+original signed preview token, `approveCustomUpdates:false`, and
+a unique operationId to canonical
+`ExcelPersonnelImportService.CommitAsync`. The service revalidates
+staleness, identity and site state; atomically inserts new people,
+identity history and effective-dated assignments, creates only the
+previewed missing sites, records rejected-row evidence in
+`ImportIssues`, and appends original `PERSONNEL_IMPORT` and
+`SITE_CREATE` audit events. It has the original transaction-level
+idempotency contract. The WPF UI itself **never retries** an
+uncertain write; a lost response, malformed receipt or changed
+manager session locks the same user session and requires manual
+inspection of original committed import batches and personnel.
+
+Both stage, preview and commit validate the exact live SQLCipher
+manager principal and session nonce before/after the original
+services. Logout, route change, expired session or changed file/sheet
+mode clears tokens and precludes sending a stale approval.
+One receipt proves the original batch ID, new person/rejection/site
+counts and commit timestamp. After successful closure the
+administration roster reloads.
+
+**Test-first:** nine new C# native xUnit tests were committed before
+implementation for manager-only access, file size/type, no-write
+staging/preview, independent approval of rejection/new-site/name
+warnings, forged or truncated plans, sheet-mode invalidation,
+logout-late response, unknown write no-retry and disabled existing
+custom-field mutations. The original synthetic SQLCipher
+`ExcelPersonnelImportIntegrationTests` already cover add-only
+audit, immutable identity history, existing-number and archived
+identity refusal, multi-sheet parsing and custom headings, partial
+rejection, staleness, one-time idempotent receipts, and automatic
+audited site creation. A new fail-closed negative-path source/XAML
+check executes in BOTH Windows Core and Windows Release before the
+C# suites. Advanced worksheet index selection and custom column
+heading mapping remain in the original UI until separately moved
+to WPF; the native pilot currently provides first-or-all sheets.
+
+**Release rules unchanged:** BOTH Core/Release green on final head
+SHA; all nine unique Release xUnit shards and real pre-package
+WPF/WebView2 E2E green BEFORE packaging; both x86/x64
+Portable/Installer builds green; FOUR independent packaged acceptance
+jobs green; independent SHA-256 provenance green; only then merge.
+The clean-machine, keyboard/accessibility, DPI 100/125/150% UAT
+is a separate manual gate for production promotion. All four
+customer distributions continue to use original DesktopHost/WebView2
+until complete 69-route WPF parity and explicit acceptance.
