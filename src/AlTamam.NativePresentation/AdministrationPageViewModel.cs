@@ -47,10 +47,23 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             argument => argument is NativePersonnelDisplayRow row && CanOpenProfile(row));
         CloseProfileCommand = new NativeCommand(_ => CloseProfile(), _ => _profileOpen);
         Mutation = new NativePersonnelMutationViewModel();
+        Movement = new NativePersonnelTransferViewModel();
+        OpenInternalTransferCommand = new NativeCommand(
+            argument => {
+                if (argument is NativePersonnelDisplayRow person && CanOpenMovement(person))
+                    Movement.Open(person, _site, _sites, false);
+            },
+            argument => argument is NativePersonnelDisplayRow person && CanOpenMovement(person));
+        OpenExternalTransferCommand = new NativeCommand(
+            argument => {
+                if (argument is NativePersonnelDisplayRow person && CanOpenMovement(person))
+                    Movement.Open(person, _site, _sites, true);
+            },
+            argument => argument is NativePersonnelDisplayRow person && CanOpenMovement(person));
         OpenCreateCommand = new NativeCommand(
             _ => { CloseProfile(); Mutation.OpenCreate(_sites); },
             _ => _connected && !_loading && CanRead && !_profileOpen &&
-                 !Mutation.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen);
         OpenEditCommand = new NativeCommand(
             row => {
                 if (row is NativePersonnelDisplayRow person && CanOpenEdit(person))
@@ -69,7 +82,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public override string StatusMessage => _loading
         ? "جار قراءة سجل الأفراد المعتمد من قاعدة البيانات المشفرة..."
         : _connected
-            ? "سجل الأفراد من SQLCipher. الإضافة وتعديل الهوية يتطلبان معاينة وتأكيداً؛ التنقلات والفصل تأتي في المراحل التالية."
+            ? "سجل الأفراد من SQLCipher. الإضافة والتعديل والنقل تتطلب معاينة وتأكيداً؛ الفصل والاستعادة في المراحل التالية."
             : "إدارة الأفراد لم تتصل بالبيانات بعد أو لا تتوفر صلاحية الإدارة.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
@@ -98,6 +111,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public string ProfileError => _profileError;
     public NativePersonnelProfile? SelectedProfile => _profile;
     public NativePersonnelMutationViewModel Mutation { get; }
+    public NativePersonnelTransferViewModel Movement { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -108,6 +122,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand CloseProfileCommand { get; }
     public ICommand OpenCreateCommand { get; }
     public ICommand OpenEditCommand { get; }
+    public ICommand OpenInternalTransferCommand { get; }
+    public ICommand OpenExternalTransferCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -122,6 +138,14 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                     _boundActor is { } actor && _liveActor?.Invoke() == actor &&
                     _rows.Any(current => ReferenceEquals(current, row)));
             Mutation.CommittedAndClosed += () => _ = RefreshAsync();
+        }
+        if (reader is INativePersonnelMovementBackend movementBackend)
+        {
+            Movement.AttachBackend(movementBackend, () => _liveActor?.Invoke(),
+                row => _connected && !_loading && !_profileOpen &&
+                    _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+                    _rows.Any(current => ReferenceEquals(current, row)));
+            Movement.CommittedAndClosed += () => _ = RefreshAsync();
         }
         UpdateCommands();
     }
@@ -148,6 +172,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     {
         CloseProfile();
         Mutation.ForceCancel();
+        Movement.ForceCancel();
         _connected = false;
         _loading = false;
         _error = error;
@@ -311,9 +336,23 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         await RefreshAsync(ct);
     }
 
+    private bool CanOpenMovement(NativePersonnelDisplayRow? row) =>
+        row is not null && row.Active && row.StatusName == "على القوة" &&
+        row.Revision >= 1 &&
+        _status == 1 && _site.Length > 0 &&
+        _sites.Count(site => site.SiteId == _site &&
+                             site.Name == row.SiteName) == 1 &&
+        _connected && !_loading && !_profileOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen &&
+        _reader is INativePersonnelMovementBackend &&
+        _rows.Any(current => ReferenceEquals(current, row)) &&
+        _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+        RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
+
     private bool CanOpenEdit(NativePersonnelDisplayRow? row) =>
         row is not null && row.Active && row.Revision >= 1 &&
-        _connected && !_loading && !_profileOpen && !Mutation.IsOpen &&
+        _connected && !_loading && !_profileOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen &&
         _reader is INativePersonnelMutationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -321,6 +360,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
 
     private bool CanOpenProfile(NativePersonnelDisplayRow? row) =>
         _connected && !_loading && !_profileOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen &&
         _reader is not null && row is not null &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -448,7 +488,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         foreach (ICommand command in new[] {
             RefreshCommand, SearchCommand, ClearSearchCommand,
             PreviousPageCommand, NextPageCommand, OpenProfileCommand,
-            OpenCreateCommand, OpenEditCommand
+            OpenCreateCommand, OpenEditCommand,
+            OpenInternalTransferCommand, OpenExternalTransferCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
