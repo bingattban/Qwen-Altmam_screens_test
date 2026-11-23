@@ -70,13 +70,17 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenExcelImportCommand = new NativeCommand(
             _ => { if (CanOpenExcelImport()) ExcelImport.Open(); },
             _ => CanOpenExcelImport());
+        ImportHistory = new NativeImportOutcomeHistoryViewModel();
+        OpenImportHistoryCommand = new NativeCommand(
+            _ => { if (CanOpenImportHistory()) _ = ImportHistory.OpenAsync(); },
+            _ => CanOpenImportHistory());
         OpenSiteCatalogCommand = new NativeCommand(
             _ => _ = SiteCatalog.OpenAsync(),
             _ => CanRead && _connected && !_loading && !_profileOpen &&
                  _reader is INativeSiteCatalogBackend &&
                  !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
                  !Separation.IsOpen && !SeparationArchive.IsOpen &&
-                 !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen);
+                 !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen);
         OpenArchivedReturnCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow row && CanOpenArchivedReturn(row))
@@ -89,12 +93,12 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                  _reader is INativeStatusCatalogBackend &&
                  !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
                  !Separation.IsOpen && !SeparationArchive.IsOpen &&
-                 !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen);
+                 !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen);
         OpenSeparationArchiveCommand = new NativeCommand(
             _ => _ = SeparationArchive.OpenAsync(_sites),
             _ => CanRead && _connected && !_loading && !_profileOpen &&
                  !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
-                 !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen);
+                 !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen);
         OpenSeparationCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow row && CanOpenSeparation(row))
@@ -104,7 +108,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenMovementArchiveCommand = new NativeCommand(
             _ => _ = Archive.OpenAsync(),
             _ => CanRead && _connected && !_loading && !_profileOpen &&
-                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen);
         OpenInternalTransferCommand = new NativeCommand(
             argument => {
                 if (argument is NativePersonnelDisplayRow person && CanOpenMovement(person))
@@ -120,7 +124,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         OpenCreateCommand = new NativeCommand(
             _ => { CloseProfile(); Mutation.OpenCreate(_sites); },
             _ => _connected && !_loading && CanRead && !_profileOpen &&
-                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen);
+                 !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen);
         OpenEditCommand = new NativeCommand(
             row => {
                 if (row is NativePersonnelDisplayRow person && CanOpenEdit(person))
@@ -178,6 +182,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public NativeSiteCatalogViewModel SiteCatalog { get; }
     public NativeStatusCatalogViewModel StatusCatalog { get; }
     public NativeExcelPersonnelImportViewModel ExcelImport { get; }
+    public NativeImportOutcomeHistoryViewModel ImportHistory { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -199,6 +204,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand OpenSiteCatalogCommand { get; }
     public ICommand OpenStatusCatalogCommand { get; }
     public ICommand OpenExcelImportCommand { get; }
+    public ICommand OpenImportHistoryCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -243,6 +249,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             ExcelImport.AttachBackend(importBackend, () => _liveActor?.Invoke());
             ExcelImport.CommittedAndClosed += () => _ = RefreshAsync();
         }
+        if (reader is INativeImportOutcomeHistoryBackend historyBackend)
+            ImportHistory.AttachBackend(historyBackend, () => _liveActor?.Invoke());
         if (reader is INativeMovementArchiveBackend archiveBackend)
             Archive.AttachBackend(archiveBackend, () => _liveActor?.Invoke());
         if (reader is INativePersonnelSeparationBackend separationBackend)
@@ -305,6 +313,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         BulkMovement.ForceCancel();
         BulkExternalMovement.ForceCancel();
         ExcelImport.ForceCancel();
+        ImportHistory.Close();
         Archive.Close();
         Separation.ForceCancel();
         SeparationArchive.Close();
@@ -481,7 +490,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _status is 0 or 2 or 3 or 4 &&
         _connected && !_loading && !_profileOpen &&
         !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
-        !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _reader is INativeArchivedReturnBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -492,9 +501,20 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         row.Revision >= 1 && _status == 1 && _site.Length > 0 &&
         _sites.Count(site => site.SiteId == _site && site.Name == row.SiteName) == 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _reader is INativePersonnelSeparationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
+        _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+        RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
+
+    private bool CanOpenImportHistory() =>
+        _connected && !_loading && !_profileOpen &&
+        _reader is INativeImportOutcomeHistoryBackend &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
+        !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen &&
+        !SiteCatalog.IsOpen && !StatusCatalog.IsOpen &&
+        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen &&
+        !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
 
@@ -502,10 +522,10 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _connected && !_loading && !_profileOpen &&
         _reader is INativeExcelPersonnelImportBackend &&
         !Mutation.IsOpen && !Movement.IsOpen &&
-        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen &&
-        !ExcelImport.IsOpen &&
+        !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
 
@@ -519,7 +539,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             _rows.All(row => row.SiteName == site.Name)) == 1 &&
         _reader is INativeBulkExternalTransferBackend &&
         !Mutation.IsOpen && !Movement.IsOpen &&
-        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
         !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -534,9 +554,9 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _sites.Count(s => s.SiteId == _site &&
             _rows.All(r => r.SiteName == s.Name)) == 1 &&
         _reader is INativeBulkInternalTransferBackend &&
-        !Mutation.IsOpen && !Movement.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen &&
-        !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
 
@@ -547,7 +567,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _sites.Count(site => site.SiteId == _site &&
                              site.Name == row.SiteName) == 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _reader is INativePersonnelMovementBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -556,7 +576,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     private bool CanOpenEdit(NativePersonnelDisplayRow? row) =>
         row is not null && row.Active && row.Revision >= 1 &&
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _reader is INativePersonnelMutationBackend &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -564,7 +584,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
 
     private bool CanOpenProfile(NativePersonnelDisplayRow? row) =>
         _connected && !_loading && !_profileOpen &&
-        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen && !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen && !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
         _reader is not null && row is not null &&
         _rows.Any(current => ReferenceEquals(current, row)) &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
@@ -695,7 +715,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             OpenCreateCommand, OpenEditCommand,
             OpenInternalTransferCommand, OpenExternalTransferCommand,
             OpenBulkInternalTransferCommand, OpenBulkExternalTransferCommand,
-            OpenExcelImportCommand,
+            OpenExcelImportCommand, OpenImportHistoryCommand,
             OpenMovementArchiveCommand, OpenSeparationCommand,
             OpenSeparationArchiveCommand, OpenArchivedReturnCommand,
             OpenSiteCatalogCommand, OpenStatusCatalogCommand
