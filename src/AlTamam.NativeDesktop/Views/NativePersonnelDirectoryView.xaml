@@ -70,6 +70,10 @@
                         Command="{Binding OpenProfileCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فتح تفاصيل فرد بالمعرف الثابت"/>
+                <Button Content="استيراد كشف أفراد Excel"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenExcelImportCommand}"
+                        AutomationProperties.Name="اختيار ملف Excel ومعاينة الأفراد الجدد والمواقع قبل الحفظ"/>
                 <Button Content="إدارة حالات التحضير" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenStatusCatalogCommand}"
@@ -259,5 +263,8 @@
         <views:NativeStatusCatalogView Grid.RowSpan="5"
                                        DataContext="{Binding StatusCatalog}"
                                        Panel.ZIndex="200"/>
+        <views:NativeExcelPersonnelImportView Grid.RowSpan="5"
+                                              DataContext="{Binding ExcelImport}"
+                                              Panel.ZIndex="220"/>
     </Grid>
 </UserControl>
