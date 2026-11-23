@@ -46,6 +46,20 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             argument => { if (argument is NativePersonnelDisplayRow row) _ = OpenProfileAsync(row); },
             argument => argument is NativePersonnelDisplayRow row && CanOpenProfile(row));
         CloseProfileCommand = new NativeCommand(_ => CloseProfile(), _ => _profileOpen);
+        Mutation = new NativePersonnelMutationViewModel();
+        OpenCreateCommand = new NativeCommand(
+            _ => { CloseProfile(); Mutation.OpenCreate(_sites); },
+            _ => _connected && !_loading && CanRead && !_profileOpen &&
+                 !Mutation.IsOpen);
+        OpenEditCommand = new NativeCommand(
+            row => {
+                if (row is NativePersonnelDisplayRow person && CanOpenEdit(person))
+                {
+                    CloseProfile();
+                    Mutation.OpenEdit(person);
+                }
+            },
+            row => row is NativePersonnelDisplayRow person && CanOpenEdit(person));
     }
 
     private bool CanRead =>
@@ -55,7 +69,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public override string StatusMessage => _loading
         ? "جار قراءة سجل الأفراد المعتمد من قاعدة البيانات المشفرة..."
         : _connected
-            ? "سجل الأفراد الحالي من SQLCipher. العرض للقراءة فقط؛ تعديل الأسماء والتنقلات والفصل تأتي في المراحل التالية."
+            ? "سجل الأفراد من SQLCipher. الإضافة وتعديل الهوية يتطلبان معاينة وتأكيداً؛ التنقلات والفصل تأتي في المراحل التالية."
             : "إدارة الأفراد لم تتصل بالبيانات بعد أو لا تتوفر صلاحية الإدارة.";
     public bool IsLoading => _loading;
     public string LoadError => _error;
@@ -83,6 +97,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public bool IsProfileLoading => _profileLoading;
     public string ProfileError => _profileError;
     public NativePersonnelProfile? SelectedProfile => _profile;
+    public NativePersonnelMutationViewModel Mutation { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -91,6 +106,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand NextPageCommand { get; }
     public ICommand OpenProfileCommand { get; }
     public ICommand CloseProfileCommand { get; }
+    public ICommand OpenCreateCommand { get; }
+    public ICommand OpenEditCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -98,6 +115,14 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         if (_reader is not null) throw new InvalidOperationException("Personnel reader already attached.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
+        if (reader is INativePersonnelMutationBackend mutationBackend)
+        {
+            Mutation.AttachBackend(mutationBackend, () => _liveActor?.Invoke(),
+                row => _connected && !_loading && !_profileOpen &&
+                    _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+                    _rows.Any(current => ReferenceEquals(current, row)));
+            Mutation.CommittedAndClosed += () => _ = RefreshAsync();
+        }
         UpdateCommands();
     }
 
@@ -122,6 +147,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     private void HideRows(string error)
     {
         CloseProfile();
+        Mutation.ForceCancel();
         _connected = false;
         _loading = false;
         _error = error;
@@ -285,6 +311,14 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         await RefreshAsync(ct);
     }
 
+    private bool CanOpenEdit(NativePersonnelDisplayRow? row) =>
+        row is not null && row.Active && row.Revision >= 1 &&
+        _connected && !_loading && !_profileOpen && !Mutation.IsOpen &&
+        _reader is INativePersonnelMutationBackend &&
+        _rows.Any(current => ReferenceEquals(current, row)) &&
+        _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+        RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
+
     private bool CanOpenProfile(NativePersonnelDisplayRow? row) =>
         _connected && !_loading && !_profileOpen &&
         _reader is not null && row is not null &&
@@ -413,7 +447,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     {
         foreach (ICommand command in new[] {
             RefreshCommand, SearchCommand, ClearSearchCommand,
-            PreviousPageCommand, NextPageCommand, OpenProfileCommand
+            PreviousPageCommand, NextPageCommand, OpenProfileCommand,
+            OpenCreateCommand, OpenEditCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }
