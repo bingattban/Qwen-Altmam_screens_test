@@ -48,6 +48,22 @@ public sealed class NativeGroupExcelExportPhase9Tests
     }
 
     [Fact]
+    public void Preview_command_becomes_enabled_after_canonical_group_report_is_loaded()
+    {
+        var backend = new FakeBackend();
+        NativePersonnelGroupReportRequest? selectedReport = null;
+        var vm = new NativePersonnelGroupExcelViewModel();
+        vm.Attach(backend, () => Manager, () => selectedReport);
+        Assert.False(vm.OpenPreviewCommand.CanExecute(null));
+        int changed = 0;
+        vm.OpenPreviewCommand.CanExecuteChanged += (_, _) => changed++;
+        selectedReport = Request();
+        vm.NotifySourceChanged();
+        Assert.True(vm.OpenPreviewCommand.CanExecute(null));
+        Assert.True(changed > 0);
+    }
+
+    [Fact]
     public async Task Preview_and_confirm_are_denied_for_empty_or_duplicate_ids()
     {
         var backend = new FakeBackend();
