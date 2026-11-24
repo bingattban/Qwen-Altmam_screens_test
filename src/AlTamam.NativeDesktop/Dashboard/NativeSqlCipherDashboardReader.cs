@@ -20,13 +20,149 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
-      INativeImportOutcomeHistoryBackend, INativePersonnelReportReader
+      INativeImportOutcomeHistoryBackend, INativePersonnelReportReader,
+      INativePersonnelGroupReportReader
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Phase 9 group slice: same canonical PersonnelReportService.ReportAsync,
+    // not another SQL query engine, report writer or invented day counts.
+    // Verify a real live manager session on both sides of the database read.
+    public async Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(
+        NativeIdentity actor, NativePersonnelGroupReportRequest request,
+        CancellationToken ct = default)
+    {
+        static bool IsIsoDate(string date) => date.Length == 0 ||
+            DateOnly.TryParseExact(date, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+
+        if (request is null || request.PersonIds is not { Count: >= 1 and <= 100 } ||
+            request.PersonIds.Any(id => id is not { Length: >= 3 and <= 128 } ||
+                id.Any(char.IsControl)) ||
+            request.PersonIds.Distinct(StringComparer.Ordinal).Count() !=
+                request.PersonIds.Count ||
+            request.SummaryPage is < 1 or > 100000 ||
+            request.MovementType is < 0 or > 4 ||
+            request.DateFrom is null || request.DateTo is null ||
+            request.SiteId is null || request.StatusId is null ||
+            !IsIsoDate(request.DateFrom) || !IsIsoDate(request.DateTo) ||
+            (request.DateFrom.Length > 0 && request.DateTo.Length > 0 &&
+                string.CompareOrdinal(request.DateFrom, request.DateTo) > 0) ||
+            request.SiteId.Length > 128 || request.StatusId.Length > 128 ||
+            request.SiteId.Any(char.IsControl) || request.StatusId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid original PersonId group report request.");
+
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse original = await new PersonnelReportService(database)
+            .ReportAsync(new JsonObject
+            {
+                ["personIds"] = new JsonArray(request.PersonIds
+                    .Select(id => (JsonNode?)JsonValue.Create(id)).ToArray()),
+                ["dateFrom"] = request.DateFrom,
+                ["dateTo"] = request.DateTo,
+                ["siteId"] = request.SiteId,
+                ["statusId"] = request.StatusId,
+                ["movementType"] = request.MovementType,
+                ["summaryPage"] = request.SummaryPage
+            }, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+
+        JsonObject data = RequiredObject(original, "PersonnelReport(native-group)");
+        if (RequiredText(data, "mode") != "group" ||
+            RequiredNumber(data, "personCount") != request.PersonIds.Count ||
+            RequiredText(data, "dateFrom") != request.DateFrom ||
+            RequiredText(data, "dateTo") != request.DateTo ||
+            RequiredText(data, "siteId") != request.SiteId ||
+            RequiredText(data, "statusId") != request.StatusId ||
+            RequiredNumber(data, "movementType") != request.MovementType ||
+            RequiredNumber(data, "dailyStatusPage") != request.SummaryPage)
+            throw new InvalidDataException("Canonical group PersonIds, filter or page echo mismatch.");
+
+        JsonArray sourcePersons = RequiredArray(data, "persons");
+        JsonArray sourceTotals = RequiredArray(data, "statusTotals");
+        JsonArray sourceDaily = RequiredArray(data, "dailyStatusTotals");
+        if (sourcePersons.Count != request.PersonIds.Count ||
+            sourceTotals.Count > 5000 || sourceDaily.Count > 100)
+            throw new InvalidDataException("Canonical group source was truncated or unbounded.");
+
+        var persons = sourcePersons.Select((node, index) =>
+        {
+            JsonObject item = RequireObject(node);
+            string id = RequiredText(item, "personId");
+            if (id != request.PersonIds[index])
+                throw new InvalidDataException("Canonical group returned wrong roster or order.");
+            var statusTotals = RequiredArray(item, "statusTotals");
+            if (statusTotals.Count > 5000)
+                throw new InvalidDataException("Canonical person historical statuses exceeded limit.");
+            return new NativePersonnelGroupPerson(
+                id, RequiredText(item, "name"),
+                RequiredText(item, "serviceNumberA"),
+                RequiredText(item, "firstRecordedDate"),
+                checked((int)RequiredNumber(item, "organizationalStatus")),
+                RequiredBoolean(item, "active"),
+                RequiredNumber(item, "attendanceTotal"),
+                RequiredNumber(item, "movementTotal"),
+                statusTotals.Select(status =>
+                {
+                    JsonObject s = RequireObject(status);
+                    return new NativePersonnelReportStatusTotal(
+                        RequiredText(s, "statusId"),
+                        RequiredText(s, "statusName"),
+                        RequiredNumber(s, "count"));
+                }).ToArray());
+        }).ToArray();
+
+        var totals = sourceTotals.Select(node =>
+        {
+            JsonObject s = RequireObject(node);
+            return new NativePersonnelReportStatusTotal(
+                RequiredText(s, "statusId"),
+                RequiredText(s, "statusName"),
+                RequiredNumber(s, "count"));
+        }).ToArray();
+        var daily = sourceDaily.Select(node =>
+        {
+            JsonObject s = RequireObject(node);
+            return new NativePersonnelGroupDailyStatus(
+                RequiredText(s, "date"),
+                RequiredText(s, "statusId"),
+                RequiredText(s, "statusName"),
+                RequiredNumber(s, "count"),
+                RequiredNumber(s, "personCount"));
+        }).ToArray();
+
+        var report = new NativePersonnelGroupReportSnapshot(
+            persons.Select(x => x.PersonId).ToArray(),
+            checked((int)RequiredNumber(data, "personCount")),
+            RequiredNumber(data, "attendanceTotal"),
+            RequiredNumber(data, "movementTotal"),
+            RequiredText(data, "dateFrom"),
+            RequiredText(data, "dateTo"),
+            RequiredText(data, "siteId"),
+            RequiredText(data, "statusId"),
+            checked((int)RequiredNumber(data, "movementType")),
+            checked((int)RequiredNumber(data, "dailyStatusPage")),
+            RequiredBoolean(data, "dailyStatusHasNext"),
+            persons, totals, daily);
+
+        if (report.AttendanceTotal < 0 || report.MovementTotal < 0 ||
+            report.Persons.Any(x => x.AttendanceTotal < 0 || x.MovementTotal < 0 ||
+                x.StatusTotals.Any(s => s.Count < 0) ||
+                x.StatusTotals.Sum(s => s.Count) != x.AttendanceTotal) ||
+            report.Persons.Sum(x => x.AttendanceTotal) != report.AttendanceTotal ||
+            report.Persons.Sum(x => x.MovementTotal) != report.MovementTotal ||
+            report.StatusTotals.Any(x => x.Count < 0) ||
+            report.StatusTotals.Sum(x => x.Count) != report.AttendanceTotal ||
+            (report.DailyStatusHasNext && report.DailyStatuses.Count != 100) ||
+            report.DailyStatuses.Any(x => x.Count < 0 || x.PersonCount < 0 ||
+                x.PersonCount > report.PersonCount || x.PersonCount > x.Count))
+            throw new InvalidDataException("Canonical group totals, PersonId or daily pagination mismatch.");
+        return report;
+    }
 
     // Phase 9: the ORIGINAL immutable PersonId-keyed historical report.
     // WPF presents selected 100-row pages only; the backend never clones SQL
