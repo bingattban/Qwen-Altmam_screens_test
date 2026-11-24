@@ -164,6 +164,9 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             selected.Any(r => r is null || !candidates.Any(c => ReferenceEquals(c, r))) ||
             selected.Select(r => r.PersonId).Distinct(StringComparer.Ordinal).Count() != selected.Count)
         {
+            // A rejected replacement must not leave an older approved group
+            // available for reporting or Excel export. Require explicit reselection.
+            _selectedRows = [];
             InvalidateLoadedResult();
             _error = "اختيار غير صالح: يجب تحديد الأفراد من الصفحة الحالية دون تكرار أو تجاوز 100.";
             Changed();
