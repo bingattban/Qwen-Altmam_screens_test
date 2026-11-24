@@ -95,6 +95,10 @@
                                     Command="{Binding RunCommand}"/>
                             <Button Content="مسح المرشحات" Style="{StaticResource GroupAction}"
                                     Command="{Binding ClearFiltersCommand}"/>
+                            <Button Content="معاينة تصدير التقرير الجماعي Excel"
+                                    Style="{StaticResource GroupAction}"
+                                    Command="{Binding Excel.OpenPreviewCommand}"
+                                    AutomationProperties.Name="معاينة تصدير تاريخ المجموعة إلى ملف Excel قبل تأكيد الإنشاء"/>
                         </WrapPanel>
                         <TextBlock Text="{Binding AppliedFiltersLabel}"
                                    TextWrapping="Wrap" Foreground="#0F2942"
@@ -158,10 +162,62 @@
                                 <DataGridTextColumn Header="عدد الأفراد" Binding="{Binding PersonCount}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                        <TextBlock Text="هذا التقرير للقراءة فقط من SQLCipher. اختيار المجموعة مقصور على الصفحة الحالية؛ التقارير عبر صفحات متعددة وتصدير Excel ضمن مراحل لاحقة."
+                        <TextBlock Text="هذا التقرير للقراءة فقط من SQLCipher. اختيار المجموعة مقصور على الصفحة الحالية؛ التقارير عبر صفحات متعددة والتصدير الفردي التاريخي إلى Excel ضمن مراحل لاحقة."
                                    Foreground="#64748B" Margin="0,12,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </ScrollViewer>
+                <!-- Separate operator approval: no export on preview, no retry
+                     after an uncertain commit, no user-controlled file path. -->
+                <Border Grid.RowSpan="3" Background="#D10F172A" Panel.ZIndex="50"
+                        DataContext="{Binding Excel}"
+                        Visibility="{Binding IsOpen, Converter={StaticResource GroupVisible}}">
+                    <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+                            CornerRadius="10" Padding="18" MaxWidth="620"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,8">
+                                <Button Content="إغلاق" DockPanel.Dock="Left"
+                                        Command="{Binding CloseCommand}"
+                                        Style="{StaticResource GroupAction}"/>
+                                <TextBlock Text="معاينة تصدير Excel — التقرير التاريخي الجماعي"
+                                           FontSize="17" FontWeight="Bold"
+                                           Foreground="#0F2942"/>
+                            </DockPanel>
+                            <TextBlock Text="سيتم تصدير السجلات الأصلية المعتمدة للفترة المختارة في 4 أوراق Excel بترتيب المجموعة، بما فيها صفحات الملخص اليومي كاملة ضمن الحد الآمن. لا يتغير التحضير أو قاعدة البيانات."
+                                       TextWrapping="Wrap" Foreground="#475569"/>
+                            <ProgressBar Height="4" IsIndeterminate="True" Margin="0,7,0,0"
+                                         Visibility="{Binding IsBusy, Converter={StaticResource GroupVisible}}"/>
+                            <TextBlock Text="{Binding Error}" TextWrapping="Wrap"
+                                       Foreground="#BE123C" FontWeight="SemiBold"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <Border Background="#F1F5F9" Padding="10" CornerRadius="7"
+                                    Margin="0,8,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="المعاينة الأصلية قبل التأكيد" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Preview.SuggestedFileName}"/>
+                                    <WrapPanel Margin="0,5,0,0">
+                                        <TextBlock Text="عدد الأفراد: "/>
+                                        <TextBlock Text="{Binding Preview.PersonCount}" Margin="0,0,14,0"/>
+                                        <TextBlock Text="أيام التحضير: "/>
+                                        <TextBlock Text="{Binding Preview.AttendanceTotal}" Margin="0,0,14,0"/>
+                                        <TextBlock Text="الحركات: "/>
+                                        <TextBlock Text="{Binding Preview.MovementTotal}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Text="حفظ محلي داخل مجلد التقارير المعتمد مسبقا؛ لا توجد إمكانية لمسار خارجي أو ملف باسم مكرر. قد تستغرق قراءة جميع الصفحات وقتا على البيانات الكبيرة."
+                                       TextWrapping="Wrap" Foreground="#64748B"/>
+                            <Button Content="تأكيد إنشاء ملف Excel"
+                                    Command="{Binding ConfirmCommand}"
+                                    Style="{StaticResource GroupAction}"
+                                    AutomationProperties.Name="تأكيد تصدير التقرير الجماعي بعد معاينة الأفراد والمجاميع"/>
+                            <TextBlock Text="{Binding CompletionMessage}" Foreground="#047857"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Receipt.FilePath}" TextWrapping="Wrap"
+                                       Foreground="#0F2942"/>
+                        </StackPanel>
+                    </Border>
+                </Border>
             </Grid>
         </Border>
     </Grid>

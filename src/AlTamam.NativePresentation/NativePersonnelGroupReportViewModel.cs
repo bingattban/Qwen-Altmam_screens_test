@@ -27,6 +27,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     private int _movementType;
     private NativePersonnelGroupReportSnapshot? _report;
 
+    public NativePersonnelGroupExcelViewModel Excel { get; } = new();
+
     public NativePersonnelGroupReportViewModel()
     {
         CloseCommand = new NativeCommand(_ => Close(), _ => _open);
@@ -109,6 +111,25 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
         _currentRows = currentRows ?? throw new ArgumentNullException(nameof(currentRows));
+        if (backend is INativePersonnelGroupExcelBackend excel)
+            Excel.Attach(excel, () => _liveActor?.Invoke(), CurrentExcelRequest,
+                () => _report);
+    }
+
+    // Only an already displayed canonical report for the SAME current,
+    // explicitly selected PersonIds can authorize a fresh export preview.
+    private NativePersonnelGroupReportRequest? CurrentExcelRequest()
+    {
+        if (!CanRead || _busy || _report is not { } report ||
+            report.PersonIds.Count != _selectedRows.Count ||
+            !_selectedRows.Select(r => r.PersonId)
+                .SequenceEqual(report.PersonIds, StringComparer.Ordinal) ||
+            report.DateFrom != _from || report.DateTo != _to ||
+            report.MovementType != _movementType)
+            return null;
+        return new NativePersonnelGroupReportRequest(
+            report.PersonIds.ToArray(), report.DateFrom, report.DateTo,
+            report.MovementType, 1, report.SiteId, report.StatusId);
     }
 
     private bool CanRead => _open && _backend is not null &&
@@ -171,6 +192,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             return;
         }
         _summaryPage = 1;
+        Excel.Close();
         await LoadAsync(ct);
     }
 
@@ -179,6 +201,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _from = "";
         _to = "";
         _movementType = 0;
+        Excel.Close();
         InvalidateLoadedResult();
         return RunAsync(ct);
     }
@@ -248,6 +271,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         ++_generation;
         _pending?.Cancel();
         _pending = null;
+        Excel.Close();
         _busy = false;
         _report = null;
         _error = "";
@@ -257,6 +281,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
 
     public void Close()
     {
+        Excel.Close();
         ++_generation;
         _pending?.Cancel();
         _pending = null;
@@ -329,6 +354,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
 
     private void Changed()
     {
+        Excel.NotifySourceChanged();
         foreach (string name in new[]
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage),
@@ -336,7 +362,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             nameof(SelectedCountLabel), nameof(DateFromDraft), nameof(DateToDraft),
             nameof(MovementTypeDraft), nameof(MovementTypeOptions),
             nameof(DailySummaryPageLabel), nameof(AppliedFiltersLabel),
-            nameof(CanNextSummary), nameof(CanPreviousSummary)
+            nameof(CanNextSummary), nameof(CanPreviousSummary),
+            nameof(Excel)
         })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         foreach (ICommand command in new[]
