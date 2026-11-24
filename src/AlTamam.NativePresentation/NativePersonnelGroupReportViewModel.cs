@@ -112,7 +112,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
         _currentRows = currentRows ?? throw new ArgumentNullException(nameof(currentRows));
         if (backend is INativePersonnelGroupExcelBackend excel)
-            Excel.Attach(excel, () => _liveActor?.Invoke(), CurrentExcelRequest);
+            Excel.Attach(excel, () => _liveActor?.Invoke(), CurrentExcelRequest,
+                () => _report);
     }
 
     // Only an already displayed canonical report for the SAME current,
