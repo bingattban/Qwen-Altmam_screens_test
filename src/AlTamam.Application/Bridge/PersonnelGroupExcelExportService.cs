@@ -42,7 +42,9 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
         data[key] as JsonArray ??
         throw new InvalidDataException("Missing canonical history array " + key);
 
-    private static JsonObject Obj(JsonNode? node) =>
+    // BridgeResponse.Data is declared object, whereas JsonArray enumeration
+    // yields JsonNode. Require exactly the same JsonObject source shape.
+    private static JsonObject Obj(object? node) =>
         node as JsonObject ??
         throw new InvalidDataException("Corrupted historical report item.");
 
