@@ -72,6 +72,10 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             _ => CanOpenExcelImport());
         ImportHistory = new NativeImportOutcomeHistoryViewModel();
         ReportHistory = new NativePersonnelReportViewModel();
+        GroupReport = new NativePersonnelGroupReportViewModel();
+        OpenGroupReportCommand = new NativeCommand(
+            _ => { if (CanOpenGroupReport()) GroupReport.Open(_rows); },
+            _ => CanOpenGroupReport());
         OpenPersonnelReportCommand = new NativeCommand(
             argument =>
             {
@@ -193,6 +197,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public NativeExcelPersonnelImportViewModel ExcelImport { get; }
     public NativeImportOutcomeHistoryViewModel ImportHistory { get; }
     public NativePersonnelReportViewModel ReportHistory { get; }
+    public NativePersonnelGroupReportViewModel GroupReport { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SearchCommand { get; }
@@ -216,6 +221,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     public ICommand OpenExcelImportCommand { get; }
     public ICommand OpenImportHistoryCommand { get; }
     public ICommand OpenPersonnelReportCommand { get; }
+    public ICommand OpenGroupReportCommand { get; }
 
     public void AttachReader(INativePersonnelDirectoryReader reader,
         Func<NativeIdentity?> liveActor)
@@ -267,6 +273,8 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                 row => _connected && !_loading && _boundActor is { } actor &&
                     _liveActor?.Invoke() == actor &&
                     _rows.Any(current => ReferenceEquals(current, row)));
+        if (reader is INativePersonnelGroupReportReader groupBackend)
+            GroupReport.AttachBackend(groupBackend, () => _liveActor?.Invoke(), () => _rows);
         if (reader is INativeMovementArchiveBackend archiveBackend)
             Archive.AttachBackend(archiveBackend, () => _liveActor?.Invoke());
         if (reader is INativePersonnelSeparationBackend separationBackend)
@@ -331,6 +339,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         ExcelImport.ForceCancel();
         ImportHistory.Close();
         ReportHistory.Close();
+        GroupReport.Close();
         Archive.Close();
         Separation.ForceCancel();
         SeparationArchive.Close();
@@ -354,6 +363,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     {
         // Reloading a roster invalidates native report row references.
         ReportHistory.Close();
+        GroupReport.Close();
         var actor = _liveActor?.Invoke();
         if (_reader is null || actor is null ||
             !RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
@@ -526,6 +536,19 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
 
+    private bool CanOpenGroupReport() =>
+        _connected && !_loading && !_profileOpen &&
+        _rows.Count is >= 1 and <= 100 &&
+        _reader is INativePersonnelGroupReportReader &&
+        !Mutation.IsOpen && !Movement.IsOpen && !Archive.IsOpen &&
+        !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen &&
+        !SiteCatalog.IsOpen && !StatusCatalog.IsOpen &&
+        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen &&
+        !ExcelImport.IsOpen && !ImportHistory.IsOpen &&
+        !ReportHistory.IsOpen && !GroupReport.IsOpen &&
+        _boundActor is { } actor && _liveActor?.Invoke() == actor &&
+        RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
+
     private bool CanOpenPersonnelReport(NativePersonnelDisplayRow? row) =>
         row is not null && row.PersonId is { Length: >= 3 and <= 128 } &&
         _connected && !_loading && !_profileOpen &&
@@ -536,6 +559,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         !SiteCatalog.IsOpen && !StatusCatalog.IsOpen &&
         !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen &&
         !ExcelImport.IsOpen && !ImportHistory.IsOpen && !ReportHistory.IsOpen &&
+        !GroupReport.IsOpen &&
         _boundActor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role);
 
@@ -748,7 +772,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
             OpenInternalTransferCommand, OpenExternalTransferCommand,
             OpenBulkInternalTransferCommand, OpenBulkExternalTransferCommand,
             OpenExcelImportCommand, OpenImportHistoryCommand,
-            OpenPersonnelReportCommand,
+            OpenPersonnelReportCommand, OpenGroupReportCommand,
             OpenMovementArchiveCommand, OpenSeparationCommand,
             OpenSeparationArchiveCommand, OpenArchivedReturnCommand,
             OpenSiteCatalogCommand, OpenStatusCatalogCommand
