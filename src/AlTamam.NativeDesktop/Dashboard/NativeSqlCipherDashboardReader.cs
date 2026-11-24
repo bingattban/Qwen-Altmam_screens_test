@@ -21,13 +21,105 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader,
-      INativePersonnelGroupReportReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    // Native Phase 9 group Excel: preview and explicit confirm are backed by
+    // the original PersonId historical source and approved monthly-export
+    // output-directory policy; the UI never supplies filesystem paths.
+    private static JsonObject GroupExcelPayload(NativePersonnelGroupReportRequest request)
+    {
+        if (request is null || request.PersonIds is not { Count: >= 1 and <= 100 } ||
+            request.PersonIds.Any(id => id is not { Length: >= 3 and <= 128 } ||
+                id.Any(char.IsControl)) ||
+            request.PersonIds.Distinct(StringComparer.Ordinal).Count() != request.PersonIds.Count ||
+            request.MovementType is < 0 or > 4 || request.SummaryPage != 1 ||
+            request.DateFrom is null || request.DateTo is null ||
+            request.SiteId is null || request.StatusId is null ||
+            request.SiteId.Length > 128 || request.StatusId.Length > 128 ||
+            request.SiteId.Any(char.IsControl) || request.StatusId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid native group Excel request.");
+        return new JsonObject
+        {
+            ["personIds"] = new JsonArray(request.PersonIds
+                .Select(id => (JsonNode?)JsonValue.Create(id)).ToArray()),
+            ["dateFrom"] = request.DateFrom,
+            ["dateTo"] = request.DateTo,
+            ["siteId"] = request.SiteId,
+            ["statusId"] = request.StatusId,
+            ["movementType"] = request.MovementType
+        };
+    }
+
+    public async Task<NativeGroupExcelPreview> PreviewGroupExcelAsync(
+        NativeIdentity actor, NativePersonnelGroupReportRequest request,
+        CancellationToken ct = default)
+    {
+        JsonObject payload = GroupExcelPayload(request);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelGroupExcelExportService(database)
+            .PreviewAsync(payload, ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject source = RequiredObject(response, "PreviewPersonnelGroupExcel");
+        JsonArray ids = RequiredArray(source, "personIds");
+        if (ids.Count != request.PersonIds.Count ||
+            !ids.Select(node => node?.GetValue<string>() ?? "")
+                .SequenceEqual(request.PersonIds, StringComparer.Ordinal) ||
+            RequiredText(source, "dateFrom") != request.DateFrom ||
+            RequiredText(source, "dateTo") != request.DateTo ||
+            RequiredText(source, "siteId") != request.SiteId ||
+            RequiredText(source, "statusId") != request.StatusId ||
+            RequiredNumber(source, "movementType") != request.MovementType ||
+            RequiredText(source, "format") != "xlsx" ||
+            RequiredNumber(source, "personCount") != request.PersonIds.Count)
+            throw new InvalidDataException("Canonical group Excel preview identity/filter mismatch.");
+        string hash = RequiredText(source, "fingerprint");
+        if (hash.Length != 64 || hash.Any(ch => !char.IsAsciiHexDigit(ch)))
+            throw new InvalidDataException("Invalid group Excel source evidence fingerprint.");
+        return new NativeGroupExcelPreview(
+            request.PersonIds.ToArray(), request.DateFrom, request.DateTo,
+            request.SiteId, request.StatusId, request.MovementType,
+            checked((int)RequiredNumber(source, "personCount")),
+            RequiredNumber(source, "attendanceTotal"),
+            RequiredNumber(source, "movementTotal"),
+            hash, RequiredText(source, "suggestedFileName"));
+    }
+
+    public async Task<NativeGroupExcelReceipt> ExportGroupExcelAsync(
+        NativeIdentity actor, NativePersonnelGroupReportRequest request,
+        string fingerprint, CancellationToken ct = default)
+    {
+        JsonObject payload = GroupExcelPayload(request);
+        if (fingerprint is not { Length: 64 } ||
+            fingerprint.Any(ch => !char.IsAsciiHexDigit(ch)))
+            throw new InvalidDataException("Invalid group Excel approval fingerprint.");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        BridgeResponse response = await new PersonnelGroupExcelExportService(database)
+            .ExportAsync(payload, fingerprint,
+                token => VerifyPersonnelManagerAsync(actor, token), ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        JsonObject source = RequiredObject(response, "ExportPersonnelGroupExcel");
+        if (RequiredText(source, "format") != "xlsx" ||
+            RequiredText(source, "fingerprint") != fingerprint.ToLowerInvariant() ||
+            RequiredNumber(source, "personCount") != request.PersonIds.Count ||
+            RequiredNumber(source, "sheetCount") != 4 ||
+            RequiredNumber(source, "dailyRows") is < 0 or > 20000)
+            throw new InvalidDataException("Canonical group Excel export receipt mismatch.");
+        return new NativeGroupExcelReceipt(
+            RequiredText(source, "filePath"),
+            checked((int)RequiredNumber(source, "personCount")),
+            RequiredNumber(source, "attendanceTotal"),
+            RequiredNumber(source, "movementTotal"),
+            RequiredText(source, "fingerprint"),
+            checked((int)RequiredNumber(source, "sheetCount")),
+            RequiredNumber(source, "dailyRows"));
+    }
 
     // Phase 9 group slice: same canonical PersonnelReportService.ReportAsync,
     // not another SQL query engine, report writer or invented day counts.
