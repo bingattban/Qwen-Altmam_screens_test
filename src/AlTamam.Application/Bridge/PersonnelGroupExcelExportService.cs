@@ -295,6 +295,7 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
         string file = Path.Combine(folder, name);
         string partial = file + ".part";
         bool published = false;
+        bool completed = false;
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -309,6 +310,7 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
             published = true;
             await authorize(ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
+            completed = true;
             return BridgeHelpers.Ok(new JsonObject
             {
                 ["filePath"] = file,
@@ -331,11 +333,13 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
         }
         finally
         {
-            if (published)
+            // Revocation or cancellation *after* the atomic rename still
+            // deletes the newly created export rather than disclosing data.
+            if (published && !completed)
             {
-                // If the post-commit actor check failed, prevent disclosure.
-                // This filename was uniquely created by this attempt.
-                // A successful export retains it.
+                try { if (File.Exists(file)) File.Delete(file); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
             try { if (File.Exists(partial)) File.Delete(partial); }
             catch (IOException) { }
