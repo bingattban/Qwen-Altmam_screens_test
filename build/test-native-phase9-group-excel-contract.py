@@ -25,7 +25,7 @@ TEXT = {k:(ROOT/p).read_text(encoding="utf-8") for k,p in FILES.items()}
 COMMAND = "python build/test-native-phase9-group-excel-contract.py"
 NEEDED = {
     "source": (
-        "new PersonnelReportService", # Canonical original source only
+        "private readonly PersonnelReportService _canonical = new(database);", # Canonical original source only
         ".ReportAsync(Page(input, page), ct)",
         "OutputDirectorySettings(database).GetAsync(ct)",
         "OutputDirectorySettings.IsSafeDirectory",
