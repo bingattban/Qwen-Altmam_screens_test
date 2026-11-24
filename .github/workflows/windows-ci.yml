@@ -161,6 +161,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 movement type filter contract failed' }
           python build/test-native-phase9-site-status-filter-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 canonical site and status filters failed' }
+          python build/test-native-phase9-group-report-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native WPF Phase 9 canonical group report contract failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
