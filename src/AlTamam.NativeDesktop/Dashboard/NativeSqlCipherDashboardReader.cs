@@ -21,7 +21,8 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend,
+      INativePersonnelIndividualExcelBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
@@ -119,6 +120,108 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredText(source, "fingerprint"),
             checked((int)RequiredNumber(source, "sheetCount")),
             RequiredNumber(source, "dailyRows"));
+    }
+
+    // Phase 9 individual XLSX: same original SQLCipher person history as
+    // WPF screen_025, with live manager verification before/after source
+    // access and during every page and atomic workbook publication.
+    private static JsonObject IndividualExcelPayload(NativeIndividualReportPages pages)
+    {
+        static bool Iso(string value) => value.Length==0 ||
+            DateOnly.TryParseExact(value,"yyyy-MM-dd",
+                CultureInfo.InvariantCulture,DateTimeStyles.None,out _);
+        if(pages is null || pages.PersonId is not {Length:>=3 and <=128} ||
+           pages.PersonId.Any(char.IsControl) ||
+           pages.MovementType is <0 or >4 ||
+           pages.SiteId is null || pages.StatusId is null ||
+           pages.SiteId.Length>128 || pages.StatusId.Length>128 ||
+           pages.SiteId.Any(char.IsControl) || pages.StatusId.Any(char.IsControl) ||
+           pages.DateFrom is null || pages.DateTo is null ||
+           !Iso(pages.DateFrom) || !Iso(pages.DateTo) ||
+           (pages.DateFrom!="" && pages.DateTo!="" &&
+            string.CompareOrdinal(pages.DateFrom,pages.DateTo)>0))
+           throw new InvalidDataException("Invalid source-bound individual Excel request.");
+        return new JsonObject
+        {
+            ["personId"]=pages.PersonId,
+            ["dateFrom"]=pages.DateFrom,
+            ["dateTo"]=pages.DateTo,
+            ["siteId"]=pages.SiteId,
+            ["statusId"]=pages.StatusId,
+            ["movementType"]=pages.MovementType
+        };
+    }
+
+    public async Task<NativeIndividualExcelPreview> PreviewAsync(
+        NativeIdentity actor, NativeIndividualReportPages request,
+        CancellationToken ct = default)
+    {
+        var payload=IndividualExcelPayload(request);
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var response=await new PersonnelIndividualExcelExportService(database)
+            .PreviewAsync(payload,ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var data=RequiredObject(response,"PreviewPersonnelIndividualExcel");
+        if(RequiredText(data,"personId")!=request.PersonId ||
+           RequiredText(data,"dateFrom")!=request.DateFrom ||
+           RequiredText(data,"dateTo")!=request.DateTo ||
+           RequiredText(data,"siteId")!=request.SiteId ||
+           RequiredText(data,"statusId")!=request.StatusId ||
+           RequiredNumber(data,"movementType")!=request.MovementType ||
+           RequiredText(data,"format")!="xlsx")
+            throw new InvalidDataException("Canonical person Excel preview source mismatch.");
+        string hash=RequiredText(data,"fingerprint");
+        if(hash.Length!=64 || hash.Any(c=>!char.IsAsciiHexDigit(c)))
+            throw new InvalidDataException("Individual Excel source fingerprint invalid.");
+        return new NativeIndividualExcelPreview(
+            request.PersonId,
+            RequiredText(data,"name"),
+            RequiredText(data,"serviceNumberA"),
+            request.DateFrom,request.DateTo,request.SiteId,request.StatusId,
+            request.MovementType,
+            RequiredNumber(data,"attendanceTotal"),
+            RequiredNumber(data,"movementTotal"),
+            RequiredNumber(data,"identityTotal"),
+            RequiredNumber(data,"siteTotal"),
+            RequiredNumber(data,"revisionTotal"),
+            RequiredNumber(data,"auditTotal"),
+            hash,RequiredText(data,"suggestedFileName"));
+    }
+
+    public async Task<NativeIndividualExcelReceipt> ExportAsync(
+        NativeIdentity actor, NativeIndividualReportPages request,
+        string fingerprint, CancellationToken ct = default)
+    {
+        var payload=IndividualExcelPayload(request);
+        if(fingerprint is not {Length:64} ||
+           fingerprint.Any(c=>!char.IsAsciiHexDigit(c)))
+            throw new InvalidDataException("Untrusted person XLSX approval token.");
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var response=await new PersonnelIndividualExcelExportService(database)
+            .ExportAsync(payload,fingerprint,
+                token=>VerifyPersonnelManagerAsync(actor,token),ct)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var data=RequiredObject(response,"ExportPersonnelIndividualExcel");
+        if(RequiredText(data,"fingerprint")!=fingerprint.ToLowerInvariant() ||
+           RequiredText(data,"format")!="xlsx" ||
+           RequiredNumber(data,"sheetCount")!=8)
+            throw new InvalidDataException("Individual Excel receipt mismatches approval.");
+        var totals=new[]
+        {
+            RequiredNumber(data,"attendanceRows"),
+            RequiredNumber(data,"movementsRows"),
+            RequiredNumber(data,"identityHistoryRows"),
+            RequiredNumber(data,"siteHistoryRows"),
+            RequiredNumber(data,"revisionsRows"),
+            RequiredNumber(data,"auditRows")
+        };
+        if(totals.Any(x=>x is <0 or >20000))
+            throw new InvalidDataException("Unbounded individual export evidence.");
+        return new NativeIndividualExcelReceipt(
+            RequiredText(data,"filePath"),
+            RequiredText(data,"fingerprint"),
+            totals[0],totals[1],totals[2],totals[3],totals[4],totals[5],8);
     }
 
     // Phase 9 group slice: same canonical PersonnelReportService.ReportAsync,
