@@ -64,6 +64,30 @@ public sealed class NativeGroupExcelExportPhase9Tests
     }
 
     [Fact]
+    public async Task Displayed_group_totals_must_match_canonical_excel_preview()
+    {
+        var request = Request();
+        var people = request.PersonIds.Select(id => new NativePersonnelGroupPerson(
+            id, "اسم", "0001", "2024-01-01", 1, true, 15, 2,
+            [new NativePersonnelReportStatusTotal("STS", "حاضر", 15)])).ToArray();
+        var displayed = new NativePersonnelGroupReportSnapshot(
+            request.PersonIds, 2, 30, 4, request.DateFrom, request.DateTo,
+            request.SiteId, request.StatusId, request.MovementType, 1,
+            false, people, [new("STS", "حاضر", 30)], []);
+        var backend = new FakeBackend { ForgePreviewTotals = true };
+        var vm = new NativePersonnelGroupExcelViewModel();
+        vm.Attach(backend, () => Manager, () => request, () => displayed);
+        await vm.OpenPreviewAsync();
+        Assert.Null(vm.Preview);
+        Assert.NotEmpty(vm.Error);
+        Assert.Equal(0, backend.Exports);
+        backend.ForgePreviewTotals = false;
+        vm.Close();
+        await vm.OpenPreviewAsync();
+        Assert.True(vm.CanConfirm);
+    }
+
+    [Fact]
     public async Task Preview_and_confirm_are_denied_for_empty_or_duplicate_ids()
     {
         var backend = new FakeBackend();
@@ -166,7 +190,7 @@ public sealed class NativeGroupExcelExportPhase9Tests
         public int Previews, Exports;
         public string? Fingerprint;
         public NativePersonnelGroupReportRequest? Last;
-        public bool ForgePreview, ForgeReceipt, FailExport;
+        public bool ForgePreview, ForgePreviewTotals, ForgeReceipt, FailExport;
         public Task<NativeGroupExcelPreview>? Pending;
 
         public Task<NativeGroupExcelPreview> PreviewGroupExcelAsync(
@@ -178,6 +202,7 @@ public sealed class NativeGroupExcelExportPhase9Tests
             if (Pending is not null) return Pending;
             NativeGroupExcelPreview answer = Preview(request);
             if (ForgePreview) answer = answer with { DateTo = "1900-01-01" };
+            if (ForgePreviewTotals) answer = answer with { AttendanceTotal = 31 };
             return Task.FromResult(answer);
         }
 
