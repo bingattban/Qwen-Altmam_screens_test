@@ -267,6 +267,58 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.Empty(vm.CandidateRows);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Rejected_selection_clears_previous_approved_group_and_prevents_read(
+        bool duplicate)
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows([One]);
+        await vm.RunAsync();
+        Assert.NotNull(vm.Report);
+        Assert.Equal(1, reader.Reads);
+
+        vm.SelectRows(duplicate ? [One, One] : [Row(Two.PersonId, 2)]);
+        Assert.Equal(0, vm.SelectedCount);
+        Assert.Null(vm.Report);
+        Assert.False(vm.RunCommand.CanExecute(null));
+        Assert.False(vm.CanNextSummary);
+        await vm.RunAsync();
+        Assert.Equal(1, reader.Reads);
+
+        vm.SelectRows([Two]);
+        await vm.RunAsync();
+        Assert.Equal(2, reader.Reads);
+        Assert.Equal(Two.PersonId, Assert.Single(vm.Report!.PersonIds));
+    }
+
+    [Fact]
+    public async Task Rejected_selection_during_read_cancels_old_group_and_blocks_new_read()
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows([One]);
+        var late = new TaskCompletionSource<NativePersonnelGroupReportSnapshot>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.Pending = late.Task;
+        Task oldRead = vm.RunAsync();
+        vm.SelectRows([Row(Two.PersonId, 2)]);
+        reader.Pending = null;
+        await vm.RunAsync();
+        late.SetResult(Snapshot(new NativePersonnelGroupReportRequest([One.PersonId])));
+        await oldRead;
+        Assert.Equal(1, reader.Reads);
+        Assert.Equal(0, vm.SelectedCount);
+        Assert.Null(vm.Report);
+        Assert.False(vm.IsLoading);
+    }
+
     private sealed class FakeReader : INativePersonnelGroupReportReader
     {
         public NativePersonnelGroupReportRequest? Last;
