@@ -160,6 +160,11 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
         }
     }
 
+    // The group report loads asynchronously after the export backend was
+    // attached. Re-evaluate preview availability when the canonical report,
+    // selected PersonIds or live session changes.
+    public void NotifySourceChanged() => Changed();
+
     public void Close()
     {
         ++_generation;
