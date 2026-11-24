@@ -353,6 +353,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
 
     private void Changed()
     {
+        Excel.NotifySourceChanged();
         foreach (string name in new[]
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage),
