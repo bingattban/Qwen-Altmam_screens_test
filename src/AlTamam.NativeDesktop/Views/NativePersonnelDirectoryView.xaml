@@ -65,6 +65,10 @@
                         VerticalAlignment="Bottom" Command="{Binding ClearSearchCommand}"/>
                 <Button Content="تحديث" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom" Command="{Binding RefreshCommand}"/>
+                <Button Content="التقرير الجماعي — تحديد أفراد من الصفحة"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding OpenGroupReportCommand}"
+                        AutomationProperties.Name="فتح التقرير الجماعي التاريخي للقراءة فقط واختيار فرد إلى 100 فرد من الصفحة"/>
                 <Button Content="التقرير التاريخي للفرد المحدد"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenPersonnelReportCommand}"
@@ -281,5 +285,8 @@
         <views:NativePersonnelReportView Grid.RowSpan="5"
                                          DataContext="{Binding ReportHistory}"
                                          Panel.ZIndex="230"/>
+        <views:NativePersonnelGroupReportView Grid.RowSpan="5"
+                                              DataContext="{Binding GroupReport}"
+                                              Panel.ZIndex="235"/>
     </Grid>
 </UserControl>
