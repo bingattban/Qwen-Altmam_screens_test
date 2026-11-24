@@ -1703,3 +1703,63 @@ four Windows x86/x64 Portable/Installer packages and their four independent
 acceptance jobs, and final SHA-256 provenance audit must all succeed.
 The manual clean-machine evidence gate remains separate and is never
 misrepresented as a passed CI test.
+
+
+## Phase 9 — slice 8 (#46): canonical group-history Excel export for WPF
+
+This slice is explicitly **group Excel only**. The existing
+`MonthlyExcelExportService` produces a fundamentally different monthly
+roster and is not repurposed as a historical individual or group report.
+Instead, `PersonnelGroupExcelExportService` reads the **same original**
+`PersonnelReportService.ReportAsync` in its group mode. The native desktop
+adapter verifies the live manager session, immutable selected `PersonId`
+array and date/status/site/movement filters. No new SQL report projection,
+database schema, attendance mutation, browser-selected output path or
+independent business-source cache is introduced.
+
+The operator first runs and validates a WPF group report for the current
+selected roster page, then requests a separate Excel preview. Preview is
+strictly read-only. Explicit confirmation supplies the same `PersonId`
+order, period and filters plus the SHA-256 canonical group summary
+fingerprint. The service re-reads every daily status page (100 rows per
+canonical page), verifies the same source fingerprint and exact echoes,
+bounds the daily report to **20,000** rows and fails rather than silently
+truncating beyond that limit. It reconciles the sum of all original daily
+counts against the canonical full-period attendance total; subsequent
+source drift, invalid/duplicate IDs or expired authorization aborts
+export. A fresh preview is mandatory after any unknown export failure;
+the UI never auto-retries and cancels on navigation, session or group
+selection/filters change.
+
+The genuine offline `.xlsx` workbook has four RTL Arabic worksheets:
+**الأفراد** (immutable IDs/current labels and two historical totals),
+**الحالات** (group historical status counts), **الملخص اليومي**
+(full bounded source-paged daily status/count/distinct-person evidence)
+and **حالات الأفراد** (saved per-person historical status breakdowns).
+All cells are Office Open XML inline strings, not executable formulas.
+The renderer reuses `ExcelReportLayout` and
+`ReportWorkbookCommit.VerifyFlushAndMove`, with the existing
+`OutputDirectorySettings` local folder policy. The filename includes a
+unique generated suffix, no preexisting workbook is overwritten, and
+untrusted paths are never accepted from the WPF layer. Temporary partial
+files are deleted on failure; interrupted post-commit authorization is
+handled as a failed export and deletes this attempt's new file.
+
+The C# test-first suite checks two-step approval, forged previews and
+receipts, reordered/stale/duplicate identity selection, role and token
+revocation, cancellation and no automatic retries. Another test
+inspects a REAL four-worksheet OOXML ZIP, Arabic names, RTL sheet views,
+unmodified immutable PersonId, XML safety and absence of any formula
+cells. Both Windows Core and Release preflights execute the negative-
+mutation guard before C# tests and, in Release, before all four customer
+packages.
+
+**Remaining:** individual native historical XLSX; optional historical
+site/status group-filter selectors; group selection across multiple
+roster pages; physical offline Windows 100/125/150% DPI acceptance and
+remaining 69-route parity. The original WebView2 customer host remains
+the shipping app. This source branch is safe to merge only after BOTH
+exact-head Windows workflows, nine disjoint test shards, prepackage WPF
+E2E, x86/x64 Portable and Installer, four package acceptances and
+independent SHA-256 audit succeed; the skipped manual clean-machine gate
+must never be reported as an automated pass.
