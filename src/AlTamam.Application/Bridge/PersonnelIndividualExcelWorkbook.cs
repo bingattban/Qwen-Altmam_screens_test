@@ -253,7 +253,7 @@ public static class PersonnelIndividualExcelWorkbook
         using var stream=entry.Open();
         using var writer=XmlWriter.Create(stream,new XmlWriterSettings
         {
-            Encoding=new UTF8Encoding(false),CloseOutput:false
+            Encoding=new UTF8Encoding(false),CloseOutput=false
         });
         writer.WriteStartDocument();
         render(writer);
