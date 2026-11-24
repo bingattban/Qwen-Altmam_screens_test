@@ -15,6 +15,8 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
     private INativePersonnelGroupExcelBackend? _backend;
     private Func<NativeIdentity?>? _actor;
     private Func<NativePersonnelGroupReportRequest?>? _request;
+    private Func<NativePersonnelGroupReportSnapshot?>? _displayedReport;
+    private NativePersonnelGroupReportSnapshot? _approvedReport;
     private NativeIdentity? _approvedActor;
     private NativePersonnelGroupReportRequest? _approvedRequest;
     private NativeGroupExcelPreview? _preview;
@@ -49,17 +51,21 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
         _preview is not null && _approvedActor is { } prior &&
         _actor?.Invoke() == prior &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(prior.Role) &&
-        SameRequest(_approvedRequest, _request?.Invoke());
+        SameRequest(_approvedRequest, _request?.Invoke()) &&
+        (_displayedReport is null ||
+            ReferenceEquals(_approvedReport, _displayedReport()));
 
     public void Attach(INativePersonnelGroupExcelBackend backend,
         Func<NativeIdentity?> actor,
-        Func<NativePersonnelGroupReportRequest?> request)
+        Func<NativePersonnelGroupReportRequest?> request,
+        Func<NativePersonnelGroupReportSnapshot?>? displayedReport = null)
     {
         if (_backend is not null)
             throw new InvalidOperationException("Group Excel backend already initialized.");
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _actor = actor ?? throw new ArgumentNullException(nameof(actor));
         _request = request ?? throw new ArgumentNullException(nameof(request));
+        _displayedReport = displayedReport;
     }
 
     public async Task OpenPreviewAsync(CancellationToken ct = default)
@@ -67,6 +73,7 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
         if (!CanOpen) return;
         NativeIdentity actor = _actor!.Invoke()!;
         var request = _request!.Invoke()!;
+        NativePersonnelGroupReportSnapshot? displayed = _displayedReport?.Invoke();
         int version = ++_generation;
         _pending?.Cancel();
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -74,6 +81,7 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
         _open = _busy = true;
         _approvedActor = actor;
         _approvedRequest = CopyRequest(request);
+        _approvedReport = displayed;
         _preview = null;
         _receipt = null;
         _error = "";
@@ -88,6 +96,14 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
                 return;
             }
             ValidatePreview(preview, request);
+            if (_displayedReport is not null &&
+                (displayed is null ||
+                 !ReferenceEquals(displayed, _displayedReport()) ||
+                 displayed.PersonCount != preview.PersonCount ||
+                 displayed.AttendanceTotal != preview.AttendanceTotal ||
+                 displayed.MovementTotal != preview.MovementTotal ||
+                 !displayed.PersonIds.SequenceEqual(preview.PersonIds, StringComparer.Ordinal)))
+                throw new InvalidDataException("Displayed group totals changed before Excel approval.");
             _preview = preview;
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
@@ -163,7 +179,19 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
     // The group report loads asynchronously after the export backend was
     // attached. Re-evaluate preview availability when the canonical report,
     // selected PersonIds or live session changes.
-    public void NotifySourceChanged() => Changed();
+    public void NotifySourceChanged()
+    {
+        if (_open &&
+            (_actor?.Invoke() != _approvedActor ||
+             !SameRequest(_approvedRequest, _request?.Invoke()) ||
+             (_displayedReport is not null &&
+              !ReferenceEquals(_approvedReport, _displayedReport()))))
+        {
+            Close();
+            return;
+        }
+        Changed();
+    }
 
     public void Close()
     {
@@ -172,6 +200,7 @@ public sealed class NativePersonnelGroupExcelViewModel : INotifyPropertyChanged
         _pending = null;
         _approvedActor = null;
         _approvedRequest = null;
+        _approvedReport = null;
         _preview = null;
         _receipt = null;
         _open = _busy = false;
