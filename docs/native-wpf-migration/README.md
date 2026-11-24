@@ -1646,3 +1646,60 @@ all 69-route parity and independent manual acceptance are proved.
 The branch merges only after both current-head Windows pipelines,
 nine distinct Release test shards, real E2E, x86/x64 Portable+Installer
 acceptance and independent four-package SHA-256 audit pass.
+
+
+## Phase 9 — slice 7: read-only native WPF group history (screen_025)
+
+This slice adds the **first actual native WPF group report** to the existing
+administration register, alongside the previously merged native individual
+report. Both use the **same original** `PersonnelReportService.ReportAsync`
+on encrypted local SQLCipher. No new reporting SQL, persistence table,
+database migration, external service, write action, file export, or new
+route is introduced.
+
+- The user opens **التقرير الجماعي** from the authenticated, authorized
+  administration roster and explicitly multi-selects 1–100 individuals
+  from the **current loaded roster page**. Selecting nothing never sends
+  a request. A person is identified only by immutable `PersonId`,
+  never the mutable name, service number or row number. Over-100 roster
+  pages, malformed/duplicate IDs, unknown references and reloaded roster
+  objects fail closed. Cross-page selections are intentionally deferred.
+- `NativePersonnelGroupReportViewModel` owns selection, cancellable
+  in-flight reads, inclusive ISO date range, bounded 0–4 movement
+  filter and canonical daily status paging of 100 source rows. It
+  resets the daily page on new group/filters, ignores late responses,
+  wipes all sensitive rows when closed, and denies reads after session
+  replacement, role revocation, a roster reload or leaving the
+  administration route.
+- The native SQLCipher adapter validates the live administrator session
+  **before and after** calling the original `ReportAsync` with an exact
+  `personIds` array. It verifies the canonical `mode=group`,
+  selected PersonId order/cardinality, date/movement/page/filter echoes,
+  count bounds, per-person and group attendance/movement totals and
+  status totals; no current-roster summary can masquerade as historic
+  evidence.
+- The Arabic RTL WPF window displays the exact source person summaries,
+  historical attendance and movement totals, original saved status
+  totals, and paged daily status snapshots with both count and
+  distinct-person count. No 100-row screen page is used to recalculate
+  lifetime or period totals.
+- C# xUnit tests were committed **before** implementation for explicit
+  selection, rejected forged/stale/unknown identities, malformed dates,
+  changing filters, 100-row summary paging, cancellation/revocation and
+  group total integrity. Both Windows Core and Windows Release execute
+  a negative-path group-source guard before C# build and test.
+
+**Deliberately incomplete:** native individual/group Excel export;
+cross-page group selection beyond the current 100-person roster page;
+site/status group filter selectors; full 69-route native functional
+parity; Windows clean-machine, DPI 100/125/150%, Arabic keyboard
+and offline installed-app UAT. The existing shipped x86/x64 Portable
+and Installer packages continue to include the complete original
+DesktopHost/WebView2; no cutover to experimental WPF is authorized.
+
+**Merge gate:** both Core and Release must pass at identical head SHA;
+Release nine xUnit shards, Windows WPF/WebView2/SQLCipher E2E, original
+four Windows x86/x64 Portable/Installer packages and their four independent
+acceptance jobs, and final SHA-256 provenance audit must all succeed.
+The manual clean-machine evidence gate remains separate and is never
+misrepresented as a passed CI test.
