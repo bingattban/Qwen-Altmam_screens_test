@@ -1763,3 +1763,29 @@ exact-head Windows workflows, nine disjoint test shards, prepackage WPF
 E2E, x86/x64 Portable and Installer, four package acceptances and
 independent SHA-256 audit succeed; the skipped manual clean-machine gate
 must never be reported as an automated pass.
+
+
+## Phase 9 — group selection safety follow-up (before additional filters)
+
+Base: `d9dfdb23e5f40d8fb169d098f67230a082cdd7dc` (merged #46).
+
+A rejected group selection previously invalidated the displayed report and
+Excel preview but retained the prior selected rows. A subsequent Run could
+therefore read the previously selected individuals rather than requiring
+explicit reselection. The fix clears the selection before invalidating all
+in-flight results and Excel approval. No database schema, report projection,
+role policy, packaging workflow or valid-selection behavior changes.
+
+Regression tests were committed before implementation: invalid replacement
+with a duplicate or foreign row after a successful report, and invalid
+replacement during a pending report. They assert zero retained selections,
+no additional canonical reads, no late report repaint, and successful
+recovery by valid explicit reselection. This safety correction is not a
+performance optimization; no measured speedup is claimed. Valid requests
+retain the original query path; rejected requests must issue zero additional
+SQLCipher report calls.
+
+Both Windows workflows on the final PR head, all existing release test and
+package gates, and SHA-256 audit remain mandatory before merge. Individual
+historical Excel, group site/status selectors, cross-page selection, route
+parity and physical Windows acceptance remain unfinished.
