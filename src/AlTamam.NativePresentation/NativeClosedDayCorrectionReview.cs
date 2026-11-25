@@ -41,6 +41,8 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
     private Func<NativeMonthlyCellDetails?>? _currentDetail;
     private NativeIdentity? _actor;
     private NativeMonthlyCellDetails? _detail;
+    private NativeHistoricalPeriodEvidence? _period;
+    private Func<NativeHistoricalPeriodEvidence?>? _currentPeriod;
     private string _operationId = "";
     private bool _busy;
     private bool _uncertain;
@@ -58,7 +60,8 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
     public ICommand PreviewCommand { get; }
     public ICommand ConfirmCommand { get; }
     public IReadOnlyList<NativeAttendanceStatusChoice> StatusChoices => _choices;
-    public bool CanEdit => IsOpen && !_busy && !_uncertain && Receipt is null && ContextValid();
+    public bool NeedsPeriodReload { get; private set; }
+    public bool CanEdit => IsOpen && !_busy && !_uncertain && !NeedsPeriodReload && Receipt is null && ContextValid();
     public bool CanClose => IsOpen && !_busy && !_uncertain;
     public string SelectedStatusId
     {
@@ -106,15 +109,16 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
     public NativeClosedDayCorrectionPreview? Preview { get; private set; }
     public NativeClosedDayCorrectionReceipt? Receipt { get; private set; }
     public string Error { get; private set; } = "";
-    public bool IsOpen => _detail is not null;
+    public bool IsOpen => _detail is not null || _period is not null;
     public bool IsBusy => _busy;
     public bool HasUnverifiedCommit => _uncertain;
 
     private bool ContextValid() =>
         _actor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
-        _detail is { } detail && ReferenceEquals(_currentDetail?.Invoke(), detail) &&
-        detail.BusinessDate < DateOnly.FromDateTime(DateTime.Now);
+        ((_detail is { } detail && ReferenceEquals(_currentDetail?.Invoke(), detail) &&
+          detail.BusinessDate < DateOnly.FromDateTime(DateTime.Now)) ||
+         (_period is { } period && ReferenceEquals(_currentPeriod?.Invoke(),period) && CanUsePeriod(period)));
 
     public bool Open(INativeClosedDayCorrectionBackend backend,
         Func<NativeIdentity?> liveActor, Func<NativeMonthlyCellDetails?> currentDetail,
@@ -137,12 +141,35 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
         return true;
     }
 
+    public static bool CanUsePeriod(NativeHistoricalPeriodEvidence period)
+    {
+        var today=DateOnly.FromDateTime(DateTime.Now);
+        return period.Request.SpanDays==1 && period.Request.From<today &&
+            period.Matches(period.Request,today) && period.Days[0].HasSavedRecord;
+    }
+
+    public bool OpenForPeriod(INativeClosedDayCorrectionBackend backend,Func<NativeIdentity?> liveActor,
+        Func<NativeHistoricalPeriodEvidence?> currentPeriod,NativeHistoricalPeriodEvidence period)
+    {
+        var actor=liveActor();
+        if (IsOpen || _busy || _uncertain || actor is null ||
+            !RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) ||
+            !ReferenceEquals(currentPeriod(),period) || !CanUsePeriod(period)) return false;
+        _backend=backend;
+        _liveActor=liveActor;
+        _actor=actor;
+        _period=period;
+        _currentPeriod=currentPeriod;
+        Notify();
+        return true;
+    }
+
     private static bool ValidId(string value) => value.Length is >= 1 and <= 128 &&
         !string.IsNullOrWhiteSpace(value) && !value.Any(char.IsControl);
 
     public async Task PreviewAsync(string statusId, string reason, CancellationToken ct = default)
     {
-        if (_busy || _uncertain || Receipt is not null || _backend is null) return;
+        if (_busy || _uncertain || NeedsPeriodReload || Receipt is not null || _backend is null) return;
         if (!ContextValid()) { Close(); return; }
         Preview = null;
         _operationId = "";
@@ -154,9 +181,9 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
             Notify();
             return;
         }
-        var detail = _detail!;
-        var request = new NativeClosedDayCorrectionRequest(detail.PersonId,
-            detail.BusinessDate, statusId, reason);
+        var detail = _detail;
+        var request = new NativeClosedDayCorrectionRequest(detail?.PersonId ?? _period!.Request.PersonId,
+            detail?.BusinessDate ?? _period!.Request.From, statusId, reason);
         int generation = ++_generation;
         _busy = true;
         Notify();
@@ -169,14 +196,29 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
                 !response.Token.All(Uri.IsHexDigit) ||
                 response.PreviousRevision is < 1 or long.MaxValue ||
                 !response.RequiresExplicitConfirmation ||
-                response.PersonName != detail.PersonName ||
-                response.ServiceNumberA != detail.ServiceNumberA ||
-                response.SiteName != detail.AttendanceSiteName ||
-                response.BeforeStatusName != detail.AttendanceStatus ||
+                string.IsNullOrWhiteSpace(response.PersonName) ||
+                string.IsNullOrWhiteSpace(response.ServiceNumberA) ||
+                string.IsNullOrWhiteSpace(response.SiteName) ||
+                string.IsNullOrWhiteSpace(response.BeforeStatusName) ||
+                (detail is not null && (response.PersonName != detail.PersonName ||
+                 response.ServiceNumberA != detail.ServiceNumberA ||
+                 response.SiteName != detail.AttendanceSiteName ||
+                 response.BeforeStatusName != detail.AttendanceStatus)) ||
                 !ValidId(response.BeforeStatusId) ||
                 response.BeforeStatusId == statusId ||
                 string.IsNullOrWhiteSpace(response.AfterStatusName))
                 throw new InvalidDataException("Mismatched canonical closed-day preview.");
+            if (_period is { } evidence)
+            {
+                var day=evidence.Days[0];
+                if (response.PreviousRevision!=day.Revision || response.SiteName!=day.SiteName ||
+                    response.BeforeStatusName!=day.StatusName)
+                {
+                    NeedsPeriodReload=true;
+                    Error="تغير سجل اليوم منذ قراءته؛ أغلق المراجعة لإعادة قراءة السجل.";
+                    return;
+                }
+            }
             Preview = response;
             _operationId = Guid.NewGuid().ToString("N");
         }
@@ -261,6 +303,9 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
         _backend = null;
         _actor = null;
         _detail = null;
+        _period=null;
+        _currentPeriod=null;
+        NeedsPeriodReload=false;
         _liveActor = null;
         _currentDetail = null;
         Preview = null;
