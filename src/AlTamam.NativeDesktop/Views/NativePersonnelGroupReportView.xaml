@@ -117,10 +117,31 @@
                         </Border>
                         <TextBlock Text="الأفراد وبياناتهم الحالية مع أعداد التحضير والحركات التاريخية المحفوظة"
                                    Style="{StaticResource GroupTitle}"/>
+                        <TextBlock Text="حدد صف الفرد لعرض تفاصيل حالاته التاريخية المعتمدة ضمن الفترة المحددة."
+                                   Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,5"/>
                         <DataGrid ItemsSource="{Binding Report.Persons}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
-                                  Height="190" AlternatingRowBackground="#F8FAFC"
+                                  Height="320" AlternatingRowBackground="#F8FAFC"
+                                  SelectionMode="Single" SelectionUnit="FullRow"
+                                  RowDetailsVisibilityMode="VisibleWhenSelected"
                                   AutomationProperties.Name="المجموعة المختارة بمعرفات الأفراد ومجاميع أصلية">
+                            <DataGrid.RowDetailsTemplate>
+                                <DataTemplate>
+                                    <StackPanel Background="#F1F5F9" Margin="4">
+                                        <TextBlock Text="تفاصيل حالات الفرد المحدد" FontWeight="SemiBold"
+                                                   Foreground="#0F2942" Margin="8,6"/>
+                                        <DataGrid ItemsSource="{Binding StatusTotals}" AutoGenerateColumns="False"
+                                                  IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                                  MaxHeight="155" Margin="8,0,8,8"
+                                                  AutomationProperties.Name="الحالات التاريخية للفرد المحدد">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="الحالة التاريخية" Binding="{Binding StatusName}" Width="2*"/>
+                                                <DataGridTextColumn Header="عدد الأيام" Binding="{Binding Count}" Width="*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGrid.RowDetailsTemplate>
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الاسم الحالي" Binding="{Binding Name}" Width="2*"/>
                                 <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="*"/>
@@ -162,7 +183,7 @@
                                 <DataGridTextColumn Header="عدد الأفراد" Binding="{Binding PersonCount}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                        <TextBlock Text="هذا التقرير للقراءة فقط من SQLCipher. اختيار المجموعة مقصور على الصفحة الحالية؛ التقارير عبر صفحات متعددة والتصدير الفردي التاريخي إلى Excel ضمن مراحل لاحقة."
+                        <TextBlock Text="هذا التقرير للقراءة فقط من SQLCipher. اختيار المجموعة مقصور على الصفحة الحالية؛ اختيار المجموعة عبر صفحات متعددة ضمن مراحل لاحقة."
                                    Foreground="#64748B" Margin="0,12,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </ScrollViewer>
