@@ -2212,3 +2212,27 @@ No SQL, schema, canonical policy, legacy response or packaging changes.
 Historical range correction and monthly lifecycle parity remain pending,
 as does manual acceptance on clean Windows. Both exact-head workflows and
 all four package acceptance/SHA-256 gates must pass before merge.
+
+## Phase 10 — historical range atomicity prerequisite
+
+Base: `218dcbb28e6063648392d2ec67fe790b8e3d3ce4` (merged #64).
+
+Before exposing historical range correction in native WPF, inspection found
+that the original ClosedDayCorrectionService consumed its token and wrote
+individual days before validating subsequent days. ExecuteInWriteTransactionAsync
+commits a normally returned BridgeResponse, even an error response, so a late
+stale day could commit preceding days while reporting failure. This slice
+validates every sealed day within the same write transaction before token
+consumption and any mutation. It checks chronological uniqueness, bounds,
+revision/existence, assignment/site and status snapshots. The subsequent
+mutation loop uses the verified states; concurrency write failures still
+throw and roll back. No changes to the original allowed range, roles,
+policy, SQL statements, schema, wire format, legacy UI or package workflow.
+Two SQLCipher integration cases exercise a changed final-day revision or
+status snapshot, proving the expected rejection without earlier inserts,
+audit events, receipts or consumed token, followed by fresh successful
+preview/commit. The existing fatal Windows preflight protects validation
+ordering. These tests require CI confirmation; native range UI and monthly
+lifecycle integration remain next, after the prerequisite passes.
+Manual Windows acceptance is still pending. Both exact-head workflows and
+all four package acceptance/SHA-256 checks are mandatory before merge.
