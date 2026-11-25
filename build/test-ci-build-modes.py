@@ -45,8 +45,18 @@ class BuildModes(unittest.TestCase):
         package=job(release,"package")
         for name in ("Install Inno Setup 6","Generate SHA-256 checksums","Verify bytes, checksums","Stage byte-identical","Upload standalone Portable","Upload standalone Installer","Upload checksums and build metadata","Retain raw publish dir","Optional signing"):
             self.assertIn("if: env.BUILD_MODE == 'full'",step(package,name),name)
-        self.assertIn("if: env.BUILD_MODE == 'development'",step(package,"Compile x64 target without packaging"))
-        self.assertIn("-r win-x64 --self-contained true",step(package,"Compile x64 target without packaging"))
+        compile_step=step(job(release,"preflight"),"Compile x64 target without packaging")
+        self.assertIn("if: env.BUILD_MODE == 'development'",compile_step)
+        self.assertIn("-r win-x64 --self-contained true",compile_step)
+        self.assertIn("-r win-x86 --self-contained true",compile_step)
+        self.assertNotIn("dotnet publish",compile_step)
+        installer=(ROOT/"build/AlTamam-installer.iss").read_text(encoding="utf-8")
+        for token in ("#ifdef BuildX86","ArchitecturesAllowed=x86compatible",
+                      "ArchitecturesAllowed=x64compatible","ArchitecturesInstallIn64BitMode=x64compatible",
+                      "[UninstallDelete]",'Name: "{app}\\logs"'):
+            self.assertIn(token,installer)
+        self.assertIn("'/DBuildX64'",step(package,"Install Inno Setup 6"))
+        self.assertIn("'/DBuildX86'",step(package,"Install Inno Setup 6"))
         self.assertIn("if: env.BUILD_MODE == 'development'",step(package,"Generate development-only SHA-256 evidence"))
         self.assertIn("if: env.BUILD_MODE == 'development'",step(package,"Upload development Portable x86"))
         audit=job(release,"handover-evidence")

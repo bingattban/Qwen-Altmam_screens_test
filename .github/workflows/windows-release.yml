@@ -300,6 +300,17 @@ jobs:
           path: Phase13Dependencies/*.json
           if-no-files-found: error
 
+      - name: Compile x64 target without packaging (development)
+        if: env.BUILD_MODE == 'development'
+        shell: pwsh
+        run: |
+          dotnet build src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj -c Release -r win-x64 --self-contained true
+          if ($LASTEXITCODE -ne 0) { throw 'x64 host target compilation failed' }
+          dotnet build src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj -c Release -r win-x64 --self-contained true
+          if ($LASTEXITCODE -ne 0) { throw 'x64 native target compilation failed' }
+          dotnet build src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj -c Release -r win-x86 --self-contained true
+          if ($LASTEXITCODE -ne 0) { throw 'x86 native target compilation failed' }
+
   build-test:
     # Run in parallel with preflight; both must pass before package.
     name: Full deterministic Release validation (${{ matrix.shard }})
@@ -492,14 +503,6 @@ jobs:
           cache-dependency-path: Directory.Packages.props
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: Compile x64 target without packaging (development)
-        if: env.BUILD_MODE == 'development'
-        shell: pwsh
-        run: |
-          dotnet build src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj -c Release -r win-x64 --self-contained true
-          if ($LASTEXITCODE -ne 0) { throw 'x64 host target compilation failed' }
-          dotnet build src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj -c Release -r win-x64 --self-contained true
-          if ($LASTEXITCODE -ne 0) { throw 'x64 native target compilation failed' }
       - name: Stage and verify offline Cairo and Tajawal fonts
         shell: pwsh
         run: |
@@ -718,9 +721,8 @@ jobs:
           compression-level: 0
 
   package-acceptance:
-    # Four independently verified shipped-binary tests, two per architecture.
-    # Parallelize the two ~7 minute win-x86 SQLCipher/WebView2 checks across
-    # separate runners without dropping either of the real package exercises.
+    # Full mode: four real independent packaged-binary checks in parallel.
+    # Development: exactly one real x86 Portable check; no installer is built.
     name: Real packaged ${{ matrix.arch }} ${{ matrix.mode }} acceptance (15.06)
     needs: package
     runs-on: windows-latest
@@ -779,8 +781,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   handover-evidence:
-    # Independent same-run x86+x64 customer-file hash verification after the
-    # entire Release test and four real package acceptance jobs.
+    # Independent same-run SHA verification after all required acceptance jobs.
+    # Full mode retains the four-file verifier; development is never full evidence.
     name: Independent package SHA256 audit (development or full release)
     needs: [package, package-acceptance]
     runs-on: windows-latest
@@ -826,8 +828,8 @@ jobs:
           "Development x86 Portable verified. NOT full release acceptance." >> $env:GITHUB_STEP_SUMMARY
 
   clean-windows-acceptance:
-    # The main branch automatically packages TESTED CANDIDATES. It is not a claim
-    # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
+    # A full manual/tagged build produces four TESTED CANDIDATES; it is not a
+    # claim of completed clean-machine acceptance. Retain the original gate.
     # NEVER mark nightly/main artifacts as final released deliverables.
     if: (github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full') || startsWith(github.ref, 'refs/tags/v')
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate

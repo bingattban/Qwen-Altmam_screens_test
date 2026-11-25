@@ -69,7 +69,8 @@ def collect(root: Path) -> dict:
             "dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj")),
         "release_test_gate": all(x in release for x in (
             "needs: [preflight, build-test, verify-full-test-shards, webview-e2e]",
-            "Full deterministic test suite", "Phase 15 independent four-package customer SHA256 audit")),
+            "Full deterministic test suite", "Independent package SHA256 audit (development or full release)",
+            "python build/verify-phase15-handover.py", "python build/development-artifact.py verify")),
         "four_package_matrix": all(x in release for x in (
             "\"runtime\":\"win-x86\"", "\"runtime\":\"win-x64\"",
             "Build Portable ZIP", "compile installer")),

@@ -12,7 +12,7 @@ WORKFLOWS = (
 )
 TEST_LINE = re.compile(r"^\s*node\s+build/(test-[\w-]+\.js)\s*$")
 SELF_LINE = re.compile(r"^\s*python\s+build/test-ci-exit-guards\.py\s*$")
-PY_CONTRACT_LINE = re.compile(r"^\s*python\s+build/(?:validate-ui-shell|test-ci-performance-contract|test-release-artifact-provenance|test-webview-selfcheck-contract|test-local-reminders-contract|test-native-[\w-]+)\.py\s*$")
+PY_CONTRACT_LINE = re.compile(r"^\s*python\s+build/(?:validate-ui-shell|test-ci-build-modes|test-ci-performance-contract|test-release-artifact-provenance|test-webview-selfcheck-contract|test-local-reminders-contract|test-native-[\w-]+)\.py\s*$")
 EXIT_CHECK = re.compile(r"^\s*if\s*\(\$LASTEXITCODE\s+-ne\s+0\)\s*\{\s*throw\b.+\}\s*$")
 
 
