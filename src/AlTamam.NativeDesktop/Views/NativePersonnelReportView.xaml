@@ -40,7 +40,7 @@
                                TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. التقرير الجماعي وتصدير التقرير إلى Excel في مراحل لاحقة."
+                    <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. يمكن معاينة التقرير المعتمد وتصديره إلى Excel دون تعديل السجلات."
                                TextWrapping="Wrap" Foreground="#475569"/>
                     <TextBlock Text="تصفية الفترة الزمنية (شاملة يوم البداية والنهاية). اترك الحقل فارغا لعرض السجل دون حد."
                                TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,3"/>
@@ -93,6 +93,52 @@
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="2,8">
+                        <Button Content="معاينة تصدير التقرير إلى Excel"
+                                Command="{Binding Excel.OpenPreviewCommand}"
+                                Style="{StaticResource ReportAction}" HorizontalAlignment="Right"
+                                AutomationProperties.Name="معاينة تصدير التقرير الفردي إلى Excel"/>
+                        <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1"
+                                CornerRadius="6" Padding="12" Margin="0,4,0,8"
+                                DataContext="{Binding Excel}"
+                                Visibility="{Binding IsOpen, Converter={StaticResource VisibleWhenTrue}}">
+                            <StackPanel>
+                                <TextBlock Text="معاينة تصدير التقرير الفردي" FontSize="17"
+                                           FontWeight="Bold" Foreground="#0F2942"/>
+                                <TextBlock Text="يشمل الملف تسع أوراق من السجلات الكاملة، وليس الصفحة الظاهرة فقط. راجع النطاق والمجلد ثم أكد الحفظ. الموافقة صالحة لدقيقتين."
+                                           TextWrapping="Wrap" Margin="0,6"/>
+                                <TextBlock Text="{Binding Preview.Name}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Preview.ServiceNumberA}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                                <WrapPanel Margin="0,6">
+                                    <TextBlock Text="من: "/><TextBlock Text="{Binding Preview.Request.DateFrom}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="إلى: "/><TextBlock Text="{Binding Preview.Request.DateTo}" Margin="0,0,12,0"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4">
+                                    <TextBlock Text="التحضير: "/><TextBlock Text="{Binding Preview.AttendanceTotal}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="الهوية: "/><TextBlock Text="{Binding Preview.IdentityTotal}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="الحركات: "/><TextBlock Text="{Binding Preview.MovementTotal}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="التصحيحات: "/><TextBlock Text="{Binding Preview.RevisionTotal}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="العمليات: "/><TextBlock Text="{Binding Preview.AuditTotal}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="المواقع: "/><TextBlock Text="{Binding Preview.SiteTotal}"/>
+                                </WrapPanel>
+                                <TextBlock Text="مجلد الحفظ المعتمد:" FontWeight="SemiBold" Margin="0,4"/>
+                                <TextBox Text="{Binding Preview.Directory, Mode=OneWay}" IsReadOnly="True"
+                                         TextWrapping="Wrap" FlowDirection="LeftToRight"/>
+                                <ProgressBar Height="4" IsIndeterminate="True" Margin="0,6"
+                                             Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhenTrue}}"/>
+                                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite"/>
+                                <TextBlock Text="{Binding CompletionMessage}" Foreground="#047857" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite"/>
+                                <TextBox Text="{Binding Receipt.FilePath, Mode=OneWay}" IsReadOnly="True"
+                                         TextWrapping="Wrap" FlowDirection="LeftToRight" Margin="0,4"/>
+                                <WrapPanel>
+                                    <Button Content="تأكيد وحفظ Excel" Command="{Binding ConfirmCommand}"
+                                            Style="{StaticResource ReportAction}"/>
+                                    <Button Content="إغلاق المعاينة" Command="{Binding CloseCommand}"
+                                            Style="{StaticResource ReportAction}"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
                         <Border Background="#F1F5F9" Padding="10" CornerRadius="6"
                                 BorderBrush="#E2E8F0" BorderThickness="1">
                             <WrapPanel>
