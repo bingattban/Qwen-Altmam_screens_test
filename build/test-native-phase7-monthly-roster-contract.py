@@ -138,7 +138,7 @@ def problems(content):
         require("shell",token)
     for token in ("INativeAdministrativeCatchUpBackend.PreviewCatchUpAsync(", "INativeAdministrativeCatchUpBackend.CommitCatchUpAsync("):
         require("backend",token)
-    for token in ("CatchUp.PreviewCommand","CatchUp.ConfirmCommand","CatchUp.CloseCommand",
+    for token in ('<BooleanToVisibilityConverter x:Key="VisibilityIfTrue"/>', "CatchUp.PreviewCommand","CatchUp.ConfirmCommand","CatchUp.CloseCommand",
                   "CatchUp.Preview.PendingCount","CatchUp.Preview.EligibleCount","OpenCatchUpCommand"):
         require("templates",token)
     for token in ("Catch_up_requires_admin_valid_date_reason_and_separate_confirmation",

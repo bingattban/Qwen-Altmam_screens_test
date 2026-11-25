@@ -39,8 +39,9 @@ public sealed class NativeAdministrativeCatchUpReviewPhase10Tests
         await review.PreviewAsync();
         await review.ConfirmAsync();
         Assert.Single(fake.Commits);
-        Assert.Equal(2,review.Receipt!.AppliedCount);
-        Assert.Equal(5,review.Receipt.PendingBefore);
+        var receipt = Assert.IsType<NativeAdministrativeCatchUpReceipt>(review.Receipt);
+        Assert.Equal(2,receipt.AppliedCount);
+        Assert.Equal(5,receipt.PendingBefore);
         Assert.False(review.CanEdit);
         Assert.True(review.Close());
     }
