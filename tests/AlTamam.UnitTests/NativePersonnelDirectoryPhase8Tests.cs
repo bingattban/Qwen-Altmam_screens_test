@@ -145,11 +145,69 @@ public sealed class NativePersonnelDirectoryPhase8Tests
         Assert.Empty(vm.Rows);
     }
 
-    private sealed class Reader : INativePersonnelDirectoryReader
+    [Fact]
+    public async Task Group_picker_preserves_parent_directory_scope_and_selection_across_pages()
+    {
+        var reader = new Reader { Total = 101, CompletePages = true };
+        var vm = new AdministrationPageViewModel();
+        vm.AttachReader(reader, () => Manager);
+        await vm.RefreshAsync();
+        await vm.SelectSiteAsync("SITE-A");
+        await vm.SearchAsync("أحمد");
+        var origin = vm.Rows;
+        var first = origin[0];
+        vm.OpenGroupReportCommand.Execute(null);
+        Assert.True(vm.GroupReport.IsOpen);
+        vm.GroupReport.SelectRows([first]);
+        vm.GroupReport.AddPageSelectionCommand.Execute(null);
+        await vm.GroupReport.NextRosterPageAsync();
+        Assert.Equal(2, reader.Requests[^1].Page);
+        Assert.Equal("SITE-A", reader.Requests[^1].SiteId);
+        Assert.Equal("أحمد", reader.Requests[^1].SearchTerm);
+        Assert.Equal(1, reader.Requests[^1].OrganizationalStatus);
+        Assert.Same(origin, vm.Rows);
+        var second = Assert.Single(vm.GroupReport.CandidateRows);
+        Assert.NotEqual(first.PersonId, second.PersonId);
+        vm.GroupReport.SelectRows([second]);
+        vm.GroupReport.AddPageSelectionCommand.Execute(null);
+        Assert.Equal(new[] { first.PersonId, second.PersonId },
+            vm.GroupReport.SelectedPeople.Select(row => row.PersonId));
+        await vm.GroupReport.PreviousRosterPageAsync();
+        Assert.Equal(1, vm.GroupReport.RosterPage);
+        Assert.Equal(2, vm.GroupReport.SelectedCount);
+        await vm.RefreshAsync();
+        Assert.False(vm.GroupReport.IsOpen);
+        Assert.Empty(vm.GroupReport.SelectedPeople);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Group_picker_rejects_incomplete_or_changed_total_page(bool changeTotal)
+    {
+        var reader = new Reader { Total = 102, CompletePages = true };
+        var vm = new AdministrationPageViewModel();
+        vm.AttachReader(reader, () => Manager);
+        await vm.RefreshAsync();
+        var origin = vm.Rows;
+        vm.OpenGroupReportCommand.Execute(null);
+        Assert.True(vm.GroupReport.IsOpen);
+        vm.GroupReport.SelectRows([origin[0]]);
+        vm.GroupReport.AddPageSelectionCommand.Execute(null);
+        if (changeTotal) reader.Total = 103;
+        else reader.CompletePages = false;
+        await vm.GroupReport.NextRosterPageAsync();
+        Assert.False(vm.GroupReport.IsOpen);
+        Assert.Empty(vm.GroupReport.SelectedPeople);
+        Assert.Same(origin, vm.Rows);
+        Assert.True(vm.IsDataConnected);
+    }
+
+    private sealed class Reader : INativePersonnelDirectoryReader, INativePersonnelGroupReportReader
     {
         public int Profiles;
         public long Total = 1;
-        public bool ForgedEcho;
+        public bool ForgedEcho, CompletePages;
         public Task<NativePersonnelSnapshot>? Pending;
         public readonly List<NativePersonnelFilter> Requests = [];
 
@@ -165,15 +223,32 @@ public sealed class NativePersonnelDirectoryPhase8Tests
             return Pending ?? Task.FromResult(Snapshot(filter));
         }
 
+        public Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(
+            NativeIdentity actor, NativePersonnelGroupReportRequest request,
+            CancellationToken ct = default) =>
+            throw new InvalidOperationException("Picker tests must not read report data.");
+
+        private IReadOnlyList<NativePersonnelRow> PageRows(NativePersonnelFilter filter)
+        {
+            if (!CompletePages)
+                return [new NativePersonnelRow("P-1", "123", "أحمد",
+                    "المركز", 1, true, 1, ["رقيب", "ممتاز"])
+                    { RowNumber = (filter.Page - 1) * 100 + 1 }];
+            int offset = (filter.Page - 1) * filter.PageSize;
+            int count = (int)Math.Clamp(Total - offset, 0L, filter.PageSize);
+            return Enumerable.Range(offset + 1, count).Select(i =>
+                new NativePersonnelRow("P-" + i, i.ToString("D6"), "أحمد " + i,
+                    "المركز", 1, true, 1, ["رقيب", "ممتاز"]) { RowNumber = i })
+                .ToArray();
+        }
+
         public NativePersonnelSnapshot Snapshot(NativePersonnelFilter filter) =>
             new(ForgedEcho ? "SITE-OTHER" : filter.SiteId, filter.SearchTerm,
                 filter.OrganizationalStatus, filter.Page, Total,
                 (long)filter.Page * 100 < Total,
                 [new NativeDashboardColumn("rank", "الرتبة"),
                     new NativeDashboardColumn("note", "ملاحظة")],
-                [new NativePersonnelRow("P-1", "123", "أحمد",
-                    "المركز", 1, true, 1, ["رقيب", "ممتاز"])
-                    { RowNumber = (filter.Page - 1) * 100 + 1 }]);
+                PageRows(filter));
 
         public Task<NativePersonnelProfile> ReadProfileAsync(
             NativeIdentity actor, string personId, CancellationToken ct = default)
