@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows.Input;
+using AlTamam.Domain.Policies;
 
 namespace AlTamam.NativePresentation;
 
@@ -37,19 +38,57 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public MonthlyAttendancePageViewModel()
         : base(NativeScreen.MonthlyAttendance, "التمام الشهري")
     {
-        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead);
-        SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanRead);
-        ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanRead);
+        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead && CanChangeMonthlyScope);
+        SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanRead && CanChangeMonthlyScope);
+        ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanRead && CanChangeMonthlyScope);
         PreviousPageCommand = new NativeCommand(_ => _ = PreviousPageAsync(),
-            _ => CanRead && !_loading && _page > 1);
+            _ => CanRead && CanChangeMonthlyScope && !_loading && _page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
-            _ => CanRead && !_loading && _hasNext);
+            _ => CanRead && CanChangeMonthlyScope && !_loading && _hasNext);
         CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
-            _ => IsCellDetailsOpen);
+            _ => IsCellDetailsOpen && !Correction.IsOpen);
         Excel = new NativeMonthlyExcelExportViewModel();
+        Correction = new NativeClosedDayCorrectionReview();
+        OpenCorrectionCommand = new NativeCommand(_ => _ = OpenCorrectionAsync(), _ => CanOpenCorrection);
+        CloseCorrectionCommand = new NativeCommand(_ => _ = CloseCorrectionAsync(), _ => Correction.CanClose);
+        Correction.PropertyChanged += (_, _) => NotifyCorrection();
     }
 
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
+    public NativeClosedDayCorrectionReview Correction { get; }
+    public ICommand OpenCorrectionCommand { get; }
+    public ICommand CloseCorrectionCommand { get; }
+    public bool CanChangeMonthlyScope => !Correction.IsOpen;
+    public bool CanOpenCorrection => _reader is INativeClosedDayCorrectionBackend && _connected && !_loading &&
+        _detailOpen && !_detailLoading && !Correction.IsOpen && !Excel.IsOpen && !Excel.IsBusy &&
+        _liveActor?.Invoke() is { } actor && actor == _boundActor &&
+        RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
+        _selectedDetail is { } detail && detail.BusinessDate < DateOnly.FromDateTime(DateTime.Now) &&
+        !string.IsNullOrWhiteSpace(detail.AttendanceCommittedAtUtc);
+
+    public async Task OpenCorrectionAsync(CancellationToken ct = default)
+    {
+        if (!CanOpenCorrection || _reader is not INativeClosedDayCorrectionBackend backend || _selectedDetail is not { } detail) return;
+        if (Correction.Open(backend, () => _liveActor?.Invoke(), () => _selectedDetail, detail))
+            await Correction.LoadChoicesAsync(ct);
+    }
+
+    public async Task CloseCorrectionAsync(CancellationToken ct = default)
+    {
+        bool committed = Correction.Receipt is not null;
+        if (!Correction.Close()) return;
+        if (committed) await RefreshAsync(ct);
+    }
+
+    private void NotifyCorrection()
+    {
+        Changed(nameof(CanOpenCorrection), nameof(CanChangeMonthlyScope));
+        ((NativeCommand)OpenCorrectionCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)CloseCorrectionCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)CloseCellDetailsCommand).NotifyAvailabilityChanged();
+        UpdateCommands();
+    }
+
     public override bool IsDataConnected => _connected;
     public override string StatusMessage => IsLoading
         ? "جار قراءة كشف التمام الشهري المعتمد من قاعدة البيانات المشفرة..."
@@ -73,7 +112,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         get => _searchDraft;
         set
         {
-            if (_searchDraft == value) return;
+            if (!CanChangeMonthlyScope || _searchDraft == value) return;
             _searchDraft = value ?? "";
             Changed(nameof(SearchDraft));
             Excel.NotifyContextChanged();
@@ -115,7 +154,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         if (reader is INativeMonthlyExcelExportBackend exportBackend)
             Excel.Attach(exportBackend, () => _liveActor?.Invoke(), () =>
             {
-                if (!_connected || _loading || _boundActor is null ||
+                if (!CanChangeMonthlyScope || !_connected || _loading || _boundActor is null ||
                     _liveActor?.Invoke() != _boundActor ||
                     !string.Equals(_searchDraft.Trim(), _term, StringComparison.Ordinal) ||
                     !ValidPeriod(_period) ||
@@ -129,7 +168,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public async Task OpenCellDetailsAsync(NativeMonthlyDisplayRow? row, int day,
         CancellationToken ct = default)
     {
-        if (!_connected || _loading || _detailOpen ||
+        if (!CanChangeMonthlyScope || !_connected || _loading || _detailOpen ||
             _detailsReader is null || row is null ||
             !_rows.Any(item => ReferenceEquals(item, row)) ||
             day < 1 || day > _days.Count ||
@@ -199,6 +238,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public void CloseCellDetails()
     {
+        if (!CanChangeMonthlyScope) return;
         ++_detailGeneration;
         _detailPending?.Cancel();
         _detailPending = null;
@@ -215,10 +255,13 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             nameof(CellDetailsError), nameof(SelectedCellDetails),
             nameof(SelectedCellDateLabel));
         ((NativeCommand)CloseCellDetailsCommand).NotifyAvailabilityChanged();
+        Changed(nameof(CanOpenCorrection));
+        ((NativeCommand)OpenCorrectionCommand).NotifyAvailabilityChanged();
     }
 
     public void Clear()
     {
+        Correction.ForceClear();
         ++_generation;
         _pending?.Cancel();
         _pending = null;
@@ -265,6 +308,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             HideRows("تغيرت جلسة المستخدم؛ أعد تسجيل الدخول قبل قراءة الأرشيف.");
             return;
         }
+        if (!CanChangeMonthlyScope) return;
         _boundActor ??= actor;
         int request = ++_generation;
         _pending?.Cancel();
@@ -359,6 +403,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public async Task SelectPeriodAsync(string? period, CancellationToken ct = default)
     {
+        if (!CanChangeMonthlyScope) return;
         if (!ValidPeriod(period) || !_periods.Any(p => p.Period == period))
         {
             Invalidate("الشهر المحدد خارج الأرشيف المعتمد أو في المستقبل.");
@@ -373,6 +418,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public async Task SelectSiteAsync(string? siteId, CancellationToken ct = default)
     {
+        if (!CanChangeMonthlyScope) return;
         siteId ??= "";
         if (siteId.Length > 0 && !_sites.Any(s => s.SiteId == siteId))
         {
@@ -388,6 +434,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public async Task SearchAsync(string? search, CancellationToken ct = default)
     {
+        if (!CanChangeMonthlyScope) return;
         string term = (search ?? "").Trim();
         if (term.Length > 100 || term.Any(char.IsControl))
         {
@@ -403,6 +450,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public async Task NextPageAsync(CancellationToken ct = default)
     {
+        if (!CanChangeMonthlyScope) return;
         if (!_hasNext || _loading || _page == 100000) return;
         ++_page;
         Changed(nameof(Page));
@@ -411,6 +459,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public async Task PreviousPageAsync(CancellationToken ct = default)
     {
+        if (!CanChangeMonthlyScope) return;
         if (_page <= 1 || _loading) return;
         --_page;
         Changed(nameof(Page));
