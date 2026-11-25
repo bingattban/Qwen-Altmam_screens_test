@@ -36,3 +36,33 @@ Baseline PR #141 at exact head `3383b4ce242a3168e5f772611b6b47ed3996233c`:
 5. Do not declare a precise percentage improvement until **both** new candidate runs have completed successfully and comparable results have been measured. Clean-machine offline Windows acceptance and signed/public release are separate owner gates.
 
 **Status of this document:** implementation candidate, not evidence that the improved build has finished or that all SECTION 05 standalone screens are complete.
+
+## 2026-11-25 — current native migration CI audit and targeted fixture optimization
+
+Measured successful PRs #62–66 on Qwen-Altmam_screens_test, from first job start to last successful job end (includes inter-job waiting, excludes initial queue and skipped manual acceptance):
+
+| PR | Core | Release | Release run |
+|---|---:|---:|---|
+| 62 | 10m51s | 18m54s | 45657727284 |
+| 63 | 7m25s | 25m48s | 45663054333 |
+| 64 | 7m43s | 19m03s | 45669325514 |
+| 65 | 9m03s | 18m03s | 45673769791 |
+| 66 | 9m41s | 20m16s | 45677389444 |
+
+Exact head for baseline #66: `5dc2f99b0402d4d8fe43dcda55c265eb216b7295`.
+Its Core run 45677389462 passed 18 independent integration, 410 independent unit and 530 focused smoke cases. Real pre-package E2E occupied 236s; restore 13s and full compile 32s. Release jobs: static/advisory preflight 77s; slowest shard performance 394s (17 tests, xUnit reported 5m19s); nine independent restores/builds 24–56s each; independent pre-package E2E 282s; x86 packaging 260s and x64 214s (parallel); package acceptance x86 Portable 413s, x86 Installer 477s, x64 Portable 148s, x64 Installer 195s; independent SHA audit 28s. Nine shards and two workflows overlap, so their individual times are not additive.
+
+The x86 Installer acceptance log (job 139435410304) measured the real bundled native bridge subprocess at 414.83s and the independent 69-route subprocess at 5.69s; x86 Portable (139435410239) measured 332.07s and 4.77s. x64 Installer (139435410298) measured 134.76s and 3.66s. The slowest x86 operation is the actual native browser/SQLCipher roundtrip rather than ZIP extraction, Inno Setup, or route navigation. The x86 Installer trace locates most elapsed time between modal UI PASS and the final native bridge authorization/SQLCipher PASS. This is a measured bottleneck, not a claim that every second is encryption cost. The NuGet cache hit in Core and performance-shard logs; cache is already configured on Core, preflight, matrix, E2E and packaging runners. Do not add redundant caching or cache compiled/test artifacts across commits.
+
+### Implemented first candidate
+
+The existing WebView2 synthetic database disabled SQLCipher connection pooling in all modes, even when recovery/reset was explicitly split out. Use the production-equivalent encrypted connection pool ONLY for the explicit split-recovery bridge-only process, excluding recovery-only. Retain nonpooled connections in recovery-capable processes. This changes neither production connection defaults nor SQLCipher key, cipher, KDF, WAL, foreign keys, authorization, test assertions, package timeouts or test coverage. Drain the synthetic gateway, clear only its exact connection pool (no process-wide ClearAllPools), dispose, then delete temporary directories. New real SQLCipher cleanup/reopen regression and strengthened existing WebView2 preflight run in both workflows. Every bridge role, attendance, audit, 69-route, recovery, install/reinstall/uninstall, AppData-preservation and four-package checksum gate remains unchanged. No YAML workflow or distribution changes.
+
+### Remaining opportunities, not implemented
+
+1. Compare the next successful candidate against this baseline and at least two subsequent green runs, including x86/x64 subprocess timings; retain current bounded timeouts. Do not claim a numerical speedup until measured. If pooling causes errors, revert the isolated candidate rather than loosening gates.
+2. Review actual TRX timings per test/class (especially performance and slower R01/security shards). Rebalance existing exact partitions only after verifying coverage, no duplicates and evidence contract; keep the full 10k-person three-year benchmark. Separate independent test suites only if the measured critical path warrants it.
+3. Assess runner queue variability and the cost of the nine builds versus transferring exact-head build outputs. Avoid serializing all shards behind an extra compile/upload/download dependency without demonstrated benefit; retain independent native execution on Windows.
+4. Keep already-compressed ZIP/EXE artifact upload at compression level 0 and raw publish artifact at level 1; retain all four acceptance jobs. Investigate independent bridge/route retry boundaries only if traces demonstrate wasted re-execution.
+
+Native historical range UI integration remains the next functional slice after this independent CI optimization is validated. Manual clean-machine Windows acceptance remains separate and unfulfilled.
