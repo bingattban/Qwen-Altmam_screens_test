@@ -257,7 +257,7 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["statusId"] = request.StatusId,
                 ["movementType"] = request.MovementType,
                 ["summaryPage"] = request.SummaryPage
-            }, ct).ConfigureAwait(false);
+            }, ct, includeGroupFilterChoices: true).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
         JsonObject data = RequiredObject(original, "PersonnelReport(native-group)");
