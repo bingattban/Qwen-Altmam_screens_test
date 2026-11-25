@@ -123,7 +123,9 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         : "الموقع: " + _siteFilterOptions.FirstOrDefault(x => x.Id == _report.SiteId)?.Title +
           " — الحالة: " + _statusFilterOptions.FirstOrDefault(x => x.Id == _report.StatusId)?.Title;
 
-    public IReadOnlyList<NativeReportMovementTypeOption> MovementTypeOptions { get; } =
+    public IReadOnlyList<NativeReportMovementTypeOption> MovementTypeOptions => SharedMovementTypeOptions;
+
+    internal static IReadOnlyList<NativeReportMovementTypeOption> SharedMovementTypeOptions { get; } =
     [
         new(0, "جميع الحركات"),
         new(1, "نقل داخلي"),
