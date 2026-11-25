@@ -353,6 +353,25 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
                 s.Count is < 0 || s.PersonCount is < 0 ||
                 s.PersonCount > report.PersonCount || s.Count < s.PersonCount))
             throw new InvalidDataException("Forged, incomplete or mismatched canonical group report.");
+
+        // The canonical service groups by both immutable status ID and historical
+        // name snapshot. A renamed status may legitimately have multiple labels.
+        // Compare each exact pair, not just the sum of all attendance.
+        if (report.Persons.Any(person => person.StatusTotals
+                .Select(status => (status.StatusId, status.StatusName)).Distinct().Count()
+                != person.StatusTotals.Count) ||
+            report.StatusTotals.Select(status => (status.StatusId, status.StatusName))
+                .Distinct().Count() != report.StatusTotals.Count)
+            throw new InvalidDataException("Duplicate historical status breakdown.");
+
+        var perPersonTotals = report.Persons.SelectMany(person => person.StatusTotals)
+            .GroupBy(status => (status.StatusId, status.StatusName))
+            .ToDictionary(group => group.Key, group => group.Sum(status => status.Count));
+        if (perPersonTotals.Count != report.StatusTotals.Count ||
+            report.StatusTotals.Any(status =>
+                !perPersonTotals.TryGetValue((status.StatusId, status.StatusName), out long count) ||
+                count != status.Count))
+            throw new InvalidDataException("Individual and group status breakdowns do not reconcile.");
     }
 
     private void Changed()
