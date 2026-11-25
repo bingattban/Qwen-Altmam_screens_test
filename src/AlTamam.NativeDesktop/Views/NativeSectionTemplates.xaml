@@ -155,6 +155,7 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <Button Content="فتح مراجعة تعديل الفترة" Command="{Binding OpenHistoricalRangeCommand}" Padding="10,6" Margin="0,8"/>
+                        <Button Content="تصحيح يوم مغلق محفوظ (تاريخ واحد)" Command="{Binding OpenHistoricalSingleCommand}" Padding="10,6" Margin="0,4"/>
                     </StackPanel>
                     <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
                             Visibility="{Binding HistoricalRange.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
@@ -190,6 +191,36 @@
                             <Button Content="{Binding HistoricalRange.ConfirmLabel}" Command="{Binding HistoricalRange.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
                             <TextBlock Text="{Binding HistoricalRange.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
                             <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseHistoricalRangeCommand}" Padding="10,6"/>
+                        </StackPanel>
+                    </Border>
+                    <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                            Visibility="{Binding HistoricalSingle.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                        <StackPanel>
+                            <TextBlock Text="تصحيح يوم مغلق محفوظ" FontWeight="Bold" Foreground="#123752"/>
+                            <TextBlock Text="التصحيح الاستثنائي ليوم سابق واحد؛ لا يعاد فتح اليوم ولا يتغير وقت التحضير الأصلي. الخدمة تتحقق من الإذن والأهلية." TextWrapping="Wrap" Margin="0,6"/>
+                            <TextBlock Text="{Binding Historical.Evidence.Request.From, StringFormat=yyyy-MM-dd}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="الحالة المصححة" Margin="0,6,0,2"/>
+                            <ComboBox ItemsSource="{Binding HistoricalSingle.StatusChoices}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="StatusId" SelectedValue="{Binding HistoricalSingle.SelectedStatusId, Mode=TwoWay}"
+                                      IsEnabled="{Binding HistoricalSingle.CanEdit}" AutomationProperties.Name="حالة تصحيح اليوم المغلق"/>
+                            <TextBlock Text="السبب (10 إلى 400 حرف)" Margin="0,6,0,2"/>
+                            <TextBox Text="{Binding HistoricalSingle.Reason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     MaxLength="400" TextWrapping="Wrap" MinHeight="45" IsEnabled="{Binding HistoricalSingle.CanEdit}"
+                                     AutomationProperties.Name="سبب تصحيح اليوم المغلق"/>
+                            <Button Content="معاينة التصحيح الاستثنائي" Command="{Binding HistoricalSingle.PreviewCommand}" Padding="10,6" Margin="0,8"/>
+                            <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding HistoricalSingle.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.PersonName}" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.ServiceNumberA}"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.SiteName}"/>
+                            <TextBlock Text="الحالة السابقة" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.BeforeStatusName}"/>
+                            <TextBlock Text="الحالة الجديدة" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.AfterStatusName}" Foreground="#0D9488"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.Request.Reason}" TextWrapping="Wrap"/>
+                            <Button Content="{Binding HistoricalSingle.ConfirmLabel}" Command="{Binding HistoricalSingle.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
+                            <TextBlock Text="{Binding HistoricalSingle.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                            <Button Content="إغلاق مراجعة اليوم المغلق" Command="{Binding CloseHistoricalSingleCommand}" Padding="10,6"/>
                         </StackPanel>
                     </Border>
                     <Button Content="إغلاق البحث التاريخي" Command="{Binding Historical.CloseCommand}" Padding="10,6" Margin="0,8"/>
