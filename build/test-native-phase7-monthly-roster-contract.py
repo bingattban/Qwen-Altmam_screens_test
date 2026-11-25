@@ -14,6 +14,8 @@ FILES = {
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
+    "period_review": "src/AlTamam.NativePresentation/NativeHistoricalPeriodReview.cs",
+    "period_review_tests": "tests/AlTamam.UnitTests/NativeHistoricalPeriodReviewPhase10Tests.cs",
     "period_evidence": "src/AlTamam.NativePresentation/NativeHistoricalPeriodEvidence.cs",
     "period_tests": "tests/AlTamam.UnitTests/NativeHistoricalPeriodEvidencePhase10Tests.cs",
     "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
@@ -134,6 +136,15 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role)",
+                  "ReferenceEquals(x,value)", "generation!=_generation",
+                  "response.Matches(request,Today)", "Array.AsReadOnly(response.Days.ToArray())",
+                  "_pending?.Cancel();", "ClearSearchResults();"):
+        require("period_review",token)
+    for token in ("Direct_search_requires_admin_and_exact_candidate_then_reads_complete_period",
+                  "Direct_search_discards_late_results_after_clear_and_session_replacement",
+                  "Direct_period_rejects_mismatched_evidence_and_invalidates_on_search_edit"):
+        require("period_review_tests",token)
     for token in ("INativeHistoricalPeriodReader","SpanDays is >= 1 and <= 62",
                   "report.AttendanceTotal != report.Attendance.Count","saved.TryAdd(date",
                   "Array.AsReadOnly(days)","لا يوجد سجل تحضير"):
