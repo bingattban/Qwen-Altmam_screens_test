@@ -2443,7 +2443,7 @@ public sealed class NativeSqlCipherDashboardReader(
             throw new InvalidDataException("Invalid native monthly archive request.");
 
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
-        bool historical = monthStart.Year != DateTime.Now.Year ||
+        bool historical = filter.ExplicitArchive || monthStart.Year != DateTime.Now.Year ||
                           monthStart.Month != DateTime.Now.Month;
         BridgeResponse response = await new DailyMonthlyReadService(database)
             .MonthlyGridAsync(new JsonObject

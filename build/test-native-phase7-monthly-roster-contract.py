@@ -67,7 +67,7 @@ def problems(content):
         require("contracts", token)
     for token in ("VerifyContinuationIdentityAsync(actor, ct)",
                   "ArchivePeriodsAsync(ct)", "MonthlyGridAsync(new JsonObject",
-                  '["archiveMode"] = historical', '["pageSize"] = 100',
+                  '["archiveMode"] = historical', "bool historical = filter.ExplicitArchive ||", '["pageSize"] = 100',
                   "DateOnly.TryParseExact(saved.Key", "savedDays",
                   "movementNote", "RequiredText(row, \"personId\")", "RequiredArray(data, \"customColumns\")",
                   "new NativeMonthlySnapshot(",
@@ -132,6 +132,12 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    require("contracts","public bool ExplicitArchive { get; init; }")
+    for token in ("ExplicitArchive = IsArchiveMode", "SwitchCurrentMonthModeAsync",
+                  "CanSwitchMonthMode", "_explicitArchive = false;", "nameof(MonthModeLabel)"):
+        require("vm",token)
+    for token in ("ShowLiveMonthCommand","ShowCurrentArchiveCommand","MonthModeLabel"):
+        require("xaml",token)
     for token in ("NativeClosedDayPolicyRequest", "if (!CanEdit) return;", "Approved=request;",
                   "result.Enabled != approved.Enabled", "_busy=_uncertain=true;",
                   "_pending?.Cancel()", "_liveActor?.Invoke() == actor",
@@ -242,6 +248,8 @@ def problems(content):
     for token in ("No_live_session_does_not_read_months_or_people",
                   "Native_monthly_page_uses_real_historical_cells",
                   "Site_search_archive_and_pagination",
+                  "Explicit_current_month_archive_is_distinct_from_live_month_and_preserves_scope",
+                  "Archive_mode_commands_require_live_session_and_catalogue",
                   "Future_or_unlisted_month",
                   "Logout_and_replaced_nonce",
                   "Malformed_service_response"):
@@ -298,6 +306,9 @@ if __name__ == "__main__":
         ("catchup_review", "approved.MatchesReceipt(result)"),
         ("policy_review", "result.Enabled != approved.Enabled"),
         ("shell", "screen == NativeScreen.Settings || !Settings.IsReviewOpen"),
+        ("backend", "bool historical = filter.ExplicitArchive ||"),
+        ("vm", "ExplicitArchive = IsArchiveMode"),
+        ("xaml", "ShowCurrentArchiveCommand"),
         ("templates", "Policy.ConfirmCommand"),
         ("policy_review", "SetClosedDayPolicyAsync(_actor!,approved,_operationId"),
         ("policy_sql_tests", "JsonNode.DeepEquals(firstReceipt,replayedReceipt)"),
