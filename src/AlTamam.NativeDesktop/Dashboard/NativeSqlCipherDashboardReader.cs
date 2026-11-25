@@ -90,34 +90,18 @@ public sealed class NativeSqlCipherDashboardReader(
         string fingerprint = _individualExcelApproval.Consume(actor, request, approvalToken);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var service = new PersonnelIndividualExcelExportService(database);
-        var response = await service.ExportAsync(IndividualExcelPayload(request), fingerprint,
-            token => VerifyPersonnelManagerAsync(actor, token), ct, async (receipt, token) =>
+        var response = await service.ExportAuditedAsync(IndividualExcelPayload(request), fingerprint,
+            async token =>
             {
-                VerifyIndividualExcelScope(receipt, request);
-                if (!string.Equals(RequiredText(receipt, "fingerprint"), fingerprint,
-                    StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Individual Excel receipt fingerprint changed.");
-                string fileName = Path.GetFileName(RequiredText(receipt, "filePath"));
                 await VerifyPersonnelManagerAsync(actor, token).ConfigureAwait(false);
-                string exportId = Guid.NewGuid().ToString("N");
-                await database.ExecuteInWriteTransactionAsync(async (connection, tx) =>
-                {
-                    await BridgeAuditWriter.WriteAsync(connection, tx, TimeProvider.System,
-                        "PERSONNEL_EXCEL_EXPORT", "تصدير Excel",
-                        actor.UserId, actor.Username, null, "ExcelExport", exportId,
-                        "تقرير فردي", null, new JsonObject
-                        {
-                            ["fileName"] = fileName, ["mode"] = "nativeIndividual",
-                            ["personCount"] = 1, ["sheetCount"] = 9,
-                            ["dateFrom"] = request.DateFrom, ["dateTo"] = request.DateTo,
-                            ["siteId"] = request.SiteId, ["statusId"] = request.StatusId,
-                            ["movementType"] = request.MovementType
-                        }.ToJsonString(), "تصدير تقرير فردي إلى Excel دون محتوى السجلات.",
-                        null, DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                        exportId, token).ConfigureAwait(false);
-                    return 0;
-                }, token).ConfigureAwait(false);
-            }).ConfigureAwait(false);
+                var principal = await services.ResolveSessionAsync(actor.SessionNonce, token)
+                    .ConfigureAwait(false);
+                if (principal is null || principal.UserId != actor.UserId ||
+                    principal.Username != actor.Username || principal.Role != actor.Role ||
+                    principal.SessionNonce != actor.SessionNonce)
+                    throw new UnauthorizedAccessException("Individual Excel session changed.");
+                return principal;
+            }, ct).ConfigureAwait(false);
         var result = RequiredObject(response, "ExportIndividualExcel");
         return new NativeIndividualExcelReceipt(request, RequiredText(result, "filePath"),
             RequiredText(result, "fingerprint"), checked((int)RequiredNumber(result, "sheetCount")));
