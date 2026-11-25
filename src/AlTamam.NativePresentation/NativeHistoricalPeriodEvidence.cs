@@ -50,6 +50,23 @@ public sealed record NativeHistoricalPeriodEvidence(NativeHistoricalPeriodReques
         return true;
     }
 
+    // Compare only actual proposed changes; omitted days are not evidence of
+    // eligibility, and a missing record may still be canonically preparable.
+    public bool MatchesPreviewState(NativeHistoricalRangePreview preview,DateOnly today)
+    {
+        var request=preview.Request;
+        if (!Matches(Request,today) || request.PersonId!=Request.PersonId ||
+            request.From!=Request.From || request.To!=Request.To ||
+            !preview.Matches(request,today)) return false;
+        foreach (var proposed in preview.Days)
+        {
+            var saved=Days[proposed.BusinessDate.DayNumber-Request.From.DayNumber];
+            if (saved.HasSavedRecord!=proposed.HasExistingRecord ||
+                saved.Revision!=proposed.PreviousRevision) return false;
+        }
+        return true;
+    }
+
     public static NativeHistoricalPeriodEvidence FromReport(NativeHistoricalPeriodRequest request,
         NativePersonnelReportSnapshot report,DateOnly today)
     {
