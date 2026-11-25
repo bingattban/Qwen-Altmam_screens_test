@@ -14,6 +14,8 @@ FILES = {
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
+    "period_evidence": "src/AlTamam.NativePresentation/NativeHistoricalPeriodEvidence.cs",
+    "period_tests": "tests/AlTamam.UnitTests/NativeHistoricalPeriodEvidencePhase10Tests.cs",
     "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
     "catchup_contract": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpContracts.cs",
     "catchup_review": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpReview.cs",
@@ -132,6 +134,23 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("INativeHistoricalPeriodReader","SpanDays is >= 1 and <= 62",
+                  "report.AttendanceTotal != report.Attendance.Count","saved.TryAdd(date",
+                  "Array.AsReadOnly(days)","لا يوجد سجل تحضير"):
+        require("period_evidence",token)
+    for token in ("SearchHistoricalPeopleAsync(", "services.SearchPersonsAsync(term,50,ct,activeOnly:false)",
+                  "ReadHistoricalPeriodAsync(", "NativeHistoricalPeriodEvidence.FromReport(request,report"):
+        require("backend",token)
+    for token in ("OpenForPeriod(", "CanEditDates => CanEdit && _period is null",
+                  "ReferenceEquals(_currentPeriod?.Invoke(),period)", "period.Matches(period.Request,Today)",
+                  "_detail?.PersonId ?? _period!.Request.PersonId"):
+        require("range_vm",token)
+    for token in ("Historical_person_search_rejects_empty_control_and_overlong_queries",
+                  "Historical_period_requires_inclusive_bounded_past_or_today",
+                  "Historical_period_reads_saved_days_and_never_infers_missing_day_eligibility",
+                  "Historical_period_rejects_wrong_identity_scope_partial_and_duplicate_report"):
+        require("period_tests",token)
+    require("range_tests","Direct_range_requires_explicit_current_period_and_freezes_read_dates")
     require("contracts","public bool ExplicitArchive { get; init; }")
     for token in ("NativeMonthlyCellDisplay From(", "color.Skip(1).All(Uri.IsHexDigit)",
                   "luminance > 0.179", '"internal-transfer" => "↔"',
@@ -313,6 +332,9 @@ if __name__ == "__main__":
         ("vm", "RangeCorrection.ForceClear();"),
         ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen"),
         ("range_vm", "approved.MatchesReceipt(result)"),
+        ("range_vm", "OpenForPeriod("),
+        ("period_evidence", "report.AttendanceTotal != report.Attendance.Count"),
+        ("backend", "services.SearchPersonsAsync(term,50,ct,activeOnly:false)"),
         ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
         ("catchup_review", "approved.MatchesReceipt(result)"),
         ("policy_review", "result.Enabled != approved.Enabled"),

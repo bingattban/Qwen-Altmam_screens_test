@@ -117,6 +117,50 @@ public sealed class NativeHistoricalRangeReviewPhase10Tests
         Assert.Empty(fake.Commits);
     }
 
+    [Fact]
+    public async Task Direct_range_requires_explicit_current_period_and_freezes_read_dates()
+    {
+        var request=new NativeHistoricalPeriodRequest("P-1",Day,Day.AddDays(2));
+        var evidence=new NativeHistoricalPeriodEvidence(request,"أحمد","123",
+            [new(Day,false,"لا يوجد سجل تحضير","",0),
+             new(Day.AddDays(1),false,"لا يوجد سجل تحضير","",0),
+             new(Day.AddDays(2),true,"موجود","المركز",7)]);
+        NativeHistoricalPeriodEvidence? current=evidence;
+        var fake=new Fake();
+        var vm=new NativeHistoricalRangeReview();
+        Assert.False(vm.OpenForPeriod(fake,fake,()=>Owner with { Role=UserRole.Supervisor },()=>current,evidence));
+        Assert.False(vm.OpenForPeriod(fake,fake,()=>Owner,()=>current,evidence with { }));
+        Assert.True(vm.OpenForPeriod(fake,fake,()=>Owner,()=>current,evidence));
+        await vm.LoadChoicesAsync();
+        Assert.False(vm.CanEditDates);
+        var before=vm.FromText;
+        vm.FromText="1900-01-01";
+        Assert.Equal(before,vm.FromText);
+        vm.SelectedStatusId="STS-ABSENT";
+        vm.Reason="تصحيح معتمد للسجل التاريخي";
+        await vm.ConfirmAsync();
+        Assert.Empty(fake.Commits);
+        await vm.PreviewAsync();
+        Assert.NotNull(vm.Preview);
+        Assert.Equal(request.From,vm.Preview!.Request.From);
+        Assert.Equal(request.To,vm.Preview!.Request.To);
+        Assert.Equal(request.PersonId,vm.Preview!.Request.PersonId);
+        current=evidence with { };
+        await vm.ConfirmAsync();
+        Assert.Empty(fake.Commits);
+        Assert.False(vm.IsOpen);
+        current=evidence;
+        Assert.True(vm.OpenForPeriod(fake,fake,()=>Owner,()=>current,evidence));
+        await vm.LoadChoicesAsync();
+        vm.SelectedStatusId="STS-ABSENT";
+        vm.Reason="تصحيح معتمد للسجل التاريخي";
+        await vm.PreviewAsync();
+        await vm.ConfirmAsync();
+        Assert.Single(fake.Commits);
+        Assert.NotNull(vm.Receipt);
+        Assert.True(vm.Close());
+    }
+
     private sealed class Fake : INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
     {
         public int Previews;

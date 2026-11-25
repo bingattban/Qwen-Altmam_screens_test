@@ -20,7 +20,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
-      INativeImportOutcomeHistoryBackend, INativePersonnelReportReader,
+      INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
       INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
@@ -389,6 +389,46 @@ public sealed class NativeSqlCipherDashboardReader(
     // Phase 9: the ORIGINAL immutable PersonId-keyed historical report.
     // WPF presents selected 100-row pages only; the backend never clones SQL
     // or writes/exports a second independent personnel report.
+    public async Task<IReadOnlyList<NativeHistoricalPersonCandidate>> SearchHistoricalPeopleAsync(
+        NativeIdentity actor,string term,CancellationToken ct=default)
+    {
+        if (!NativeHistoricalPersonCandidate.IsValidTerm(term))
+            throw new InvalidDataException("Invalid historical person search.");
+        if (!RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role))
+            throw new UnauthorizedAccessException("Historical correction requires administration.");
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var response=await services.SearchPersonsAsync(term,50,ct,activeOnly:false).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var data=RequiredObject(response,"SearchPersons(historical)");
+        var rows=RequiredArray(data,"items");
+        if (rows.Count > 50 || RequiredNumber(data,"count") != rows.Count)
+            throw new InvalidDataException("Invalid historical person search count.");
+        var result=rows.Select(node =>
+        {
+            var item=RequireObject(node);
+            return new NativeHistoricalPersonCandidate(RequiredText(item,"personId"),
+                RequiredText(item,"displayName"),RequiredText(item,"serviceNumberA"),
+                RequiredText(item,"siteName"),checked((int)RequiredNumber(item,"organizationalStatus")));
+        }).ToArray();
+        if (result.Any(x=>!x.IsValid) ||
+            result.Select(x=>x.PersonId).Distinct(StringComparer.Ordinal).Count()!=result.Length)
+            throw new InvalidDataException("Invalid historical person search response.");
+        return Array.AsReadOnly(result);
+    }
+
+    public async Task<NativeHistoricalPeriodEvidence> ReadHistoricalPeriodAsync(
+        NativeIdentity actor,NativeHistoricalPeriodRequest request,CancellationToken ct=default)
+    {
+        if (!request.IsValid(DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Invalid historical period.");
+        if (!RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role))
+            throw new UnauthorizedAccessException("Historical correction requires administration.");
+        var report=await ReadIndividualAsync(actor,new NativeIndividualReportPages(request.PersonId,
+            DateFrom:request.From.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            DateTo:request.To.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture)),ct).ConfigureAwait(false);
+        return NativeHistoricalPeriodEvidence.FromReport(request,report,DateOnly.FromDateTime(DateTime.Now));
+    }
+
     public async Task<NativePersonnelReportSnapshot> ReadIndividualAsync(
         NativeIdentity actor, NativeIndividualReportPages pages,
         CancellationToken ct = default)
