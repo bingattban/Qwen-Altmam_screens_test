@@ -15,7 +15,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// audit writer. Those belong to AttendanceCommitService exclusively.
 /// </summary>
 internal sealed class NativeSqlCipherAttendanceReviewBackend(
-    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend
+    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend
 {
     public async Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity identity, CancellationToken ct = default)
@@ -242,6 +242,94 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             !revisionValue.TryGetValue<long>(out long revision) || revision < 2)
             throw new InvalidDataException("Invalid canonical correction receipt.");
         return new NativeClosedDayCorrectionReceipt(RequiredText(data, "personId"), date, revision);
+    }
+
+    public async Task<NativeHistoricalRangePreview> PreviewRangeAsync(
+        NativeIdentity identity, NativeHistoricalRangeRequest request, CancellationToken ct = default)
+    {
+        if (!request.IsValid(DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Invalid historical range request.");
+        const string action = "PreviewClosedDayCorrection";
+        string from = request.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        string to = request.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new ClosedDayCorrectionService(database).PreviewAsync(new JsonObject
+        {
+            ["personId"] = request.PersonId,
+            ["dateFrom"] = from,
+            ["dateTo"] = to,
+            ["statusId"] = request.StatusId,
+            ["reason"] = request.Reason
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            RequiredText(data, "mode") != "range" ||
+            RequiredText(data, "personId") != request.PersonId ||
+            RequiredText(data, "businessDate") != from ||
+            RequiredText(data, "dateFrom") != from || RequiredText(data, "dateTo") != to ||
+            RequiredText(data, "statusId") != request.StatusId ||
+            RequiredText(data, "reason") != request.Reason ||
+            data["requiresExplicitConfirmation"]?.GetValue<bool>() != true ||
+            data["days"] is not JsonArray rows || rows.Count < 1 || rows.Count > request.SpanDays ||
+            data["previousRevision"] is not JsonValue aggregateValue ||
+            !aggregateValue.TryGetValue<long>(out long aggregate))
+            throw new InvalidDataException("Invalid canonical historical range preview.");
+
+        var days = new List<NativeHistoricalRangeDay>(rows.Count);
+        long revisionSum = 0;
+        foreach (var node in rows)
+        {
+            var row = RequiredObject(node);
+            if (!DateOnly.TryParseExact(RequiredText(row, "businessDate"), "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) ||
+                row["previousRevision"] is not JsonValue revisionValue ||
+                !revisionValue.TryGetValue<long>(out long revision) ||
+                row["hasExistingRecord"] is not JsonValue existingValue ||
+                !existingValue.TryGetValue<bool>(out bool existing))
+                throw new InvalidDataException("Invalid canonical historical day.");
+            days.Add(new(day, existing, revision,
+                RequiredText(row, "assignmentId"), RequiredText(row, "siteId"),
+                RequiredText(row, "siteName"), RequiredText(row, "beforeStatusId"),
+                RequiredText(row, "beforeStatusName"), RequiredText(row, "afterStatusName"),
+                RequiredText(row, "afterStatusSymbol"), RequiredText(row, "afterStatusColor")));
+            revisionSum = unchecked(revisionSum * 31 + revision + 1);
+        }
+        var preview = new NativeHistoricalRangePreview(request, RequiredText(data, "previewToken"),
+            RequiredText(data, "personName"), RequiredText(data, "serviceNumberA"),
+            days.AsReadOnly(), true);
+        if (revisionSum != aggregate || !preview.Matches(request, DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Historical range day mismatch.");
+        return preview;
+    }
+
+    public async Task<NativeHistoricalRangeReceipt> CommitRangeAsync(
+        NativeIdentity identity, NativeHistoricalRangePreview approved, string operationId,
+        CancellationToken ct = default)
+    {
+        if (!approved.Matches(approved.Request, DateOnly.FromDateTime(DateTime.Now)) ||
+            operationId.Length is < 16 or > 128 ||
+            operationId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
+            throw new InvalidDataException("Invalid historical range approval.");
+        const string action = "CommitClosedDayCorrection";
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new ClosedDayCorrectionService(database).CommitAsync(new JsonObject
+        {
+            ["previewToken"] = approved.Token,
+            ["operationId"] = operationId
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            !DateOnly.TryParseExact(RequiredText(data, "businessDate"), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+            data["revisionNumber"] is not JsonValue revisionValue ||
+            !revisionValue.TryGetValue<long>(out long revision))
+            throw new InvalidDataException("Invalid canonical historical range receipt.");
+        var receipt = new NativeHistoricalRangeReceipt(RequiredText(data, "personId"), date, revision);
+        if (!approved.MatchesReceipt(receipt))
+            throw new InvalidDataException("Historical range receipt mismatch.");
+        return receipt;
     }
 
     private async Task<BridgePrincipal> ResolveAuthorizedAsync(
