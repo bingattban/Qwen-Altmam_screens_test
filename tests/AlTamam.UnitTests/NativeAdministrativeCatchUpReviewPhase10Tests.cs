@@ -164,8 +164,89 @@ public sealed class NativeAdministrativeCatchUpReviewPhase10Tests
         Assert.Empty(fake.Commits);
     }
 
-    private sealed class Fake : INativeAdministrativeCatchUpBackend
+    [Fact]
+    public async Task Settings_policy_and_catch_up_reviews_are_mutually_exclusive()
     {
+        var fake = new Fake();
+        var page = new SettingsPageViewModel();
+        NativeIdentity? live = Admin with { Role=UserRole.Supervisor };
+        page.AttachCatchUp(fake,()=>live);
+        page.AttachClosedDayPolicy(fake,()=>live);
+        Assert.False(page.CanOpenPolicy);
+        Assert.False(page.EnablePolicyCommand.CanExecute(null));
+        Assert.False(page.DisablePolicyCommand.CanExecute(null));
+        live=Admin;
+        page.NotifySessionChanged();
+        Assert.True(page.CanOpenPolicy);
+        page.OpenCatchUpCommand.Execute(null);
+        Assert.True(page.CatchUp.IsOpen);
+        Assert.True(page.IsReviewOpen);
+        Assert.False(page.CanOpenPolicy);
+        page.EnablePolicyCommand.Execute(null);
+        Assert.False(page.Policy.IsOpen);
+        Assert.True(page.CatchUp.Close());
+        page.DisablePolicyCommand.Execute(null);
+        Assert.True(page.Policy.IsOpen);
+        Assert.True(page.IsReviewOpen);
+        Assert.False(page.CanOpenCatchUp);
+        page.OpenCatchUpCommand.Execute(null);
+        Assert.False(page.CatchUp.IsOpen);
+        await page.Policy.ConfirmAsync();
+        Assert.Empty(fake.PolicyCalls);
+        page.Policy.Prepare();
+        Assert.Empty(fake.PolicyCalls);
+        await page.Policy.ConfirmAsync();
+        Assert.False(Assert.IsType<NativeClosedDayPolicyReceipt>(page.Policy.Receipt).Enabled);
+        Assert.Single(fake.PolicyCalls);
+        Assert.True(page.Policy.Close());
+        Assert.False(page.IsReviewOpen);
+        Assert.True(page.CanOpenCatchUp);
+        Assert.True(page.CanOpenPolicy);
+    }
+
+    [Fact]
+    public async Task Settings_policy_uncertain_commit_blocks_other_review_and_logout_clears_late_result()
+    {
+        var fake = new Fake { WrongPolicyReceipt=true };
+        NativeIdentity? live=Admin;
+        var page = new SettingsPageViewModel();
+        page.AttachCatchUp(fake,()=>live);
+        page.AttachClosedDayPolicy(fake,()=>live);
+        page.EnablePolicyCommand.Execute(null);
+        page.Policy.Prepare();
+        await page.Policy.ConfirmAsync();
+        Assert.True(page.Policy.HasUnverifiedCommit);
+        Assert.True(page.IsReviewOpen);
+        Assert.False(page.CanOpenCatchUp);
+        Assert.False(page.CanOpenPolicy);
+        Assert.False(page.Policy.Close());
+        fake.WrongPolicyReceipt=false;
+        fake.PendingPolicy=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending=page.Policy.ConfirmAsync();
+        live=null;
+        page.Clear();
+        fake.PendingPolicy.SetResult(new(true));
+        await pending;
+        Assert.False(page.IsReviewOpen);
+        Assert.Null(page.Policy.Receipt);
+        Assert.False(page.IsDataConnected);
+        Assert.Contains("لم يتم",page.StatusMessage);
+        Assert.Equal(2,fake.PolicyCalls.Count);
+        Assert.Equal(fake.PolicyCalls[0],fake.PolicyCalls[1]);
+    }
+
+    private sealed class Fake : INativeAdministrativeCatchUpBackend, INativeClosedDayPolicyBackend
+    {
+        public bool WrongPolicyReceipt;
+        public TaskCompletionSource<NativeClosedDayPolicyReceipt>? PendingPolicy;
+        public List<(NativeClosedDayPolicyRequest Request,string Operation)> PolicyCalls=[];
+        public Task<NativeClosedDayPolicyReceipt> SetClosedDayPolicyAsync(NativeIdentity actor,
+            NativeClosedDayPolicyRequest approved,string operationId,CancellationToken ct=default)
+        {
+            PolicyCalls.Add((approved,operationId));
+            return PendingPolicy?.Task ?? Task.FromResult(new NativeClosedDayPolicyReceipt(
+                WrongPolicyReceipt ? !approved.Enabled : approved.Enabled));
+        }
         public int Previews;
         public bool Forge,BadReceipt;
         public NativeAdministrativeCatchUpPreview? Last;
