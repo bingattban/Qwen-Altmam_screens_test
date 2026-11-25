@@ -415,8 +415,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
                 rankIndex < 0 ? "" : row.CustomCells[rankIndex],
                 row.Name, row.SiteName,
                 row.CustomCells.Where((_, i) => i != rankIndex).ToArray(),
-                row.DayCells.Select(cell => new NativeMonthlyCellDisplay(
-                    cell?.Symbol ?? "", cell?.Description ?? "")).ToArray())).ToArray();
+                row.DayCells.Select(cell => NativeMonthlyCellDisplay.From(cell)).ToArray())).ToArray();
             _extraColumns = result.CustomColumns
                 .Where((_, i) => i != rankIndex).ToArray();
             _days = Enumerable.Range(1, result.DaysInMonth).ToArray();
