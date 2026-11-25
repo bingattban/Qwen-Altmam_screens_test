@@ -21,13 +21,91 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend
 {
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
 
 
+
+    private readonly NativeIndividualExcelApprovalGate _individualExcelApproval = new();
+
+    public void InvalidateIndividualExcelApproval() => _individualExcelApproval.Invalidate();
+
+    private static JsonObject IndividualExcelPayload(NativeIndividualExcelRequest request) => new()
+    {
+        ["personId"] = request.PersonId, ["dateFrom"] = request.DateFrom,
+        ["dateTo"] = request.DateTo, ["movementType"] = request.MovementType,
+        ["siteId"] = request.SiteId, ["statusId"] = request.StatusId
+    };
+
+    private static void VerifyIndividualExcelScope(JsonObject result,
+        NativeIndividualExcelRequest request)
+    {
+        if (RequiredText(result, "personId") != request.PersonId ||
+            RequiredText(result, "dateFrom") != request.DateFrom ||
+            RequiredText(result, "dateTo") != request.DateTo ||
+            RequiredText(result, "siteId") != request.SiteId ||
+            RequiredText(result, "statusId") != request.StatusId ||
+            RequiredNumber(result, "movementType") != request.MovementType ||
+            RequiredNumber(result, "sheetCount") != 9 ||
+            RequiredText(result, "format") != "xlsx")
+            throw new InvalidDataException("Individual Excel scope changed.");
+    }
+
+    public async Task<NativeIndividualExcelPreview> PreviewIndividualExcelAsync(
+        NativeIdentity actor, NativeIndividualExcelRequest request,
+        CancellationToken ct = default)
+    {
+        var generation = _individualExcelApproval.Begin();
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var service = new PersonnelIndividualExcelExportService(database);
+        var result = RequiredObject(await service.PreviewAsync(IndividualExcelPayload(request),
+            token => VerifyPersonnelManagerAsync(actor, token), ct).ConfigureAwait(false),
+            "PreviewIndividualExcel");
+        VerifyIndividualExcelScope(result, request);
+        var name = RequiredText(result, "name");
+        var number = RequiredText(result, "serviceNumberA");
+        var folder = RequiredText(result, "directory");
+        var attendance = RequiredNumber(result, "attendanceTotal");
+        var identities = RequiredNumber(result, "identityTotal");
+        var movements = RequiredNumber(result, "movementTotal");
+        var revisions = RequiredNumber(result, "revisionTotal");
+        var audits = RequiredNumber(result, "auditTotal");
+        var sites = RequiredNumber(result, "siteTotal");
+        var fingerprint = RequiredText(result, "fingerprint");
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        string approval = _individualExcelApproval.Publish(generation, actor, request, fingerprint);
+        return new NativeIndividualExcelPreview(request, name, number, folder,
+            attendance, identities, movements, revisions, audits, sites, fingerprint, approval);
+    }
+
+    public async Task<NativeIndividualExcelReceipt> ExportIndividualExcelAsync(
+        NativeIdentity actor, NativeIndividualExcelRequest request, string approvalToken,
+        CancellationToken ct = default)
+    {
+        // Consume before awaiting: even a failed or cancelled attempt needs a fresh preview.
+        string fingerprint = _individualExcelApproval.Consume(actor, request, approvalToken);
+        await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
+        var service = new PersonnelIndividualExcelExportService(database);
+        var response = await service.ExportAuditedAsync(IndividualExcelPayload(request), fingerprint,
+            async token =>
+            {
+                await VerifyPersonnelManagerAsync(actor, token).ConfigureAwait(false);
+                var principal = await services.ResolveSessionAsync(actor.SessionNonce, token)
+                    .ConfigureAwait(false);
+                if (principal is null || principal.UserId != actor.UserId ||
+                    principal.Username != actor.Username || principal.Role != actor.Role ||
+                    principal.SessionNonce != actor.SessionNonce)
+                    throw new UnauthorizedAccessException("Individual Excel session changed.");
+                return principal;
+            }, ct).ConfigureAwait(false);
+        var result = RequiredObject(response, "ExportIndividualExcel");
+        return new NativeIndividualExcelReceipt(request, RequiredText(result, "filePath"),
+            RequiredText(result, "fingerprint"), checked((int)RequiredNumber(result, "sheetCount")));
+    }
 
     // Native Phase 9 group Excel: preview and explicit confirm are backed by
     // the original PersonId historical source and approved monthly-export

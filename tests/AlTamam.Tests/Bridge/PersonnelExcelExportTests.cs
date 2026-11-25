@@ -459,6 +459,51 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         Assert.Empty(Directory.GetFiles(_folder));
     }
 
+    [Fact]
+    public async Task NativeIndividualAuditedExportRecordsMetadataWithoutHistoricalContent()
+    {
+        var svc = new PersonnelIndividualExcelExportService(_db);
+        var request = NativeIndividualRequest();
+        var preview = await svc.PreviewAsync(request, _=>Task.CompletedTask, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var fingerprint = Assert.IsType<JsonObject>(preview.Data)["fingerprint"]!.GetValue<string>();
+        var exported = await svc.ExportAuditedAsync(request, fingerprint,
+            _=>Task.FromResult(Actor), CancellationToken.None);
+        Assert.True(exported.Success, exported.UserMessage);
+        var receipt = Assert.IsType<JsonObject>(exported.Data);
+        Assert.True(System.IO.File.Exists(File(receipt)));
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = "SELECT NewValueJson FROM AuditEvents WHERE OperationCode='PERSONNEL_EXCEL_EXPORT';";
+        var audit = Assert.IsType<string>(await q.ExecuteScalarAsync());
+        var meta = JsonNode.Parse(audit)!.AsObject();
+        Assert.Equal(Path.GetFileName(File(receipt)), meta["fileName"]!.GetValue<string>());
+        Assert.Equal("nativeIndividual",meta["mode"]!.GetValue<string>());
+        Assert.DoesNotContain("الموظف السابق",audit);
+        Assert.DoesNotContain(Actor.SessionNonce,audit);
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task NativeIndividualAuditedExportRejectsChangedPrincipalAfterPublication()
+    {
+        var svc = new PersonnelIndividualExcelExportService(_db);
+        var request = NativeIndividualRequest();
+        var preview = await svc.PreviewAsync(request, _=>Task.CompletedTask, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var fingerprint = Assert.IsType<JsonObject>(preview.Data)["fingerprint"]!.GetValue<string>();
+        Task<BridgePrincipal> Resolve(CancellationToken ct) =>
+            Task.FromResult(Directory.GetFiles(_folder,"*.xlsx").Length == 0
+                ? Actor : new BridgePrincipal(Actor.UserId,Actor.Username,Actor.Role,"other-session"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(()=>
+            svc.ExportAuditedAsync(request,fingerprint,Resolve,CancellationToken.None));
+        Assert.Empty(Directory.GetFiles(_folder));
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSONNEL_EXCEL_EXPORT';";
+        Assert.Equal(0L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

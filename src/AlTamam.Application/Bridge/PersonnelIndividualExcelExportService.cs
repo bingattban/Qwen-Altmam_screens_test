@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Excel.Reports;
 using AlTamam.Infrastructure.Persistence;
 
@@ -52,9 +53,61 @@ public sealed class PersonnelIndividualExcelExportService(AlTamamDbContext datab
         }
     }
 
+    /// <summary>
+    /// Canonical native publication with a resolved live manager principal.
+    /// The presentation adapter never owns an audit transaction.
+    /// </summary>
+    public async Task<BridgeResponse> ExportAuditedAsync(JsonObject request,
+        string expectedFingerprint, Func<CancellationToken, Task<BridgePrincipal>> resolvePrincipal,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(resolvePrincipal);
+        ct.ThrowIfCancellationRequested();
+        BridgePrincipal initial = await resolvePrincipal(ct).ConfigureAwait(false);
+        if (!RoleAuthorizationPolicy.CanAccessUsersManagement(initial.Role))
+            throw new UnauthorizedAccessException("Individual Excel requires personnel administration.");
+
+        async Task Authorize(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var live = await resolvePrincipal(token).ConfigureAwait(false);
+            if (live.UserId != initial.UserId || live.Username != initial.Username ||
+                live.Role != initial.Role || live.SessionNonce != initial.SessionNonce ||
+                !RoleAuthorizationPolicy.CanAccessUsersManagement(live.Role))
+                throw new UnauthorizedAccessException("Individual Excel principal changed.");
+        }
+
+        return await ExportAsync(request, expectedFingerprint, Authorize, ct,
+            async (receipt, token) =>
+            {
+                await Authorize(token).ConfigureAwait(false);
+                string fileName = Path.GetFileName(receipt["filePath"]!.GetValue<string>());
+                string exportId = Guid.NewGuid().ToString("N");
+                var meta = new JsonObject
+                {
+                    ["fileName"] = fileName, ["mode"] = "nativeIndividual",
+                    ["personCount"] = 1, ["sheetCount"] = 9
+                };
+                foreach (string key in new[] { "dateFrom", "dateTo", "siteId", "statusId", "movementType" })
+                    meta[key] = receipt[key]!.DeepClone();
+
+                await database.ExecuteInWriteTransactionAsync(async (connection, tx) =>
+                {
+                    await BridgeAuditWriter.WriteAsync(connection, tx, TimeProvider.System,
+                        "PERSONNEL_EXCEL_EXPORT", "تصدير Excel",
+                        initial.UserId, initial.Username, null, "ExcelExport", exportId,
+                        "تقرير فردي", null, meta.ToJsonString(),
+                        "تصدير تقرير فردي إلى Excel دون محتوى السجلات.", null,
+                        DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        exportId, token).ConfigureAwait(false);
+                    return 0;
+                }, token).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+    }
+
     public async Task<BridgeResponse> ExportAsync(JsonObject request,
         string expectedFingerprint, Func<CancellationToken, Task> authorize,
-        CancellationToken ct)
+        CancellationToken ct, Func<JsonObject, CancellationToken, Task>? auditPublication = null)
     {
         ArgumentNullException.ThrowIfNull(authorize);
         if (expectedFingerprint is not { Length: 64 } ||
@@ -110,6 +163,10 @@ public sealed class PersonnelIndividualExcelExportService(AlTamamDbContext datab
             receipt["format"] = "xlsx";
             receipt["sheetCount"] = 9;
             receipt["fingerprint"] = fingerprint;
+            // The native adapter supplies durable audit before a success receipt.
+            // A failed audit leaves completed false, so the new file is cleaned up.
+            if (auditPublication is not null)
+                await auditPublication((JsonObject)receipt.DeepClone(), ct).ConfigureAwait(false);
             completed = true;
             return BridgeHelpers.Ok(receipt);
         }
