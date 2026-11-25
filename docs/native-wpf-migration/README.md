@@ -2053,3 +2053,23 @@ paged source reads. The integration regression checks that removing only
 the two opted-in fields yields an identical legacy JSON payload. The frozen
 wire-shape snapshots, lifecycle assertions, CI and package gates are unchanged.
 The correction requires new exact-head Core and Release results before merge.
+
+## Phase 9 — group report current custom-field parity
+
+Base: `5f741b45165723209f7b77611938dcc5d4a1f088` (merged #56).
+
+The canonical group response already contains visible current custom-field
+metadata and per-person values. The native adapter now carries these
+existing fields without changing the application service, legacy wire
+contract, SQL queries or workbook. The ViewModel rejects inconsistent
+metadata, duplicate IDs or misaligned per-person field projections.
+The native RTL report shows a rank column only from an actual configured
+rank field (blank if absent) and current custom fields in selected-row
+read-only details. Current values are explicitly distinguished from saved
+historical status totals; immutable PersonId and field ID remain the keys.
+Three new test-first scenarios cover reused displayed personnel numbers,
+missing values and invalid field mappings/metadata. No schema, host or CI
+changes. Custom-field workbook parity and cross-page group selection
+remain pending, as does manual clean-machine Windows acceptance.
+Require both exact-head Windows workflows, four package acceptances and
+independent SHA-256 audit before merge.
