@@ -10,6 +10,8 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parent.parent
 PATHS = {
     "original": "src/AlTamam.Application/Bridge/PersonnelReportService.cs",
+    "audit_contracts": "src/AlTamam.NativePresentation/NativeAuditReadContracts.cs",
+    "audit_tests": "tests/AlTamam.UnitTests/NativeAuditReadPhase11Tests.cs",
     "contracts": "src/AlTamam.NativePresentation/NativePersonnelReportContracts.cs",
     "viewmodel": "src/AlTamam.NativePresentation/NativePersonnelReportViewModel.cs",
     "adapter": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
@@ -40,7 +42,19 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
+    "audit_contracts": ("INativeAuditReader", "CanReviewAuditOverlayHistory(role)",
+                        "Rows.Count!=Math.Clamp", "row.Sequence!=offset+i+1",
+                        "!expected.IncludeTombstoned && row.IsTombstoned", "!ids.Add(row.AuditEventId)"),
+    "audit_tests": ("Hidden_audit_entries_require_administration",
+                    "Audit_filter_preserves_bounds_and_rejects_invalid_dates",
+                    "Audit_snapshot_rejects_duplicate_rows_wrong_sequence_and_hidden_leaks",
+                    "Audit_snapshot_checks_actual_page_size_and_canonical_offset"),
     "adapter": ("new PersonnelReportService(database)",
+                "new AuditOverlayService(database).QueryAuditLogAsync",
+                "filter.IsAuthorized(principal.Role)", '["includeTombstoned"]=filter.IncludeTombstoned',
+                'RequiredNumber(data,"pageSize")!=NativeAuditFilter.PageSize',
+                'RequiredNumber(data,"count")!=items.Count',
+                'RequiredText(row,"rawDescription")', "!snapshot.Matches(filter)",
                 '["auditPage"] = pages.AuditPage',
                 'RequiredNumber(data, "auditPage") != pages.AuditPage',
                 'RequiredArray(data, "monthlyTotals")',
@@ -71,7 +85,9 @@ def validate(files):
         for token in tokens:
             if token not in files[key]:
                 errors.append(f"{key}: missing original report invariant: {token}")
-    for key in ("contracts", "viewmodel", "view"):
+    if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
+        errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
+    for key in ("contracts", "viewmodel", "view", "audit_contracts"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
@@ -98,6 +114,10 @@ if __name__ == "__main__":
     for key, needle in (
         ("original", "GROUP BY SUBSTR(AttendanceLocalDate,1,7),StatusId,StatusNameSnapshot"),
         ("original", "FROM AuditEvents"),
+        ("audit_contracts", "CanReviewAuditOverlayHistory(role)"),
+        ("audit_contracts", "!ids.Add(row.AuditEventId)"),
+        ("audit_tests", "Hidden_audit_entries_require_administration"),
+        ("adapter", "new AuditOverlayService(database).QueryAuditLogAsync"),
         ("contracts", "NativePersonnelReportAuditRecord("),
         ("viewmodel", "report.AuditPage != requested.AuditPage"),
         ("viewmodel", "report.MonthlyTotals.Sum(month => month.Count) != report.AttendanceTotal"),

@@ -21,8 +21,56 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader
 {
+    // Phase 11: canonical read-only audit query with the actual durable principal.
+    public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
+        CancellationToken ct=default)
+    {
+        if (filter is null || !filter.IsValid)
+            throw new InvalidDataException("Invalid native audit filter.");
+        if (!filter.IsAuthorized(actor.Role))
+            throw new UnauthorizedAccessException("Native audit scope denied.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if (principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !filter.IsAuthorized(principal.Role))
+            throw new UnauthorizedAccessException("Audit session changed.");
+        // The canonical list is read-only and does not use the optional clock.
+        var response=await new AuditOverlayService(database).QueryAuditLogAsync(new JsonObject
+        {
+            ["term"]=filter.Term,["actor"]=filter.Actor,["target"]=filter.Target,
+            ["operation"]=filter.Operation,["fromDate"]=filter.FromDate,["toDate"]=filter.ToDate,
+            ["includeTombstoned"]=filter.IncludeTombstoned,["page"]=filter.Page,
+            ["pageSize"]=NativeAuditFilter.PageSize
+        },ct,principal).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"QueryAuditLog");
+        var items=RequiredArray(data,"items");
+        if (RequiredNumber(data,"page")!=filter.Page ||
+            RequiredNumber(data,"pageSize")!=NativeAuditFilter.PageSize ||
+            RequiredNumber(data,"count")!=items.Count || items.Count>NativeAuditFilter.PageSize)
+            throw new InvalidDataException("Canonical audit page mismatch.");
+        var rows=items.Select(node =>
+        {
+            var row=RequireObject(node);
+            return new NativeAuditRow(RequiredText(row,"auditEventId"),RequiredNumber(row,"sequence"),
+                RequiredText(row,"operationCode"),RequiredText(row,"operationArabicName"),
+                RequiredText(row,"actorDisplay"),RequiredText(row,"targetDisplay"),
+                RequiredText(row,"description"),RequiredText(row,"rawDescription"),
+                row["reason"]?.GetValue<string>()??"",RequiredText(row,"effectiveLocalDate"),
+                RequiredText(row,"executedAtUtc"),RequiredText(row,"outcome"),RequiredText(row,"eventHash"),
+                RequiredBoolean(row,"isTombstoned"),checked((int)RequiredNumber(row,"overlayVersion")));
+        }).ToArray();
+        var snapshot=new NativeAuditSnapshot(filter,RequiredNumber(data,"total"),
+            RequiredBoolean(data,"hasNext"),Array.AsReadOnly(rows));
+        if (!snapshot.Matches(filter))
+            throw new InvalidDataException("Canonical audit rows invalid or changed during read.");
+        return snapshot;
+    }
+
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
         new(services, database);
 
