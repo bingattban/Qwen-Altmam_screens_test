@@ -25,6 +25,9 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     private bool _open, _busy;
     private string _error = "", _from = "", _to = "";
     private int _movementType;
+    private string _siteId = "", _statusId = "";
+    private IReadOnlyList<NativeReportFilterOption> _siteOptions = [new("", "جميع المواقع")];
+    private IReadOnlyList<NativeReportFilterOption> _statusOptions = [new("", "جميع الحالات")];
     private NativePersonnelGroupReportSnapshot? _report;
 
     public NativePersonnelGroupExcelViewModel Excel { get; } = new();
@@ -51,7 +54,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         : $"صفحة الملخص اليومي {_report.DailyStatusPage} (100 صف في الصفحة)";
     public string AppliedFiltersLabel => _report is null
         ? "لم يُعتمد تقرير جماعي بعد."
-        : $"الفترة المعتمدة: {(_report.DateFrom == "" ? "من البداية" : _report.DateFrom)} — {(_report.DateTo == "" ? "حتى النهاية" : _report.DateTo)}؛ نوع الحركة: {MovementTypeOptions.First(x => x.Value == _report.MovementType).Title}";
+        : $"الفترة المعتمدة: {(_report.DateFrom == "" ? "من البداية" : _report.DateFrom)} — {(_report.DateTo == "" ? "حتى النهاية" : _report.DateTo)}؛ نوع الحركة: {MovementTypeOptions.First(x => x.Value == _report.MovementType).Title}؛ الموقع: {_siteOptions.FirstOrDefault(x => x.Id == _report.SiteId)?.Title}؛ الحالة: {_statusOptions.FirstOrDefault(x => x.Id == _report.StatusId)?.Title}";
     public bool CanNextSummary => CanRead && !_busy &&
         _report is { DailyStatusHasNext: true } && _summaryPage < 100000;
     public bool CanPreviousSummary => CanRead && !_busy &&
@@ -96,6 +99,32 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         }
     }
 
+    public IReadOnlyList<NativeReportFilterOption> SiteFilterOptions => _siteOptions;
+    public IReadOnlyList<NativeReportFilterOption> StatusFilterOptions => _statusOptions;
+
+    public string SiteIdDraft
+    {
+        get => _siteId;
+        set
+        {
+            string next = value ?? "";
+            if (_siteId == next) return;
+            _siteId = next;
+            InvalidateLoadedResult();
+        }
+    }
+    public string StatusIdDraft
+    {
+        get => _statusId;
+        set
+        {
+            string next = value ?? "";
+            if (_statusId == next) return;
+            _statusId = next;
+            InvalidateLoadedResult();
+        }
+    }
+
     public ICommand CloseCommand { get; }
     public ICommand RunCommand { get; }
     public ICommand ClearFiltersCommand { get; }
@@ -125,7 +154,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             !_selectedRows.Select(r => r.PersonId)
                 .SequenceEqual(report.PersonIds, StringComparer.Ordinal) ||
             report.DateFrom != _from || report.DateTo != _to ||
-            report.MovementType != _movementType)
+            report.MovementType != _movementType || report.SiteId != _siteId || report.StatusId != _statusId)
             return null;
         return new NativePersonnelGroupReportRequest(
             report.PersonIds.ToArray(), report.DateFrom, report.DateTo,
@@ -167,6 +196,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             // A rejected replacement must not leave an older approved group
             // available for reporting or Excel export. Require explicit reselection.
             _selectedRows = [];
+            ResetHistoricalChoices();
             InvalidateLoadedResult();
             _error = "اختيار غير صالح: يجب تحديد الأفراد من الصفحة الحالية دون تكرار أو تجاوز 100.";
             Changed();
@@ -176,6 +206,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             selected.Zip(_selectedRows).All(pair => ReferenceEquals(pair.First, pair.Second)))
             return;
         _selectedRows = selected.ToArray();
+        ResetHistoricalChoices();
         InvalidateLoadedResult();
     }
 
@@ -194,6 +225,13 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             Changed();
             return;
         }
+        if (!_siteOptions.Any(x => x.Id == _siteId) ||
+            !_statusOptions.Any(x => x.Id == _statusId))
+        {
+            _error = "اختر الموقع والحالة من المرشحات التاريخية المعتمدة للمجموعة.";
+            Changed();
+            return;
+        }
         _summaryPage = 1;
         Excel.Close();
         await LoadAsync(ct);
@@ -204,6 +242,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _from = "";
         _to = "";
         _movementType = 0;
+        _siteId = _statusId = "";
         Excel.Close();
         InvalidateLoadedResult();
         return RunAsync(ct);
@@ -236,7 +275,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _pending = linked;
         var request = new NativePersonnelGroupReportRequest(
             _selectedRows.Select(row => row.PersonId).ToArray(),
-            _from, _to, _movementType, _summaryPage);
+            _from, _to, _movementType, _summaryPage, _siteId, _statusId);
         _busy = true;
         _report = null;
         _error = "";
@@ -247,6 +286,10 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanRead) { Close(); return; }
             Validate(result, request);
+            var sites = (NativeReportFilterOption[])[new("", "جميع المواقع"), ..result.AvailableSites];
+            var statuses = (NativeReportFilterOption[])[new("", "جميع الحالات"), ..result.AvailableStatuses];
+            if (!_siteOptions.SequenceEqual(sites)) _siteOptions = sites;
+            if (!_statusOptions.SequenceEqual(statuses)) _statusOptions = statuses;
             _report = result;
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
@@ -267,6 +310,13 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
                 Changed();
             }
         }
+    }
+
+    private void ResetHistoricalChoices()
+    {
+        _siteId = _statusId = "";
+        _siteOptions = [new("", "جميع المواقع")];
+        _statusOptions = [new("", "جميع الحالات")];
     }
 
     private void InvalidateLoadedResult()
@@ -291,6 +341,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         _actor = null;
         _openedRows = null;
         _selectedRows = [];
+        ResetHistoricalChoices();
         _open = _busy = false;
         _error = _from = _to = "";
         _movementType = 0;
@@ -354,6 +405,17 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
                 s.PersonCount > report.PersonCount || s.Count < s.PersonCount))
             throw new InvalidDataException("Forged, incomplete or mismatched canonical group report.");
 
+        static bool ValidOptions(IReadOnlyList<NativeReportFilterOption>? options) =>
+            options is { Count: <= 500 } &&
+            options.All(option => option is not null &&
+                option.Id is { Length: >= 1 and <= 128 } && !option.Id.Any(char.IsControl) &&
+                option.Title is { Length: >= 1 and <= 240 } && !option.Title.Any(char.IsControl)) &&
+            options.Select(option => option.Id).Distinct(StringComparer.Ordinal).Count() == options.Count;
+        if (!ValidOptions(report.AvailableSites) || !ValidOptions(report.AvailableStatuses) ||
+            (request.SiteId.Length > 0 && !report.AvailableSites.Any(x => x.Id == request.SiteId)) ||
+            (request.StatusId.Length > 0 && !report.AvailableStatuses.Any(x => x.Id == request.StatusId)))
+            throw new InvalidDataException("Invalid group historical filter catalog.");
+
         // The canonical service groups by both immutable status ID and historical
         // name snapshot. A renamed status may legitimately have multiple labels.
         // Compare each exact pair, not just the sum of all attendance.
@@ -383,6 +445,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             nameof(Report), nameof(CandidateRows), nameof(SelectedCount),
             nameof(SelectedCountLabel), nameof(DateFromDraft), nameof(DateToDraft),
             nameof(MovementTypeDraft), nameof(MovementTypeOptions),
+            nameof(SiteFilterOptions), nameof(StatusFilterOptions), nameof(SiteIdDraft), nameof(StatusIdDraft),
             nameof(DailySummaryPageLabel), nameof(AppliedFiltersLabel),
             nameof(CanNextSummary), nameof(CanPreviousSummary),
             nameof(Excel)
