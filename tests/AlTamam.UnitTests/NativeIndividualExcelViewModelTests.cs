@@ -163,6 +163,65 @@ public sealed class NativeIndividualExcelViewModelTests
         Assert.False(vm.IsBusy);
     }
 
+    [Fact]
+    public async Task Preview_scope_shows_verified_applied_filters_and_clears_on_close()
+    {
+        var report=Report() with
+        {
+            DateTo="2026-01-31", MovementType=2, SiteId="SITE-1",
+            AvailableSites=[new("SITE-1","الموقع الأول")],
+            AvailableStatuses=[new("STS-1","موجود")]
+        };
+        var backend=new Fake();
+        var vm=new NativeIndividualExcelViewModel();
+        vm.Attach(backend,()=>Manager,()=>report);
+        Assert.Empty(vm.PreviewScope);
+        await vm.OpenPreviewAsync();
+        Assert.True(vm.CanConfirm);
+        Assert.Contains("2026-01-01",vm.PreviewScope);
+        Assert.Contains("2026-01-31",vm.PreviewScope);
+        Assert.Contains("نقل خارجي",vm.PreviewScope);
+        Assert.Contains("الموقع الأول",vm.PreviewScope);
+        Assert.Contains("موجود",vm.PreviewScope);
+        vm.Close();
+        Assert.Empty(vm.PreviewScope);
+    }
+
+    [Fact]
+    public async Task Unrestricted_preview_is_explicit_and_scope_clears_after_confirmation()
+    {
+        var report=Report() with { DateFrom="", DateTo="", StatusId="" };
+        var backend=new Fake();
+        var vm=new NativeIndividualExcelViewModel();
+        vm.Attach(backend,()=>Manager,()=>report);
+        await vm.OpenPreviewAsync();
+        Assert.Contains("من البداية",vm.PreviewScope);
+        Assert.Contains("حتى النهاية",vm.PreviewScope);
+        Assert.Contains("جميع الحركات",vm.PreviewScope);
+        Assert.Contains("جميع المواقع",vm.PreviewScope);
+        Assert.Contains("جميع الحالات",vm.PreviewScope);
+        await vm.ConfirmAsync();
+        Assert.NotNull(vm.Receipt);
+        Assert.Empty(vm.PreviewScope);
+    }
+
+    [Fact]
+    public async Task Changed_scope_does_not_show_stale_filter_names()
+    {
+        var report=Report() with { AvailableStatuses=[new("STS-1","موجود")] };
+        var backend=new Fake();
+        var vm=new NativeIndividualExcelViewModel();
+        vm.Attach(backend,()=>Manager,()=>report);
+        await vm.OpenPreviewAsync();
+        Assert.Contains("موجود",vm.PreviewScope);
+        report=report with { StatusId="STS-2", AvailableStatuses=[new("STS-2","إجازة")] };
+        vm.NotifySourceChanged();
+        Assert.Empty(vm.PreviewScope);
+        await vm.OpenPreviewAsync();
+        Assert.Contains("إجازة",vm.PreviewScope);
+        Assert.DoesNotContain("موجود",vm.PreviewScope);
+    }
+
     private sealed class Fake : INativeIndividualExcelBackend
     {
         public int Exports,Invalidations;
