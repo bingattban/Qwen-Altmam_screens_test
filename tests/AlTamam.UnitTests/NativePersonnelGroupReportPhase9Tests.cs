@@ -443,6 +443,78 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.NotEmpty(vm.ErrorMessage);
     }
 
+    [Fact]
+    public async Task Paged_picker_accumulates_only_explicit_verified_rows_and_removes_by_identity()
+    {
+        var origin = new[] { One };
+        var second = new[] { Two };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => origin);
+        vm.AttachRosterPaging(() => 1, () => true,
+            (actor, page, ct) => Task.FromResult(new NativeGroupRosterPage(
+                page, page == 1, page == 1 ? origin : second)));
+        vm.Open(origin);
+        vm.SelectRows(origin);
+        Assert.Equal(0, vm.SelectedCount);
+        vm.AddPageSelectionCommand.Execute(null);
+        await vm.NextRosterPageAsync();
+        Assert.Equal(2, vm.RosterPage);
+        Assert.Equal(1, vm.SelectedCount);
+        vm.SelectRows(second);
+        vm.AddPageSelectionCommand.Execute(null);
+        vm.AddPageSelectionCommand.Execute(null);
+        Assert.Equal(2, vm.SelectedCount);
+        await vm.RunAsync();
+        Assert.Equal(new[] { One.PersonId, Two.PersonId }, reader.Last!.PersonIds);
+        vm.RemoveSelectedPersonCommand.Execute(One);
+        Assert.Null(vm.Report);
+        Assert.Single(vm.SelectedPeople);
+        await vm.RunAsync();
+        Assert.Equal(new[] { Two.PersonId }, reader.Last!.PersonIds);
+    }
+
+    [Fact]
+    public async Task Paged_picker_rejects_forged_rows_and_does_not_keep_old_approval()
+    {
+        var origin = new[] { One };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => origin);
+        vm.AttachRosterPaging(() => 1, () => true,
+            (actor, page, ct) => Task.FromResult(new NativeGroupRosterPage(page, false, [Two])));
+        vm.Open(origin);
+        vm.SelectRows(origin);
+        vm.AddPageSelectionCommand.Execute(null);
+        await vm.NextRosterPageAsync();
+        vm.SelectRows([Row(Two.PersonId, 2)]);
+        await vm.RunAsync();
+        Assert.Equal(0, vm.SelectedCount);
+        Assert.Equal(0, reader.Reads);
+        Assert.Null(vm.Report);
+    }
+
+    [Fact]
+    public async Task Paged_picker_revoked_session_or_replaced_origin_cannot_adopt_late_page()
+    {
+        IReadOnlyList<NativePersonnelDisplayRow> origin = new[] { One };
+        NativeIdentity? actor = Manager;
+        var reader = new FakeReader();
+        var vm = VM(reader, () => actor, () => origin);
+        var pending = new TaskCompletionSource<NativeGroupRosterPage>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.AttachRosterPaging(() => 1, () => true, (_, _, _) => pending.Task);
+        vm.Open(origin);
+        vm.SelectRows(origin);
+        vm.AddPageSelectionCommand.Execute(null);
+        var navigation = vm.NextRosterPageAsync();
+        actor = Manager with { SessionNonce = "REVOKED" };
+        origin = new[] { Two };
+        pending.SetResult(new NativeGroupRosterPage(2, false, [Two]));
+        await navigation;
+        Assert.False(vm.IsOpen);
+        Assert.Empty(vm.SelectedPeople);
+        Assert.Equal(0, reader.Reads);
+    }
+
     private sealed class FakeReader : INativePersonnelGroupReportReader
     {
         public NativePersonnelGroupReportRequest? Last;
