@@ -29,6 +29,8 @@ public sealed record NativeDashboardRow(
     string StatusName, string? StatusColor, IReadOnlyList<string> CustomCells)
 {
     public int RowNumber { get; init; }
+    public bool IsUnprepared { get; init; }
+    public bool IsTransferDay { get; init; }
 }
 
 /// <summary>

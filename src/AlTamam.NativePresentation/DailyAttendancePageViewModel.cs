@@ -123,7 +123,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             !Review.IsOpen && _loadedDate == DateOnly.FromDateTime(DateTime.Now) &&
             live is not null && live == _boundPrincipal &&
             _rows.Any(item => ReferenceEquals(item, row)) &&
-            !string.IsNullOrWhiteSpace(row.PersonId);
+            !row.IsTransferDay && !string.IsNullOrWhiteSpace(row.PersonId);
     }
 
     // The original audited SQLCipher preview/commit implementation is the
@@ -131,7 +131,9 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public Task OpenReviewAsync(NativeDailyAttendanceRow row, CancellationToken ct = default)
     {
         if (!CanReviewPerson(row)) return Task.CompletedTask;
-        return Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite, [row.PersonId], ct);
+        return row.IsUnprepared
+            ? Review.OpenInitialPersonsAsync(_loadedDate!.Value, _selectedSite, [row.PersonId], ct)
+            : Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite, [row.PersonId], ct);
     }
 
     /// <summary>
@@ -163,6 +165,12 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             return false;
         }
 
+        if (selection.Any(row => row.IsTransferDay) ||
+            selection.Select(row => row.IsUnprepared).Distinct().Count() > 1)
+        {
+            ResetSelection("حدد غير المحضرين وحدهم أو المحضرين وحدهم؛ المنقولون اليوم غير قابلين للتحضير من هذا المسار.");
+            return false;
+        }
         _selected = selection.ToArray();
         _selectionError = "";
         NotifySelection();
@@ -171,13 +179,16 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     private bool CanReviewSelected() =>
         _selected.Count is >= 1 and <= 100 &&
-        _selected.All(row => CanReviewPerson(row));
+        _selected.All(row => CanReviewPerson(row)) &&
+        _selected.Select(row => row.IsUnprepared).Distinct().Count() == 1;
 
     public Task OpenSelectedReviewAsync(CancellationToken ct = default)
     {
         if (!CanReviewSelected()) return Task.CompletedTask;
-        return Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite,
-            _selected.Select(row => row.PersonId).ToArray(), ct);
+        var ids = _selected.Select(row => row.PersonId).ToArray();
+        return _selected[0].IsUnprepared
+            ? Review.OpenInitialPersonsAsync(_loadedDate!.Value, _selectedSite, ids, ct)
+            : Review.OpenPersonsAsync(_loadedDate!.Value, _selectedSite, ids, ct);
     }
 
     private void ResetSelection(string error)
@@ -287,7 +298,8 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
                     person.PersonId, person.RowNumber, person.ServiceNumberA,
                     rankIndex < 0 ? "" : person.CustomCells[rankIndex],
                     person.Name, person.SiteName, person.StatusName,
-                    person.CustomCells.Where((_, i) => i != rankIndex).ToArray())).ToArray();
+                    person.CustomCells.Where((_, i) => i != rankIndex).ToArray())
+                    { IsUnprepared = person.IsUnprepared, IsTransferDay = person.IsTransferDay }).ToArray();
             _customColumns = snapshot.CustomColumns
                 .Where((_, i) => i != rankIndex).ToArray();
             _sites = [new("", "جميع المواقع"), .. snapshot.Sites];
@@ -442,4 +454,8 @@ public sealed record NativeDailyStatusOption(string StatusId, string DisplayName
 
 public sealed record NativeDailyAttendanceRow(
     string PersonId, int RowNumber, string ServiceNumberA, string Rank, string Name,
-    string SiteName, string StatusName, IReadOnlyList<string> CustomCells);
+    string SiteName, string StatusName, IReadOnlyList<string> CustomCells)
+{
+    public bool IsUnprepared { get; init; }
+    public bool IsTransferDay { get; init; }
+}

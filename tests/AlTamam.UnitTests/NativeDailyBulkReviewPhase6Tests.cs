@@ -192,9 +192,68 @@ public sealed class NativeDailyBulkReviewPhase6Tests
         Assert.True(vm.Review.IsCompleted);
     }
 
+    [Fact]
+    public async Task Unprepared_people_use_initial_preview_and_submit_only_after_confirmation()
+    {
+        var backend = new Reader { UnpreparedFirst = true };
+        var vm = new DailyAttendancePageViewModel();
+        vm.AttachReader(backend, () => Owner);
+        await vm.RefreshAsync();
+        Assert.True(vm.Rows[0].IsUnprepared);
+        Assert.True(vm.SetSelectedRows([vm.Rows[0]]));
+        await vm.OpenSelectedReviewAsync();
+        Assert.True(vm.Review.IsInitial);
+        vm.Review.ChooseStatus("STS-ABSENT");
+        await vm.Review.PreviewAsync();
+        Assert.True(vm.Review.HasPreview);
+        Assert.Equal(1, backend.InitialPreviewCalls);
+        Assert.Equal(0, backend.PreviewCalls);
+        Assert.Equal(0, backend.InitialCommitCalls);
+        await vm.Review.ConfirmAsync();
+        Assert.True(vm.Review.IsCompleted);
+        Assert.Equal(1, backend.InitialCommitCalls);
+        Assert.Equal(0, backend.CommitCalls);
+    }
+
+    [Fact]
+    public async Task Mixed_initial_and_revision_selection_requires_separate_operations()
+    {
+        var backend = new Reader { UnpreparedFirst = true };
+        var vm = new DailyAttendancePageViewModel();
+        vm.AttachReader(backend, () => Owner);
+        await vm.RefreshAsync();
+        Assert.False(vm.SetSelectedRows([vm.Rows[0], vm.Rows[1]]));
+        Assert.NotEmpty(vm.SelectionError);
+        await vm.OpenSelectedReviewAsync();
+        Assert.False(vm.Review.IsOpen);
+        Assert.Equal(0, backend.ChoicesCalls);
+    }
+
+    [Fact]
+    public async Task Initial_preview_with_wrong_mode_or_previous_status_is_not_approved()
+    {
+        foreach (bool wrongMode in new[] { true, false })
+        {
+            var backend = new Reader { UnpreparedFirst = true,
+                WrongInitialMode = wrongMode, WrongInitialPrevious = !wrongMode };
+            var vm = new DailyAttendancePageViewModel();
+            vm.AttachReader(backend, () => Owner);
+            await vm.RefreshAsync();
+            await vm.OpenReviewAsync(vm.Rows[0]);
+            vm.Review.ChooseStatus("STS-ABSENT");
+            await vm.Review.PreviewAsync();
+            Assert.False(vm.Review.HasPreview);
+            await vm.Review.ConfirmAsync();
+            Assert.Equal(0, backend.InitialCommitCalls);
+            Assert.Equal(0, backend.CommitCalls);
+        }
+    }
+
     private sealed class Reader : INativeDashboardReader, INativeAttendanceReviewBackend
     {
         public int ReadCalls;
+        public bool UnpreparedFirst, WrongInitialMode, WrongInitialPrevious;
+        public int InitialPreviewCalls, InitialCommitCalls;
         public bool FailCommit;
         public List<string> OperationIds = [];
         public int ChoicesCalls;
@@ -210,7 +269,8 @@ public sealed class NativeDailyBulkReviewPhase6Tests
             NativeDashboardRow[] rows = filter.SearchTerm == ""
                 ? Enumerable.Range(1, 3).Select(i =>
                     new NativeDashboardRow($"P-{i}", $"A-{i}", $"فرد {i}",
-                        "المركز", "موجود", "#0D9488", ["رقيب"]) { RowNumber = i })
+                        "المركز", UnpreparedFirst && i == 1 ? "غير محضر" : "موجود", "#0D9488", ["رقيب"])
+                    { RowNumber = i, IsUnprepared = UnpreparedFirst && i == 1 })
                     .ToArray()
                 : [];
             return Task.FromResult(new NativeDashboardSnapshot(
@@ -239,6 +299,28 @@ public sealed class NativeDailyBulkReviewPhase6Tests
                 new string('p', 32), date, statusId, "غائب",
                 personIds.Select(id => new NativeAttendancePreviewPerson(
                     id, $"فرد {id}", id, "المركز", "موجود", "STS-PRESENT")).ToArray()));
+        }
+
+        public Task<NativeAttendanceRevisionPreview> PreviewInitialAsync(
+            NativeIdentity actor, DateOnly date, string site, IReadOnlyList<string> personIds,
+            string statusId, CancellationToken ct = default, NativeAttendanceDateRange? range = null)
+        {
+            InitialPreviewCalls++;
+            LastPreviewIds = personIds.ToArray();
+            return Task.FromResult(new NativeAttendanceRevisionPreview(
+                new string('i', 32), date, statusId, "غائب",
+                personIds.Select(id => new NativeAttendancePreviewPerson(
+                    id, "فرد", id, "المركز", "غير محضر",
+                    WrongInitialPrevious ? "STS-PRESENT" : "")).ToArray())
+                { IsInitial = !WrongInitialMode });
+        }
+
+        public Task<NativeAttendanceCommitReceipt> CommitInitialAsync(
+            NativeIdentity actor, string previewToken, string operationId,
+            CancellationToken ct = default)
+        {
+            InitialCommitCalls++;
+            return Task.FromResult(new NativeAttendanceCommitReceipt(LastPreviewIds.Length, "AUD-INITIAL"));
         }
 
         public Task<NativeAttendanceCommitReceipt> CommitAsync(

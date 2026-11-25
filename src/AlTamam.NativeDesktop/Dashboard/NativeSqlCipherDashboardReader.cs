@@ -2703,6 +2703,15 @@ public sealed class NativeSqlCipherDashboardReader(
         CancellationToken ct = default) =>
         _review.CommitAsync(actor, previewToken, operationId, ct);
 
+    public Task<NativeAttendanceRevisionPreview> PreviewInitialAsync(
+        NativeIdentity actor, DateOnly date, string site, IReadOnlyList<string> people,
+        string statusId, CancellationToken ct = default, NativeAttendanceDateRange? range = null) =>
+        _review.PreviewInitialAsync(actor, date, site, people, statusId, ct, range);
+
+    public Task<NativeAttendanceCommitReceipt> CommitInitialAsync(
+        NativeIdentity actor, string previewToken, string operationId, CancellationToken ct = default) =>
+        _review.CommitInitialAsync(actor, previewToken, operationId, ct);
+
     public async Task<NativeDashboardSnapshot> ReadAsync(
         NativeIdentity identity, NativeDashboardFilter filters, CancellationToken ct = default)
     {
@@ -2784,13 +2793,18 @@ public sealed class NativeSqlCipherDashboardReader(
             JsonObject custom = RequireObject(item["customFields"]);
             var cells = columns.Select(col =>
                 custom[col.ColumnId]?.GetValue<string>() ?? "").ToArray();
+            bool transferDay = RequiredBoolean(item, "transferDay");
+            if (!item.ContainsKey("statusId"))
+                throw new InvalidDataException("Missing canonical attendance status identity.");
             return new NativeDashboardRow(
                 RequiredText(item, "personId"), RequiredText(item, "serviceNumberA"),
                 RequiredText(item, "name"), RequiredText(item, "siteName"),
                 RequiredText(item, "statusName"),
                 item["statusColor"]?.GetValue<string>(), cells)
             {
-                RowNumber = checked((filters.Page - 1) * filters.PageSize + index + 1)
+                RowNumber = checked((filters.Page - 1) * filters.PageSize + index + 1),
+                IsUnprepared = !transferDay && item["statusId"] is null,
+                IsTransferDay = transferDay
             };
         }).ToArray();
 
