@@ -47,8 +47,15 @@ public static class PersonnelGroupExcelWorkbook
         JsonObject original)
     {
         var people = Array(original, "persons").Select(Obj).ToArray();
+        return CurrentCustomProjection(original, people);
+    }
+
+    // Shared projection for the existing group and individual native workbooks.
+    internal static (string[] Headings, string[][] Values) CurrentCustomProjection(
+        JsonObject original, JsonObject[] people)
+    {
         if (people.Length is < 1 or > 100)
-            throw new InvalidDataException("Group workbook person bounds exceeded.");
+            throw new InvalidDataException("Workbook person bounds exceeded.");
         // Older pure-renderer fixtures may have neither metadata nor values.
         if (!original.ContainsKey("customColumns") &&
             people.All(person => !person.ContainsKey("customFields")))
