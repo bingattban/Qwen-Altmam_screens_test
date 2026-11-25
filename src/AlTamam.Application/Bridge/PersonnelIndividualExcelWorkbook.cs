@@ -42,17 +42,19 @@ public static class PersonnelIndividualExcelWorkbook
             " — الموقع: " + Cell(complete, "siteId") +
             " — الحالة: " + Cell(complete, "statusId") +
             " — نوع الحركة: " + Count(complete, "movementType", 4);
+        var customProjection = PersonnelGroupExcelWorkbook.CurrentCustomProjection(complete, [person]);
         var identityRow = Project(person, ["personId","name","serviceNumberA","firstRecordedDate",
             "#organizationalStatus","!active"]).Concat(
             new[] {attendance.Length, identities.Length, movements.Length,
                 revisions.Length, audit.Length, sites.Length}
-            .Select(n => n.ToString(CultureInfo.InvariantCulture))).ToArray();
+            .Select(n => n.ToString(CultureInfo.InvariantCulture)))
+            .Concat(customProjection.Values[0]).ToArray();
 
         Sheet[] sheets =
         [
             new("الفرد", ["معرف الفرد الثابت","الاسم الحالي","الرقم (ع) الحالي","أول تسجيل",
                 "الحالة التنظيمية","نشط","أيام التحضير","سجلات الهوية","الحركات","التعديلات",
-                "العمليات","سجلات المواقع"], [identityRow]),
+                "العمليات","سجلات المواقع", ..customProjection.Headings], [identityRow]),
             Table("الحالات", ["معرف الحالة","الحالة التاريخية","عدد الأيام","أول تاريخ","آخر تاريخ"],
                 statuses, ["statusId","statusName","#count","firstDate","lastDate"]),
             Table("الملخص الشهري", ["الشهر","معرف الحالة","الحالة التاريخية","عدد الأيام"],
@@ -77,8 +79,8 @@ public static class PersonnelIndividualExcelWorkbook
             Table("المواقع", ["معرف الموقع","من","إلى","الموقع التاريخي","وقت الإنشاء UTC"],
                 sites, ["siteId","from","?to","siteName","createdAtUtc"])
         ];
-        // Raw audit JSON and current custom values are intentionally not
-        // included: they are not part of the approved visible history projection.
+        // Raw audit JSON remains excluded. Current custom values belong only
+        // to the identity sheet and must never replace saved historical facts.
         PersonnelGroupExcelWorkbook.WriteSheets(output, sheets,
             "التقرير التاريخي الفردي", descriptor);
     }

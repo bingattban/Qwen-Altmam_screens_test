@@ -2093,3 +2093,21 @@ schema, host or CI changes. Existing fixed columns retain their order.
 Individual workbook custom-column parity, cross-page group selection and
 manual Windows acceptance remain pending. Both exact-head workflows and
 all four package acceptance and independent SHA-256 gates must pass.
+
+## Phase 9 — individual XLSX current custom-column parity
+
+Base: `9a4eacbb1c4de5aff5fb427e47565cf32a0e480f` (merged #58).
+
+The individual export now retains canonical current custom-column metadata
+in its verified source header. Both complete source sweeps compare that
+metadata and existing current values, and the approval fingerprint covers
+both. The individual identity worksheet appends current values in canonical
+metadata order through the same validated projection used by group Excel.
+The other eight sheets and existing fixed columns are unchanged; current
+values are never substituted for historical records. Unknown field IDs,
+malformed metadata and unsafe values are rejected before workbook creation.
+Three new test scenarios cover literal OOXML cells, unknown IDs and
+metadata drift between source sweeps. No new SQL, schema, wire contract,
+workbook sheet count, host or CI changes. Cross-page group selection and
+manual clean-machine Windows acceptance remain pending. Both exact-head
+Windows workflows, four package acceptances and SHA-256 audit must pass.

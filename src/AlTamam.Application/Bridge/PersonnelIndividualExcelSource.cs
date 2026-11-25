@@ -166,7 +166,12 @@ public sealed class PersonnelIndividualExcelSource(AlTamamDbContext database)
             Number(source, "pageSize") != PageSize ||
             Number(source, "movementType") != Number(input, "movementType"))
             throw new InvalidDataException("Wrong canonical individual identity or page size.");
+        // Preserve the canonical metadata alongside current per-person values
+        // in the stable header, so both sweeps and the approval hash bind it.
+        _ = PersonnelGroupExcelWorkbook.CurrentCustomProjection(source, [person]);
         var result = new JsonObject { ["person"] = person.DeepClone() };
+        if (source.TryGetPropertyValue("customColumns", out var customColumns))
+            result["customColumns"] = customColumns?.DeepClone();
         foreach (string field in new[] { "dateFrom", "dateTo", "siteId", "statusId" })
         {
             string text = Text(source, field);
