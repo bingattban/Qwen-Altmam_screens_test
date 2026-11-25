@@ -57,6 +57,46 @@ public sealed class NativeIndividualExcelWorkbookPhase9Tests
         Assert.Contains("موقع سابق", daily.Descendants(ns + "t").Select(x => x.Value));
     }
 
+    [Fact]
+    public void Individual_current_custom_fields_are_exported_only_on_person_sheet()
+    {
+        var report = Complete();
+        report["customColumns"] = new JsonArray(
+            new JsonObject { ["columnId"]="FIELD-RANK", ["caption"]="الرتبة" },
+            new JsonObject { ["columnId"]="FIELD-NOTE", ["caption"]="ملاحظة" },
+            new JsonObject { ["columnId"]="FIELD-MISSING", ["caption"]="فارغ" });
+        report["person"]!["customFields"] = new JsonObject
+        {
+            ["FIELD-RANK"]="رقيب", ["FIELD-NOTE"]="=1+2"
+        };
+        using var buffer = new MemoryStream();
+        PersonnelIndividualExcelWorkbook.Write(buffer, report);
+        buffer.Position = 0;
+        using var zip = new ZipArchive(buffer, ZipArchiveMode.Read);
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        using var sheet = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var doc = XDocument.Load(sheet);
+        var rows = doc.Descendants(ns + "row").ToArray();
+        Assert.Equal(new[] {"الرتبة (حالي)", "ملاحظة (حالي)", "فارغ (حالي)"},
+            rows[2].Descendants(ns + "t").Select(e => e.Value).TakeLast(3));
+        Assert.Equal(new[] {"رقيب", "=1+2", ""},
+            rows[3].Descendants(ns + "t").Select(e => e.Value).TakeLast(3));
+        Assert.Empty(doc.Descendants(ns + "f"));
+        using var daily = zip.GetEntry("xl/worksheets/sheet4.xml")!.Open();
+        Assert.DoesNotContain("رقيب", XDocument.Load(daily).Descendants(ns + "t").Select(e => e.Value));
+    }
+
+    [Fact]
+    public void Individual_unknown_custom_field_rejects_workbook_before_any_write()
+    {
+        var report = Complete();
+        report["customColumns"] = new JsonArray();
+        report["person"]!["customFields"] = new JsonObject { ["UNKNOWN"]="value" };
+        using var buffer = new MemoryStream();
+        Assert.Throws<InvalidDataException>(() => PersonnelIndividualExcelWorkbook.Write(buffer, report));
+        Assert.Equal(0L, buffer.Length);
+    }
+
     [Theory]
     [InlineData("attendanceTotal")]
     [InlineData("identityTotal")]
