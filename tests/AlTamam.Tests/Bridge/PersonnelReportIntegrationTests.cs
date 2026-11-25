@@ -146,7 +146,8 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
             ["personIds"]=new JsonArray("TST-REPORT-2")
         },CancellationToken.None);
         Assert.True(other.Success,other.UserMessage);
-        var otherStatuses=Assert.IsType<JsonArray>(other.Data!["filterStatuses"]);
+        var otherData=Assert.IsType<JsonObject>(other.Data);
+        var otherStatuses=Assert.IsType<JsonArray>(otherData["filterStatuses"]);
         Assert.Equal("STS-PRESENT",Assert.Single(otherStatuses)!["id"]!.GetValue<string>());
     }
 
