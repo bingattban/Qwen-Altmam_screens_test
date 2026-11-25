@@ -132,9 +132,9 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
 
     public async Task CloseHistoricalRangeAsync(CancellationToken ct=default)
     {
-        bool committed=HistoricalRange.Receipt is not null;
+        bool reload=HistoricalRange.Receipt is not null || HistoricalRange.NeedsPeriodReload;
         if (!HistoricalRange.Close()) return;
-        if (committed)
+        if (reload)
         {
             Historical.InvalidateEvidence();
             await Historical.ReadAsync(ct);
