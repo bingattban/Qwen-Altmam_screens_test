@@ -228,7 +228,7 @@
                                            FontSize="17" FontWeight="Bold"
                                            Foreground="#0F2942"/>
                             </DockPanel>
-                            <TextBlock Text="سيتم تصدير السجلات الأصلية المعتمدة للفترة المختارة في 4 أوراق Excel بترتيب المجموعة، بما فيها صفحات الملخص اليومي كاملة ضمن الحد الآمن. لا يتغير التحضير أو قاعدة البيانات."
+                            <TextBlock Text="سيتم تصدير السجلات الأصلية المعتمدة للفترة المختارة في 4 أوراق Excel بترتيب المجموعة، بما فيها صفحات الملخص اليومي كاملة ضمن الحد الآمن. تتضمن ورقة الأفراد الحقول المخصصة الحالية، وليست قيما تاريخية. لا يتغير التحضير أو قاعدة البيانات."
                                        TextWrapping="Wrap" Foreground="#475569"/>
                             <ProgressBar Height="4" IsIndeterminate="True" Margin="0,7,0,0"
                                          Visibility="{Binding IsBusy, Converter={StaticResource GroupVisible}}"/>

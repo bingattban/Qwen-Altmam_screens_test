@@ -89,6 +89,72 @@ public sealed class NativeGroupExcelWorkbookPhase9Tests
             .Select(element => element.Value));
     }
 
+    private static JsonObject WithCustomColumns()
+    {
+        var report = Canonical();
+        report["customColumns"] = new JsonArray(
+            new JsonObject { ["columnId"]="FIELD-RANK", ["caption"]="الرتبة", ["fieldType"]=1, ["displayOrder"]=1 },
+            new JsonObject { ["columnId"]="FIELD-NOTE", ["caption"]="ملاحظة", ["fieldType"]=1, ["displayOrder"]=2 },
+            new JsonObject { ["columnId"]="FIELD-EMPTY", ["caption"]="حقل فارغ", ["fieldType"]=1, ["displayOrder"]=3 });
+        report["persons"]![0]!["customFields"] = new JsonObject
+        {
+            ["FIELD-RANK"]="رقيب", ["FIELD-NOTE"]="=1+2"
+        };
+        return report;
+    }
+
+    [Fact]
+    public void Workbook_preserves_current_custom_columns_in_metadata_order_without_formulas()
+    {
+        using var buffer = new MemoryStream();
+        PersonnelGroupExcelWorkbook.Write(buffer, WithCustomColumns(), []);
+        buffer.Position = 0;
+        using var zip = new ZipArchive(buffer, ZipArchiveMode.Read);
+        using var sheet = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var doc = XDocument.Load(sheet);
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        var rows = doc.Descendants(ns + "row").ToArray();
+        var headings = rows[2].Descendants(ns + "t").Select(x => x.Value).ToArray();
+        var values = rows[3].Descendants(ns + "t").Select(x => x.Value).ToArray();
+        Assert.Equal(new[] { "الرتبة (حالي)", "ملاحظة (حالي)", "حقل فارغ (حالي)" }, headings.TakeLast(3));
+        Assert.Equal(new[] { "رقيب", "=1+2", "" }, values.TakeLast(3));
+        Assert.Equal(headings.Length, values.Length);
+        Assert.Empty(doc.Descendants(ns + "f"));
+    }
+
+    [Theory]
+    [InlineData("duplicate")]
+    [InlineData("unknown")]
+    [InlineData("wrong-type")]
+    public void Invalid_custom_projection_is_rejected_before_zip_creation(string fault)
+    {
+        var report = WithCustomColumns();
+        var metadata = (JsonArray)report["customColumns"]!;
+        var values = (JsonObject)report["persons"]![0]!["customFields"]!;
+        if (fault == "duplicate") metadata.Add(metadata[0]!.DeepClone());
+        if (fault == "unknown") values["OTHER"] = "unrecognized";
+        if (fault == "wrong-type") values["FIELD-RANK"] = 1;
+        using var buffer = new MemoryStream();
+        Assert.Throws<InvalidDataException>(() => PersonnelGroupExcelWorkbook.Write(buffer, report, []));
+        Assert.Equal(0L, buffer.Length);
+    }
+
+    [Fact]
+    public void Group_fingerprint_binds_custom_column_metadata_and_current_values()
+    {
+        var report = WithCustomColumns();
+        string original = PersonnelGroupExcelExportService.Fingerprint(report);
+        var renamed = (JsonObject)report.DeepClone();
+        renamed["customColumns"]![0]!["caption"] = "رتبة جديدة";
+        Assert.NotEqual(original, PersonnelGroupExcelExportService.Fingerprint(renamed));
+        var changed = (JsonObject)report.DeepClone();
+        changed["persons"]![0]!["customFields"]!["FIELD-RANK"] = "جندي";
+        Assert.NotEqual(original, PersonnelGroupExcelExportService.Fingerprint(changed));
+        var page = (JsonObject)report.DeepClone();
+        page["dailyStatusPage"] = 2;
+        Assert.Equal(original, PersonnelGroupExcelExportService.Fingerprint(page));
+    }
+
     [Fact]
     public void Unsafe_excel_xml_characters_are_rejected_before_any_zip_part_is_written()
     {

@@ -41,6 +41,54 @@ public static class PersonnelGroupExcelWorkbook
     internal sealed record Sheet(string Name, string[] Headings,
         IReadOnlyList<string[]> Rows);
 
+    // The canonical metadata is already filtered to visible current fields.
+    // Preserve its ordering and immutable IDs, not mutable display captions.
+    internal static (string[] Headings, string[][] Values) CurrentCustomProjection(
+        JsonObject original)
+    {
+        var people = Array(original, "persons").Select(Obj).ToArray();
+        if (people.Length is < 1 or > 100)
+            throw new InvalidDataException("Group workbook person bounds exceeded.");
+        // Older pure-renderer fixtures may have neither metadata nor values.
+        if (!original.ContainsKey("customColumns") &&
+            people.All(person => !person.ContainsKey("customFields")))
+            return ([], people.Select(_ => System.Array.Empty<string>()).ToArray());
+
+        var metadata = Array(original, "customColumns");
+        if (metadata.Count > 500)
+            throw new InvalidDataException("Group workbook custom column bounds exceeded.");
+        var columns = metadata.Select(node =>
+        {
+            var item = Obj(node);
+            string id = Text(item, "columnId"), caption = Text(item, "caption");
+            if (id.Length is < 1 or > 128 || id.Any(char.IsControl) ||
+                string.IsNullOrWhiteSpace(caption) || caption.Length > 240 ||
+                caption.Any(char.IsControl))
+                throw new InvalidDataException("Invalid group custom column metadata.");
+            return (Id: id, Caption: SafeText(caption + " (حالي)"));
+        }).ToArray();
+        var ids = columns.Select(column => column.Id).ToHashSet(StringComparer.Ordinal);
+        if (ids.Count != columns.Length)
+            throw new InvalidDataException("Duplicate group custom column ID.");
+
+        var values = people.Select(person =>
+        {
+            var custom = Obj(person["customFields"]);
+            if (custom.Any(entry => !ids.Contains(entry.Key)))
+                throw new InvalidDataException("Unknown group custom field ID.");
+            return columns.Select(column =>
+            {
+                if (!custom.TryGetPropertyValue(column.Id, out var node))
+                    return "";
+                if (node is not JsonValue cell || !cell.TryGetValue<string>(out var value)
+                    || value is null)
+                    throw new InvalidDataException("Invalid group custom field value.");
+                return SafeText(value);
+            }).ToArray();
+        }).ToArray();
+        return (columns.Select(column => column.Caption).ToArray(), values);
+    }
+
     public static void Write(Stream output, JsonObject original,
         IReadOnlyList<JsonObject> daily)
     {
@@ -57,13 +105,14 @@ public static class PersonnelGroupExcelWorkbook
         if (allStatuses.Length > 5000)
             throw new InvalidDataException("Group status table exceeds safety bounds.");
 
-        var personRows = people.Select(p => new[]
+        var customProjection = CurrentCustomProjection(original);
+        var personRows = people.Select((p, index) => new[]
         {
             Text(p,"personId"), Text(p,"name"),
             Text(p,"serviceNumberA"), Text(p,"firstRecordedDate"),
             Number(p,"organizationalStatus"), p["active"]?.ToString() ?? "",
             Number(p,"attendanceTotal"), Number(p,"movementTotal")
-        }).ToArray();
+        }.Concat(customProjection.Values[index]).ToArray()).ToArray();
         var totalsRows = allStatuses.Select(s => new[]
         {
             Text(s,"statusId"), Text(s,"statusName"), Number(s,"count")
@@ -99,8 +148,8 @@ public static class PersonnelGroupExcelWorkbook
         var sheets = new Sheet[]
         {
             new("الأفراد", ["معرف الفرد الثابت", "الاسم الحالي", "الرقم (ع) الحالي",
-                "أول يوم مسجل", "الحالة التنظيمية", "نشط", "أيام التحضير", "الحركات"],
-                personRows),
+                "أول يوم مسجل", "الحالة التنظيمية", "نشط", "أيام التحضير", "الحركات",
+                ..customProjection.Headings], personRows),
             new("الحالات", ["معرف الحالة", "الحالة التاريخية", "أيام التحضير"], totalsRows),
             new("الملخص اليومي", ["التاريخ", "معرف الحالة",
                 "الحالة التاريخية", "أيام التحضير", "عدد الأفراد"], dailyRows),
