@@ -110,6 +110,9 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
             Number(source, "movementTotal") < 0)
             throw new InvalidDataException("Canonical group report pagination or source echo mismatch.");
 
+        // Reject invalid or unsafe current custom fields before approving export.
+        _ = PersonnelGroupExcelWorkbook.CurrentCustomProjection(source);
+
         long totalAttendance = 0, totalMovements = 0;
         for (int i = 0; i < ids.Length; i++)
         {
@@ -152,6 +155,7 @@ public sealed class PersonnelGroupExcelExportService(AlTamamDbContext database)
             ["siteId"] = report["siteId"]?.DeepClone(),
             ["statusId"] = report["statusId"]?.DeepClone(),
             ["movementType"] = report["movementType"]?.DeepClone(),
+            ["customColumns"] = report["customColumns"]?.DeepClone(),
             ["persons"] = report["persons"]?.DeepClone(),
             ["statusTotals"] = report["statusTotals"]?.DeepClone(),
             ["attendanceTotal"] = report["attendanceTotal"]?.DeepClone(),
