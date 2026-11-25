@@ -26,7 +26,15 @@ public sealed record NativePersonnelGroupPerson(
     string PersonId, string Name, string ServiceNumberA,
     string FirstRecordedDate, int OrganizationalStatus, bool Active,
     long AttendanceTotal, long MovementTotal,
-    IReadOnlyList<NativePersonnelReportStatusTotal> StatusTotals);
+    IReadOnlyList<NativePersonnelReportStatusTotal> StatusTotals)
+{
+    public IReadOnlyList<NativeGroupCustomField> CustomFields { get; init; } = [];
+    public string Rank => CustomFields.FirstOrDefault(field =>
+        field.Caption.Trim() is "الرتبة" or "رتبة")?.Value ?? "";
+}
+
+// Current visible values, never reconstructed historical values.
+public sealed record NativeGroupCustomField(string ColumnId, string Caption, string Value);
 
 public sealed record NativePersonnelGroupDailyStatus(
     string Date, string StatusId, string StatusName, long Count,
@@ -43,6 +51,7 @@ public sealed record NativePersonnelGroupReportSnapshot(
 {
     // Full historical choices for the selected immutable group, not the
     // current attendance page or the active filtered result.
+    public IReadOnlyList<NativeDashboardColumn> CustomColumns { get; init; } = [];
     public IReadOnlyList<NativeReportFilterOption> AvailableSites { get; init; } = [];
     public IReadOnlyList<NativeReportFilterOption> AvailableStatuses { get; init; } = [];
 }
