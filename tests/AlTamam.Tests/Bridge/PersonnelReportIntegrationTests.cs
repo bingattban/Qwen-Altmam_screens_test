@@ -124,6 +124,33 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task GroupFilterCatalog_IsLifetimeScopedToSelectedImmutablePeople()
+    {
+        var service=new PersonnelReportService(_db);
+        var filtered=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-02-01",["statusId"]="STS-PRESENT"
+        },CancellationToken.None);
+        Assert.True(filtered.Success,filtered.UserMessage);
+        var data=Assert.IsType<JsonObject>(filtered.Data);
+        Assert.Equal(0L,data["attendanceTotal"]!.GetValue<long>());
+        var statuses=Assert.IsType<JsonArray>(data["filterStatuses"]);
+        Assert.Equal(new[]{"STS-ABSENT","STS-PRESENT"},
+            statuses.Select(x=>x!["id"]!.GetValue<string>()).ToArray());
+        var sites=Assert.IsType<JsonArray>(data["filterSites"]);
+        Assert.Equal("SITE-UNSPECIFIED",Assert.Single(sites)!["id"]!.GetValue<string>());
+
+        var other=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-2")
+        },CancellationToken.None);
+        Assert.True(other.Success,other.UserMessage);
+        var otherStatuses=Assert.IsType<JsonArray>(other.Data!["filterStatuses"]);
+        Assert.Equal("STS-PRESENT",Assert.Single(otherStatuses)!["id"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task GroupReport_DateRangeAndInvalidInputs_AreStrictAndReadOnly()
     {
         var svc=new PersonnelReportService(_db);
