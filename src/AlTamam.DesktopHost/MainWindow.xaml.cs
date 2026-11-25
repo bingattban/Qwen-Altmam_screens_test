@@ -679,10 +679,19 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(fixtureFolder);
                 string fixtureKey = AlTamam.Infrastructure.Security.DatabaseKeyGenerator.Generate();
                 string recoveryOutput = fixtureFolder + "-recovery-output";
+                // Bridge-only checks use the same encrypted pooling as production.
+                // Recovery/reset probes retain nonpooled connections because their
+                // own lifecycle operations replace or clear database handles.
+                bool poolFixtureConnections = Environment.GetCommandLineArgs().Contains(
+                    "--webview-split-recovery-e2e", StringComparer.Ordinal) &&
+                    !Environment.GetCommandLineArgs().Contains(
+                        "--webview-recovery-only-e2e", StringComparer.Ordinal);
+                TraceWebViewSelfCheck("Synthetic SQLCipher connection pooling: " +
+                    (poolFixtureConnections ? "enabled (bridge only)" : "disabled (recovery capable)"));
                 var fixture = new AlTamamDbContext(
                     Path.Combine(fixtureFolder, "phase04-synthetic.db"),
                     fixtureKey,
-                    useConnectionPooling: false);
+                    useConnectionPooling: poolFixtureConnections);
                 DesktopBridgeGateway? fixtureGateway = null;
                 try
                 {
@@ -704,9 +713,16 @@ public partial class MainWindow : Window
                 }
                 finally
                 {
-                    if (fixtureGateway is not null)
-                        await fixtureGateway.StopReceivingAndDrainAsync().ConfigureAwait(true);
-                    fixture.Dispose();
+                    try
+                    {
+                        if (fixtureGateway is not null)
+                            await fixtureGateway.StopReceivingAndDrainAsync().ConfigureAwait(true);
+                    }
+                    finally
+                    {
+                        try { fixture.ClearConnectionPool(); }
+                        finally { fixture.Dispose(); }
+                    }
                     try { Directory.Delete(fixtureFolder, recursive: true); Directory.Delete(recoveryOutput, recursive: true); }
                     catch (IOException) { /* Windows may still be releasing synthetic WAL handles. */ }
                     catch (UnauthorizedAccessException) { /* Best-effort temporary-file cleanup. */ }
