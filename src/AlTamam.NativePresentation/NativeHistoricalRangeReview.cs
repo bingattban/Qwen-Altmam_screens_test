@@ -38,7 +38,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
     public bool CanEditDates => CanEdit && _period is null;
     public bool IsBusy => _busy;
     public bool HasUnverifiedCommit => _uncertain;
-    public bool CanEdit => IsOpen && !_busy && !_uncertain && Receipt is null && ContextValid();
+    public bool NeedsPeriodReload { get; private set; }
+    public bool CanEdit => IsOpen && !_busy && !_uncertain && !NeedsPeriodReload && Receipt is null && ContextValid();
     public bool CanClose => IsOpen && !_busy && !_uncertain;
     public string Error { get; private set; } = "";
     public string CompletionMessage { get; private set; } = "";
@@ -139,7 +140,7 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
 
     public async Task PreviewAsync(CancellationToken ct = default)
     {
-        if (_busy || _uncertain || Receipt is not null || _backend is null) return;
+        if (_busy || _uncertain || NeedsPeriodReload || Receipt is not null || _backend is null) return;
         if (!ContextValid()) { Close(); return; }
         RevokePreview();
         if (!DateOnly.TryParseExact(_from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from) ||
@@ -174,6 +175,12 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
             if (generation != _generation || linked.IsCancellationRequested || !ContextValid()) return;
             if (!response.Matches(request, Today))
                 throw new InvalidDataException("Mismatched canonical historical range preview.");
+            if (_period is { } readEvidence && !readEvidence.MatchesPreviewState(response,Today))
+            {
+                NeedsPeriodReload=true;
+                Error="تغير سجل الفترة منذ قراءته؛ أغلق المراجعة لإعادة قراءة السجلات قبل التصحيح.";
+                return;
+            }
             // Historical names/numbers can differ across the selected dates;
             // immutable PersonId is the authority. Preserve canonical identity and day snapshots.
             Preview = response with { Days = Array.AsReadOnly(response.Days.ToArray()) };
@@ -246,6 +253,7 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
         _choices = [];
         _from = _to = _status = _reason = "";
         Receipt = null;
+        NeedsPeriodReload=false;
         CompletionMessage = "";
         RevokePreview();
         Notify();

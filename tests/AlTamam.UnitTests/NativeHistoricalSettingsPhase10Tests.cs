@@ -90,10 +90,33 @@ public sealed class NativeHistoricalSettingsPhase10Tests
         Assert.False(page.CanOpenHistorical);
     }
 
+    [Fact]
+    public async Task Settings_historical_stale_preview_requires_reread_without_commit()
+    {
+        var fake=new Fake { Stale=true };
+        var page=new SettingsPageViewModel();
+        page.AttachHistorical(fake,fake,fake,()=>Admin);
+        await Load(page);
+        await page.OpenHistoricalRangeAsync();
+        page.HistoricalRange.SelectedStatusId="STS-ABSENT";
+        page.HistoricalRange.Reason="تصحيح معتمد للسجل التاريخي";
+        await page.HistoricalRange.PreviewAsync();
+        Assert.True(page.HistoricalRange.NeedsPeriodReload);
+        Assert.False(page.HistoricalRange.ConfirmCommand.CanExecute(null));
+        await page.HistoricalRange.ConfirmAsync();
+        Assert.Empty(fake.Commits);
+        fake.Stale=false;
+        await page.CloseHistoricalRangeAsync();
+        Assert.False(page.HistoricalRange.IsOpen);
+        Assert.Equal(2,fake.Reads);
+        Assert.NotNull(page.Historical.Evidence);
+        Assert.True(page.CanOpenHistoricalRange);
+    }
+
     private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
     {
         public int Reads;
-        public bool Lose;
+        public bool Lose,Stale;
         public List<string> Commits=[];
         public Task<IReadOnlyList<NativeHistoricalPersonCandidate>> SearchHistoricalPeopleAsync(NativeIdentity actor,string term,CancellationToken ct=default)
             => Task.FromResult<IReadOnlyList<NativeHistoricalPersonCandidate>>([new("P-1","أحمد","123","المركز",3)]);
@@ -101,7 +124,9 @@ public sealed class NativeHistoricalSettingsPhase10Tests
         {
             Reads++;
             return Task.FromResult(new NativeHistoricalPeriodEvidence(request,"أحمد","123",
-                Enumerable.Range(0,request.SpanDays).Select(i=>new NativeHistoricalPeriodDay(request.From.AddDays(i),false,"لا يوجد سجل تحضير","",0)).ToArray()));
+                Enumerable.Range(0,request.SpanDays).Select(i=>i==request.SpanDays-1
+                    ? new NativeHistoricalPeriodDay(request.From.AddDays(i),true,"موجود","الموقع الثاني",Stale?6:7)
+                    : new NativeHistoricalPeriodDay(request.From.AddDays(i),false,"لا يوجد سجل تحضير","",0)).ToArray()));
         }
         public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadCorrectionChoicesAsync(NativeIdentity actor,CancellationToken ct=default)
             => Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>([new("STS-ABSENT","غياب")]);

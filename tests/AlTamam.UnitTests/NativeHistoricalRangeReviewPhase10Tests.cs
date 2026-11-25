@@ -161,6 +161,35 @@ public sealed class NativeHistoricalRangeReviewPhase10Tests
         Assert.True(vm.Close());
     }
 
+    [Theory]
+    [InlineData(false,0)]
+    [InlineData(true,6)]
+    public async Task Direct_range_rejects_changed_saved_state_or_revision(bool exists,long revision)
+    {
+        var request=new NativeHistoricalPeriodRequest("P-1",Day,Day.AddDays(2));
+        var evidence=new NativeHistoricalPeriodEvidence(request,"أحمد","123",
+            [new(Day,false,"لا يوجد سجل تحضير","",0),
+             new(Day.AddDays(1),false,"لا يوجد سجل تحضير","",0),
+             new(Day.AddDays(2),exists,exists?"موجود":"لا يوجد سجل تحضير",exists?"الموقع الثاني":"",revision)]);
+        var fake=new Fake();
+        var vm=new NativeHistoricalRangeReview();
+        Assert.True(vm.OpenForPeriod(fake,fake,()=>Owner,()=>evidence,evidence));
+        await vm.LoadChoicesAsync();
+        vm.SelectedStatusId="STS-ABSENT";
+        vm.Reason="تصحيح معتمد للسجل التاريخي";
+        await vm.PreviewAsync();
+        Assert.True(vm.NeedsPeriodReload);
+        Assert.False(vm.CanEdit);
+        Assert.Null(vm.Preview);
+        Assert.False(vm.ConfirmCommand.CanExecute(null));
+        await vm.ConfirmAsync();
+        await vm.PreviewAsync();
+        Assert.Equal(1,fake.Previews);
+        Assert.Empty(fake.Commits);
+        Assert.True(vm.Close());
+        Assert.False(vm.NeedsPeriodReload);
+    }
+
     private sealed class Fake : INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
     {
         public int Previews;
