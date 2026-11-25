@@ -17,6 +17,12 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     private long _generation;
     private bool _loading;
     private string _error="";
+    private NativeAuditRow? _detailRow;
+    private NativeAuditDetail? _detail;
+    private CancellationTokenSource? _detailPending;
+    private long _detailGeneration;
+    private bool _detailLoading;
+    private string _detailError="";
 
     public NativeAuditPageViewModel() : base(NativeScreen.AuditLog,"سجل العمليات")
     {
@@ -25,6 +31,9 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         NextCommand=new NativeCommand(_=>_ = NextAsync(),_=>CanPage && _snapshot!.HasNext && _snapshot.Filter.Page<100000);
         PreviousCommand=new NativeCommand(_=>_ = PreviousAsync(),_=>CanPage && _snapshot!.Filter.Page>1);
         ClearFiltersCommand=new NativeCommand(_=>_ = ClearFiltersAsync(),_=>CanRead);
+        OpenDetailCommand=new NativeCommand(row=>{if(row is NativeAuditRow item) _=OpenDetailAsync(item);},
+            row=>row is NativeAuditRow item && CanOpenDetail(item));
+        CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen);
     }
 
     private NativeIdentity? AuthorizedActor => _liveActor?.Invoke() is { } actor &&
@@ -42,6 +51,17 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public string PageLabel => IsDataConnected ? $"الصفحة {Page} — إجمالي القيود: {Total}" : "لم يتم تحميل السجل";
     public bool IsLoading => _loading;
     public string Error => _error;
+    private bool IsCurrentRow(NativeAuditRow row)=>IsDataConnected &&
+        Rows.Any(current=>ReferenceEquals(current,row));
+    public bool IsDetailOpen=>_detailRow is { } row && IsCurrentRow(row);
+    public bool IsDetailLoading=>IsDetailOpen && _detailLoading;
+    public NativeAuditDetail? Detail=>IsDetailOpen ? _detail : null;
+    public string DetailError=>IsDetailOpen ? _detailError : "";
+    public NativeAuditRow? DetailRow=>IsDetailOpen ? _detailRow : null;
+    public NativeCommand OpenDetailCommand { get; }
+    public NativeCommand CloseDetailCommand { get; }
+    private bool CanOpenDetail(NativeAuditRow row)=>_reader is INativeAuditDetailReader &&
+        !_loading && IsCurrentRow(row) && !IsDetailLoading;
     public string Term { get=>_draft.Term; set=>SetDraft(_draft with { Term=value??"" }); }
     public string Actor { get=>_draft.Actor; set=>SetDraft(_draft with { Actor=value??"" }); }
     public string Target { get=>_draft.Target; set=>SetDraft(_draft with { Target=value??"" }); }
@@ -134,8 +154,64 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         }
     }
 
+    public async Task OpenDetailAsync(NativeAuditRow row,CancellationToken ct=default)
+    {
+        if (!CanOpenDetail(row) || _reader is not INativeAuditDetailReader reader ||
+            AuthorizedActor is not { } actor) return;
+        ResetDetail();
+        long generation=_detailGeneration;
+        _detailRow=row;
+        _detailLoading=true;
+        using var pending=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _detailPending=pending;
+        Notify();
+        try
+        {
+            var result=await reader.ReadAuditDetailAsync(actor,row,pending.Token);
+            if (generation!=_detailGeneration || pending.IsCancellationRequested ||
+                AuthorizedActor!=actor || !IsCurrentRow(row)) return;
+            if (result is null || !result.Matches(row,actor.Role))
+                throw new InvalidOperationException("Canonical audit detail changed.");
+            _detail=result;
+        }
+        catch (OperationCanceledException) when (pending.IsCancellationRequested) { }
+        catch
+        {
+            if (generation==_detailGeneration && AuthorizedActor==actor && IsCurrentRow(row))
+                _detailError="تعذر التحقق من تفاصيل القيد. حدث الكشف ثم أعد المحاولة.";
+        }
+        finally
+        {
+            if (generation==_detailGeneration)
+            {
+                _detailPending=null;
+                _detailLoading=false;
+                if (AuthorizedActor!=actor || !IsCurrentRow(row) || pending.IsCancellationRequested)
+                    ResetDetail();
+                Notify();
+            }
+        }
+    }
+
+    private void ResetDetail()
+    {
+        ++_detailGeneration;
+        _detailPending?.Cancel();
+        _detailPending=null;
+        _detailRow=null;
+        _detail=null;
+        _detailLoading=false;
+        _detailError="";
+    }
+    public void CloseDetail()
+    {
+        ResetDetail();
+        Notify();
+    }
+
     private void Invalidate()
     {
+        ResetDetail();
         ++_generation;
         _pending?.Cancel();
         _pending=null;
@@ -158,5 +234,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         NextCommand.NotifyAvailabilityChanged();
         PreviousCommand.NotifyAvailabilityChanged();
         ClearFiltersCommand.NotifyAvailabilityChanged();
+        OpenDetailCommand.NotifyAvailabilityChanged();
+        CloseDetailCommand.NotifyAvailabilityChanged();
     }
 }
