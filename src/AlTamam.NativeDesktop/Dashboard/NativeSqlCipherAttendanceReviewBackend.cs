@@ -15,7 +15,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// audit writer. Those belong to AttendanceCommitService exclusively.
 /// </summary>
 internal sealed class NativeSqlCipherAttendanceReviewBackend(
-    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend
+    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend
 {
     public async Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity identity, CancellationToken ct = default)
@@ -165,6 +165,74 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             data["auditEventIds"] is not JsonArray audits || audits.Count != count)
             throw new InvalidDataException("Canonical SQLCipher attendance receipt incomplete.");
         return new NativeAttendanceCommitReceipt(count, audit);
+    }
+
+    async Task<NativeClosedDayCorrectionPreview> INativeClosedDayCorrectionBackend.PreviewAsync(
+        NativeIdentity identity, NativeClosedDayCorrectionRequest request, CancellationToken ct)
+    {
+        string date = request.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (!AlTamam.Application.Attendance.ClosedDayCorrections.ClosedDayCorrectionEligibilityPolicy
+                .IsHistorical(date, DateTimeOffset.Now) ||
+            request.PersonId.Length is < 1 or > 128 || request.StatusId.Length is < 1 or > 128 ||
+            string.IsNullOrWhiteSpace(request.PersonId) || string.IsNullOrWhiteSpace(request.StatusId) ||
+            request.PersonId.Any(char.IsControl) || request.StatusId.Any(char.IsControl) ||
+            request.Reason.Length is < 10 or > 400 || request.Reason.Any(char.IsControl) ||
+            request.Reason.Trim() != request.Reason)
+            throw new InvalidDataException("Invalid historical correction request.");
+
+        const string action = "PreviewClosedDayCorrection";
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new ClosedDayCorrectionService(database).PreviewAsync(new JsonObject
+        {
+            ["personId"] = request.PersonId,
+            ["businessDate"] = date,
+            ["statusId"] = request.StatusId,
+            ["reason"] = request.Reason
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            data.ContainsKey("days") || RequiredText(data, "personId") != request.PersonId ||
+            RequiredText(data, "businessDate") != date ||
+            RequiredText(data, "statusId") != request.StatusId ||
+            RequiredText(data, "reason") != request.Reason ||
+            data["requiresExplicitConfirmation"]?.GetValue<bool>() != true ||
+            data["previousRevision"] is not JsonValue revisionValue ||
+            !revisionValue.TryGetValue<long>(out long revision) || revision is < 1 or long.MaxValue)
+            throw new InvalidDataException("Invalid canonical single-day correction preview.");
+        string token = RequiredText(data, "previewToken");
+        if (token.Length != 64 || !token.All(Uri.IsHexDigit))
+            throw new InvalidDataException("Invalid correction token.");
+        return new NativeClosedDayCorrectionPreview(request, token, revision,
+            RequiredText(data, "personName"), RequiredText(data, "serviceNumberA"),
+            RequiredText(data, "siteName"), RequiredText(data, "beforeStatusId"),
+            RequiredText(data, "beforeStatusName"), RequiredText(data, "afterStatusName"), true);
+    }
+
+    async Task<NativeClosedDayCorrectionReceipt> INativeClosedDayCorrectionBackend.CommitAsync(
+        NativeIdentity identity, string token, string operationId, CancellationToken ct)
+    {
+        if (token.Length != 64 || !token.All(Uri.IsHexDigit) ||
+            operationId.Length is < 16 or > 128 ||
+            operationId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
+            throw new InvalidDataException("Invalid correction approval.");
+        const string action = "CommitClosedDayCorrection";
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new ClosedDayCorrectionService(database).CommitAsync(new JsonObject
+        {
+            ["previewToken"] = token,
+            ["operationId"] = operationId
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            !DateOnly.TryParseExact(RequiredText(data, "businessDate"), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+            date >= DateOnly.FromDateTime(DateTime.Now) ||
+            data["revisionNumber"] is not JsonValue revisionValue ||
+            !revisionValue.TryGetValue<long>(out long revision) || revision < 2)
+            throw new InvalidDataException("Invalid canonical correction receipt.");
+        return new NativeClosedDayCorrectionReceipt(RequiredText(data, "personId"), date, revision);
     }
 
     private async Task<BridgePrincipal> ResolveAuthorizedAsync(
