@@ -110,7 +110,8 @@ public sealed class AdministrativeAttendanceCatchUpTests : IAsyncLifetime, IDisp
         Assert.Equal(2,Count("AuditEvents")); // automated event and named admin approval
         var retry = await svc.CommitAsync((JsonObject)commitPayload.DeepClone(),Admin,default);
         Assert.True(retry.Success,retry.UserMessage);
-        Assert.True(JsonNode.DeepEquals(receipt,retry.Data));
+        var replayedReceipt = Assert.IsType<JsonObject>(retry.Data);
+        Assert.True(JsonNode.DeepEquals(receipt,replayedReceipt));
         Assert.Equal(1,Count("AttendanceRecords"));
         Assert.Equal(2,Count("AuditEvents"));
         Assert.Equal(BridgeErrorCodes.ConflictStale,

@@ -139,13 +139,13 @@ def problems(content):
                   "approved.MatchesReceipt(receipt)", "principal.SessionRevocation",
                   '["previewToken"] = approved.Token', '["operationId"] = operationId'):
         require("catchup_adapter",token)
-    for token in ("AdministrativeAttendanceCatchUpRequest", "Receipt_accepts_only_canonical_date_and_count_with_no_overstatement",
+    for token in ("NativeAdministrativeCatchUpRequest", "Receipt_accepts_only_canonical_date_and_count_with_no_overstatement",
                   "Approved_token_remains_structurally_valid_for_exact_replay_after_window_closes"):
         require("catchup_tests",token)
     for token in ("RunForDateInTransactionAsync", "ADMIN_ATTENDANCE_CATCHUP_APPROVED",
                   "now.Fingerprint != Read(preview, \"fingerprint\")"):
         require("catchup_service",token)
-    for token in ("StalePreviewNeverOverwritesManualAttendance", "JsonNode.DeepEquals(receipt,retry.Data)"):
+    for token in ("StalePreviewNeverOverwritesManualAttendance", "var replayedReceipt = Assert.IsType<JsonObject>(retry.Data);", "JsonNode.DeepEquals(receipt,replayedReceipt)"):
         require("catchup_sql_tests",token)
     for token in ("OpenRangeCorrectionCommand","RangeCorrection.FromText","RangeCorrection.ToText",
                   "RangeCorrection.Preview.Days","RangeCorrection.ConfirmCommand","CloseRangeCorrectionCommand"):
@@ -246,7 +246,7 @@ if __name__ == "__main__":
         ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
         ("catchup_adapter", "approved.MatchesReceipt(receipt)"),
         ("catchup_service", "ADMIN_ATTENDANCE_CATCHUP_APPROVED"),
-        ("catchup_sql_tests", "JsonNode.DeepEquals(receipt,retry.Data)"),
+        ("catchup_sql_tests", "JsonNode.DeepEquals(receipt,replayedReceipt)"),
         ("range_vm", "response.Matches(request, Today)"),
         ("xaml", "RangeCorrection.ConfirmCommand"),
         ("backend", "INativeHistoricalRangeBackend.CommitRangeAsync("),
