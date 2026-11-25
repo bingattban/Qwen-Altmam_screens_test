@@ -202,8 +202,12 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         };
         var first=await service.SetPolicyAsync(request,Ga,CancellationToken.None);
         Assert.True(first.Success,first.UserMessage);
+        var firstReceipt=Assert.IsType<JsonObject>(first.Data);
+        Assert.True(firstReceipt["enabled"]!.GetValue<bool>());
         var retry=await service.SetPolicyAsync((JsonObject)request.DeepClone(),Ga,CancellationToken.None);
         Assert.True(retry.Success,retry.UserMessage);
+        var replayedReceipt=Assert.IsType<JsonObject>(retry.Data);
+        Assert.True(JsonNode.DeepEquals(firstReceipt,replayedReceipt));
         Assert.Equal("1",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
         Assert.Equal("1",Stored("SELECT COUNT(*) FROM MutationReceipts"));
         var tampered=await service.SetPolicyAsync(new JsonObject{

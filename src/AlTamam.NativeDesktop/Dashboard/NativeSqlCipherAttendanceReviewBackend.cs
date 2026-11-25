@@ -15,7 +15,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// audit writer. Those belong to AttendanceCommitService exclusively.
 /// </summary>
 internal sealed class NativeSqlCipherAttendanceReviewBackend(
-    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend
+    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend, INativeClosedDayPolicyBackend
 {
     public async Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity identity, CancellationToken ct = default)
@@ -396,6 +396,30 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         if (!approved.MatchesReceipt(receipt))
             throw new InvalidDataException("Canonical catch-up receipt mismatch.");
         return receipt;
+    }
+
+    public async Task<NativeClosedDayPolicyReceipt> SetClosedDayPolicyAsync(
+        NativeIdentity identity, NativeClosedDayPolicyRequest approved, string operationId,
+        CancellationToken ct = default)
+    {
+        if (!approved.IsValid || operationId.Length is < 16 or > 128 ||
+            operationId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
+            throw new InvalidDataException("Invalid closed-day policy approval.");
+        const string action = "SetClosedDayCorrectionPolicy";
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new ClosedDayCorrectionService(database).SetPolicyAsync(new JsonObject
+        {
+            ["enabled"] = approved.Enabled,
+            ["reason"] = approved.Reason,
+            ["operationId"] = operationId
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            data["enabled"] is not JsonValue enabledValue ||
+            !enabledValue.TryGetValue<bool>(out bool enabled) || enabled != approved.Enabled)
+            throw new InvalidDataException("Canonical closed-day policy receipt mismatch.");
+        return new NativeClosedDayPolicyReceipt(enabled);
     }
 
     private async Task<BridgePrincipal> ResolveAuthorizedAsync(
