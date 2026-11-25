@@ -2017,3 +2017,27 @@ and duplicate pairs. No SQL, schema, export contract, CI or host changes.
 Group historical site/status selectors, cross-page selection, custom-column
 parity and manual Windows acceptance remain pending. Both exact-head
 Windows workflows and four-package acceptance and SHA-256 gates must pass.
+
+## Phase 9 — group historical site and status filters
+
+Base: `f652f7614ae5cd813bc0c444b1b445a628116717` (merged #55).
+
+The canonical group report exposes bounded historical site/status choices
+for the selected immutable PersonIds, independent of date, page and active
+filter. It reuses the individual SQL choice templates with parameterized
+group IDs; no native SQL, schema or alternate data source is introduced.
+The native adapter shares the existing strict selector parser. The WPF
+screen first loads the group's report, then offers its historical choices.
+Changing a draft invalidates the report and any export preview; a new
+explicit run applies the filter IDs to the canonical request. Paging and
+Excel carry the same applied IDs. Selection changes reset the choices and
+filter drafts. Unknown choices and mismatched returned catalogs fail closed.
+The site filter restricts attendance and movements; status restricts
+attendance only, matching the original group service.
+Three new test-first scenarios cover real SQLCipher lifetime group choices,
+filter application/paging/clearing, and selection changes/foreign IDs.
+No workflow or host change. No measured speedup is claimed; group catalog
+reads add work and must be assessed on real datasets. Cross-page selection,
+custom-column parity, and clean-machine manual Windows/DPI acceptance remain
+pending. Both exact-head Windows workflows and the four package acceptance
+and independent SHA-256 audit must succeed before merge.
