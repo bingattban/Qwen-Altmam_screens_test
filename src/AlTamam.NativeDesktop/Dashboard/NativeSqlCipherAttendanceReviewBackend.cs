@@ -15,7 +15,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// audit writer. Those belong to AttendanceCommitService exclusively.
 /// </summary>
 internal sealed class NativeSqlCipherAttendanceReviewBackend(
-    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend
+    BridgeSharedServices services, AlTamamDbContext database) : INativeAttendanceReviewBackend, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend
 {
     public async Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity identity, CancellationToken ct = default)
@@ -329,6 +329,72 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         var receipt = new NativeHistoricalRangeReceipt(RequiredText(data, "personId"), date, revision);
         if (!approved.MatchesReceipt(receipt))
             throw new InvalidDataException("Historical range receipt mismatch.");
+        return receipt;
+    }
+
+    public async Task<NativeAdministrativeCatchUpPreview> PreviewCatchUpAsync(
+        NativeIdentity identity, NativeAdministrativeCatchUpRequest request, CancellationToken ct = default)
+    {
+        if (!request.IsValid(DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Invalid administrative catch-up request.");
+        const string action = "PreviewAdministrativeAttendanceCatchUp";
+        string day = request.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new AdministrativeAttendanceCatchUpService(database).PreviewAsync(new JsonObject
+        {
+            ["businessDate"] = day,
+            ["reason"] = request.Reason
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            RequiredText(data, "businessDate") != day ||
+            RequiredText(data, "reason") != request.Reason ||
+            data["pendingCount"] is not JsonValue pendingValue ||
+            !pendingValue.TryGetValue<int>(out int pending) ||
+            data["eligibleCount"] is not JsonValue eligibleValue ||
+            !eligibleValue.TryGetValue<int>(out int eligible) ||
+            data["requiresExplicitConfirmation"]?.GetValue<bool>() != true)
+            throw new InvalidDataException("Invalid canonical catch-up preview.");
+        var preview = new NativeAdministrativeCatchUpPreview(request,
+            RequiredText(data, "previewToken"), RequiredText(data, "fingerprint"),
+            pending, eligible, true);
+        if (!preview.Matches(request, DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Canonical catch-up preview mismatch.");
+        return preview;
+    }
+
+    public async Task<NativeAdministrativeCatchUpReceipt> CommitCatchUpAsync(
+        NativeIdentity identity, NativeAdministrativeCatchUpPreview approved,
+        string operationId, CancellationToken ct = default)
+    {
+        // The canonical service checks date expiry AFTER exact idempotency replay.
+        // Do not locally prevent retrieving a committed receipt after midnight.
+        if (!approved.IsWellFormed || operationId.Length is < 16 or > 128 ||
+            operationId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
+            throw new InvalidDataException("Invalid administrative catch-up approval.");
+        const string action = "CommitAdministrativeAttendanceCatchUp";
+        var principal = await ResolveAuthorizedAsync(identity, action, ct);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
+        var response = await new AdministrativeAttendanceCatchUpService(database).CommitAsync(new JsonObject
+        {
+            ["previewToken"] = approved.Token,
+            ["operationId"] = operationId
+        }, principal, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
+        if (!response.Success || response.Data is not JsonObject data ||
+            !DateOnly.TryParseExact(RequiredText(data, "businessDate"), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+            data["pendingBefore"] is not JsonValue pendingValue ||
+            !pendingValue.TryGetValue<int>(out int pending) ||
+            data["appliedCount"] is not JsonValue appliedValue ||
+            !appliedValue.TryGetValue<int>(out int applied) ||
+            data["isCatchUpRun"]?.GetValue<bool>() != true)
+            throw new InvalidDataException("Invalid canonical catch-up receipt.");
+        var receipt = new NativeAdministrativeCatchUpReceipt(date, pending, applied,
+            RequiredText(data, "summary"), true);
+        if (!approved.MatchesReceipt(receipt))
+            throw new InvalidDataException("Canonical catch-up receipt mismatch.");
         return receipt;
     }
 

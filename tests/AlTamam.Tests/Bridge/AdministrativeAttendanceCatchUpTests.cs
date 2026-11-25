@@ -84,6 +84,12 @@ public sealed class AdministrativeAttendanceCatchUpTests : IAsyncLifetime, IDisp
         Assert.True(before.Success,before.UserMessage);
         var preview = Assert.IsType<JsonObject>(before.Data);
         Assert.Equal(1, preview["pendingCount"]!.GetValue<int>());
+        Assert.Equal(1, preview["eligibleCount"]!.GetValue<int>());
+        Assert.Equal(Iso(date), preview["businessDate"]!.GetValue<string>());
+        Assert.Equal(Input(date)["reason"]!.GetValue<string>(), preview["reason"]!.GetValue<string>());
+        Assert.True(preview["requiresExplicitConfirmation"]!.GetValue<bool>());
+        Assert.Matches("^[0-9A-Fa-f]{64}$", preview["fingerprint"]!.GetValue<string>());
+        Assert.Matches("^[0-9A-Fa-f]{64}$", preview["previewToken"]!.GetValue<string>());
         var commitPayload = new JsonObject
         {
             ["previewToken"] = preview["previewToken"]!.GetValue<string>(),
@@ -93,12 +99,19 @@ public sealed class AdministrativeAttendanceCatchUpTests : IAsyncLifetime, IDisp
             (await svc.CommitAsync((JsonObject)commitPayload.DeepClone(),Supervisor,default)).ErrorCode);
         var done = await svc.CommitAsync(commitPayload,Admin,default);
         Assert.True(done.Success,done.UserMessage);
-        Assert.Equal(1,Assert.IsType<JsonObject>(done.Data)["appliedCount"]!.GetValue<int>());
+        var receipt = Assert.IsType<JsonObject>(done.Data);
+        Assert.Equal(1,receipt["appliedCount"]!.GetValue<int>());
+        Assert.Equal(1,receipt["pendingBefore"]!.GetValue<int>());
+        Assert.Equal(Iso(date),receipt["businessDate"]!.GetValue<string>());
+        Assert.True(receipt["isCatchUpRun"]!.GetValue<bool>());
+        Assert.False(string.IsNullOrWhiteSpace(receipt["summary"]!.GetValue<string>()));
         Assert.Equal(1,Count("AttendanceRecords"));
         Assert.Equal(1,Count("AutoAttendanceRuns"));
         Assert.Equal(2,Count("AuditEvents")); // automated event and named admin approval
         var retry = await svc.CommitAsync((JsonObject)commitPayload.DeepClone(),Admin,default);
         Assert.True(retry.Success,retry.UserMessage);
+        var replayedReceipt = Assert.IsType<JsonObject>(retry.Data);
+        Assert.True(JsonNode.DeepEquals(receipt,replayedReceipt));
         Assert.Equal(1,Count("AttendanceRecords"));
         Assert.Equal(2,Count("AuditEvents"));
         Assert.Equal(BridgeErrorCodes.ConflictStale,
