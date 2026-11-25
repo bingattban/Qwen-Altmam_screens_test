@@ -24,9 +24,9 @@ def validate(release: str, package: str) -> list[str]:
         if name not in build:
             issues.append("Missing candidate package output " + name)
     for required in (
-        "needs: package", "arch: [Windows-32bit, Windows-64bit]",
+        "needs: package", '\"arch\":\"Windows-32bit\"', '\"arch\":\"Windows-64bit\"',
         "RUNTIME: ${{ matrix.arch == 'Windows-32bit' && 'win-x86' || 'win-x64' }}",
-        "mode: [Portable, Installer]", "actions/download-artifact@v4",
+        '\"mode\":\"Portable\"', '\"mode\":\"Installer\"', "actions/download-artifact@v4",
         "test-package-appdata-preservation.ps1",
         "-AcceptanceMode", "if ($LASTEXITCODE -ne 0) { throw",
         "Preserve packaged acceptance diagnostics even after failure"
@@ -57,11 +57,11 @@ def self_test(release: str, package: str) -> None:
     assert not validate(release,package)
     for old,new in (
         ("needs: [package, package-acceptance]","needs: package"),
-        ("mode: [Portable, Installer]","mode: [Portable]"),
+        ('"mode":"Installer"','"mode":"MissingInstaller"'),
         ("-AcceptanceMode", "-OmittedMode"),
         ("test-package-appdata-preservation.ps1","fake-acceptance.ps1")
     ):
-        assert validate(release.replace(old,new,1),package),old
+        assert validate(release.replace(old,new),package),old
     assert validate(release,package.replace('if ($AcceptanceMode -ne "Portable")','if ($AcceptanceMode -eq "Portable")',1))
 
 

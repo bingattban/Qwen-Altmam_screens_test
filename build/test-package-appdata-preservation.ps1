@@ -7,7 +7,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$PortableArchive,
-    [Parameter(Mandatory = $true)][string]$InstallerPath,
+    [string]$InstallerPath,
     [Parameter(Mandatory = $true)]
     [ValidateSet("win-x86", "win-x64")][string]$ExpectedArch,
     [ValidateSet("All", "Portable", "Installer")][string]$AcceptanceMode = "All"
@@ -131,9 +131,13 @@ function Inno-Args([string]$dir) {
 }
 
 $portableZip = (Resolve-Path -LiteralPath $PortableArchive).Path
-$installerExe = (Resolve-Path -LiteralPath $InstallerPath).Path
 Assert-True ($portableZip.EndsWith(".zip", [StringComparison]::OrdinalIgnoreCase)) "Not a ZIP"
-Assert-True ($installerExe.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase)) "Not an installer"
+$installerExe = $null
+if ($AcceptanceMode -ne "Portable" -or -not [string]::IsNullOrWhiteSpace($InstallerPath)) {
+    Assert-True (-not [string]::IsNullOrWhiteSpace($InstallerPath)) "Installer path required for installer acceptance"
+    $installerExe = (Resolve-Path -LiteralPath $InstallerPath).Path
+    Assert-True ($installerExe.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase)) "Not an installer"
+}
 Assert-True (-not [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) "Requires isolated Windows CI runner"
 $work = Join-Path $env:RUNNER_TEMP ("altamam-package-acceptance-" + [guid]::NewGuid().ToString("N"))
 # Keep trace evidence outside the disposable installation tree. The workflow

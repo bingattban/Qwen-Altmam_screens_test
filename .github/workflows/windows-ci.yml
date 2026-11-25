@@ -87,6 +87,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
           python build/test-ci-exit-guards.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-build-modes.py
+          if ($LASTEXITCODE -ne 0) { throw 'Development/full release mode contract failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           python build/test-ci-fast-gates.py
