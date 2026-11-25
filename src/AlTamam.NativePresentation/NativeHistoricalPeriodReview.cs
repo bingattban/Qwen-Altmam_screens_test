@@ -91,6 +91,13 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
         Notify();
     }
 
+    public void InvalidateEvidence()
+    {
+        if (!CanEdit) return;
+        ClearEvidence();
+        Notify();
+    }
+
     private void ClearEvidence()
     {
         Evidence=null;
