@@ -17,6 +17,15 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     private Func<NativeIdentity?>? _liveActor;
     private Func<IReadOnlyList<NativePersonnelDisplayRow>>? _currentRows;
     private NativeIdentity? _actor;
+    private Func<int>? _originPage;
+    private Func<bool>? _originHasNext;
+    private Func<NativeIdentity, int, CancellationToken, Task<NativeGroupRosterPage>>? _pageReader;
+    private IReadOnlyList<NativePersonnelDisplayRow> _candidateRows = [];
+    private IReadOnlyList<NativePersonnelDisplayRow> _pageSelection = [];
+    private readonly Dictionary<string, NativePersonnelDisplayRow> _approvedRows = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _rosterPending;
+    private int _rosterPage = 1;
+    private bool _rosterHasNext, _pagingBusy;
     private IReadOnlyList<NativePersonnelDisplayRow>? _openedRows;
     private IReadOnlyList<NativePersonnelDisplayRow> _selectedRows = [];
     private CancellationTokenSource? _pending;
@@ -35,29 +44,47 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     public NativePersonnelGroupReportViewModel()
     {
         CloseCommand = new NativeCommand(_ => Close(), _ => _open);
-        RunCommand = new NativeCommand(_ => _ = RunAsync(), _ => CanRead && _selectedRows.Count > 0);
-        ClearFiltersCommand = new NativeCommand(_ => _ = ClearFiltersAsync(), _ => CanRead && _selectedRows.Count > 0);
+        NextRosterPageCommand = new NativeCommand(_ => _ = NextRosterPageAsync(),
+            _ => CanNavigate && _rosterHasNext && _rosterPage < 100000);
+        PreviousRosterPageCommand = new NativeCommand(_ => _ = PreviousRosterPageAsync(),
+            _ => CanNavigate && _rosterPage > 1);
+        AddPageSelectionCommand = new NativeCommand(_ => AddPageSelection(),
+            _ => CanNavigate && _pageSelection.Count > 0);
+        RemoveSelectedPersonCommand = new NativeCommand(arg =>
+        {
+            if (arg is NativePersonnelDisplayRow row) RemoveSelectedPerson(row);
+        }, arg => CanNavigate && arg is NativePersonnelDisplayRow row &&
+            _selectedRows.Any(current => ReferenceEquals(current, row)));
+        RunCommand = new NativeCommand(_ => _ = RunAsync(), _ => CanRead && !_pagingBusy && _selectedRows.Count > 0);
+        ClearFiltersCommand = new NativeCommand(_ => _ = ClearFiltersAsync(), _ => CanRead && !_pagingBusy && _selectedRows.Count > 0);
         NextSummaryCommand = new NativeCommand(_ => _ = NextSummaryAsync(), _ => CanNextSummary);
         PreviousSummaryCommand = new NativeCommand(_ => _ = PreviousSummaryAsync(), _ => CanPreviousSummary);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool IsOpen => _open;
-    public bool IsLoading => _busy;
+    public bool IsLoading => _busy || _pagingBusy;
+    public bool IsPagedPicker => _pageReader is not null;
+    public bool CanSelectRosterRows => CanRead && !_pagingBusy;
+    public int RosterPage => _rosterPage;
+    public string RosterPageLabel => $"صفحة كشف الاختيار: {_rosterPage}";
+    public IReadOnlyList<NativePersonnelDisplayRow> SelectedPeople => _selectedRows;
     public string ErrorMessage => _error;
     public NativePersonnelGroupReportSnapshot? Report => _report;
-    public IReadOnlyList<NativePersonnelDisplayRow> CandidateRows => _openedRows ?? [];
+    public IReadOnlyList<NativePersonnelDisplayRow> CandidateRows => IsPagedPicker ? _candidateRows : _openedRows ?? [];
     public int SelectedCount => _selectedRows.Count;
-    public string SelectedCountLabel => $"الأفراد المختارون صراحة: {SelectedCount} من {CandidateRows.Count} في الصفحة الحالية (الحد 100)";
+    public string SelectedCountLabel => IsPagedPicker
+        ? $"الأفراد المعتمدون في المجموعة: {SelectedCount} / 100؛ المحددون في الصفحة: {_pageSelection.Count}"
+        : $"الأفراد المختارون صراحة: {SelectedCount} من {CandidateRows.Count} في الصفحة الحالية (الحد 100)";
     public string DailySummaryPageLabel => _report is null
         ? "التفاصيل اليومية غير محملة"
         : $"صفحة الملخص اليومي {_report.DailyStatusPage} (100 صف في الصفحة)";
     public string AppliedFiltersLabel => _report is null
         ? "لم يُعتمد تقرير جماعي بعد."
         : $"الفترة المعتمدة: {(_report.DateFrom == "" ? "من البداية" : _report.DateFrom)} — {(_report.DateTo == "" ? "حتى النهاية" : _report.DateTo)}؛ نوع الحركة: {MovementTypeOptions.First(x => x.Value == _report.MovementType).Title}؛ الموقع: {_siteOptions.FirstOrDefault(x => x.Id == _report.SiteId)?.Title}؛ الحالة: {_statusOptions.FirstOrDefault(x => x.Id == _report.StatusId)?.Title}";
-    public bool CanNextSummary => CanRead && !_busy &&
+    public bool CanNextSummary => CanRead && !_busy && !_pagingBusy &&
         _report is { DailyStatusHasNext: true } && _summaryPage < 100000;
-    public bool CanPreviousSummary => CanRead && !_busy &&
+    public bool CanPreviousSummary => CanRead && !_busy && !_pagingBusy &&
         _report is not null && _summaryPage > 1;
     public IReadOnlyList<NativeReportMovementTypeOption> MovementTypeOptions { get; } =
     [
@@ -125,6 +152,10 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         }
     }
 
+    public ICommand NextRosterPageCommand { get; }
+    public ICommand PreviousRosterPageCommand { get; }
+    public ICommand AddPageSelectionCommand { get; }
+    public ICommand RemoveSelectedPersonCommand { get; }
     public ICommand CloseCommand { get; }
     public ICommand RunCommand { get; }
     public ICommand ClearFiltersCommand { get; }
@@ -145,11 +176,23 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
                 () => _report);
     }
 
+    public void AttachRosterPaging(Func<int> originPage, Func<bool> originHasNext,
+        Func<NativeIdentity, int, CancellationToken, Task<NativeGroupRosterPage>> readPage)
+    {
+        if (_open || _pageReader is not null)
+            throw new InvalidOperationException("Roster paging already attached or picker open.");
+        _originPage = originPage ?? throw new ArgumentNullException(nameof(originPage));
+        _originHasNext = originHasNext ?? throw new ArgumentNullException(nameof(originHasNext));
+        _pageReader = readPage ?? throw new ArgumentNullException(nameof(readPage));
+    }
+
+    private bool CanNavigate => IsPagedPicker && CanRead && !_pagingBusy && !_busy;
+
     // Only an already displayed canonical report for the SAME current,
     // explicitly selected PersonIds can authorize a fresh export preview.
     private NativePersonnelGroupReportRequest? CurrentExcelRequest()
     {
-        if (!CanRead || _busy || _report is not { } report ||
+        if (!CanRead || _busy || _pagingBusy || _report is not { } report ||
             report.PersonIds.Count != _selectedRows.Count ||
             !_selectedRows.Select(r => r.PersonId)
                 .SequenceEqual(report.PersonIds, StringComparer.Ordinal) ||
@@ -166,7 +209,12 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) &&
         _openedRows is { Count: >= 1 and <= 100 } rows &&
         ReferenceEquals(_currentRows?.Invoke(), rows) &&
-        _selectedRows.All(row => rows.Any(current => ReferenceEquals(current, row)));
+        _selectedRows.Count <= 100 &&
+        (IsPagedPicker
+            ? _selectedRows.Count == _approvedRows.Count &&
+              _selectedRows.All(row => _approvedRows.TryGetValue(row.PersonId, out var approved) &&
+                  ReferenceEquals(approved, row))
+            : _selectedRows.All(row => rows.Any(current => ReferenceEquals(current, row))));
 
     public void Open(IReadOnlyList<NativePersonnelDisplayRow> rows)
     {
@@ -181,6 +229,10 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             return;
         _actor = actor;
         _openedRows = rows;
+        _candidateRows = rows;
+        _rosterPage = _originPage?.Invoke() ?? 1;
+        _rosterHasNext = _originHasNext?.Invoke() ?? false;
+        if (_rosterPage is < 1 or > 100000) { Close(); return; }
         _open = true;
         Changed();
     }
@@ -188,7 +240,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     public void SelectRows(IReadOnlyList<NativePersonnelDisplayRow> selected)
     {
         if (!CanRead) { Close(); return; }
-        var candidates = _openedRows!;
+        if (_pagingBusy) return;
+        var candidates = CandidateRows;
         if (selected is null || selected.Count > 100 ||
             selected.Any(r => r is null || !candidates.Any(c => ReferenceEquals(c, r))) ||
             selected.Select(r => r.PersonId).Distinct(StringComparer.Ordinal).Count() != selected.Count)
@@ -196,9 +249,20 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             // A rejected replacement must not leave an older approved group
             // available for reporting or Excel export. Require explicit reselection.
             _selectedRows = [];
+            _approvedRows.Clear();
+            _pageSelection = [];
             ResetHistoricalChoices();
             InvalidateLoadedResult();
             _error = "اختيار غير صالح: يجب تحديد الأفراد من الصفحة الحالية دون تكرار أو تجاوز 100.";
+            Changed();
+            return;
+        }
+        if (IsPagedPicker)
+        {
+            if (selected.Count == _pageSelection.Count &&
+                selected.Zip(_pageSelection).All(pair => ReferenceEquals(pair.First, pair.Second)))
+                return;
+            _pageSelection = selected.ToArray();
             Changed();
             return;
         }
@@ -210,12 +274,104 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         InvalidateLoadedResult();
     }
 
+    private void AddPageSelection()
+    {
+        if (!CanNavigate) return;
+        var added = _pageSelection.Where(row => !_approvedRows.ContainsKey(row.PersonId)).ToArray();
+        if (added.Length == 0) return;
+        if (_selectedRows.Count + added.Length > 100)
+        {
+            InvalidateLoadedResult();
+            _error = "الحد الأقصى للمجموعة 100 فرد. أزل بعض الأفراد قبل الإضافة.";
+            Changed();
+            return;
+        }
+        // Only exact references from the currently verified page may enter.
+        if (added.Any(row => !_candidateRows.Any(current => ReferenceEquals(current, row))))
+        {
+            Close();
+            return;
+        }
+        foreach (var row in added) _approvedRows.Add(row.PersonId, row);
+        _selectedRows = [.._selectedRows, ..added];
+        ResetHistoricalChoices();
+        InvalidateLoadedResult();
+    }
+
+    private void RemoveSelectedPerson(NativePersonnelDisplayRow row)
+    {
+        if (!CanNavigate || !_approvedRows.TryGetValue(row.PersonId, out var approved) ||
+            !ReferenceEquals(approved, row)) return;
+        _approvedRows.Remove(row.PersonId);
+        _selectedRows = _selectedRows.Where(current => !ReferenceEquals(current, row)).ToArray();
+        ResetHistoricalChoices();
+        InvalidateLoadedResult();
+    }
+
+    public Task NextRosterPageAsync(CancellationToken ct = default) =>
+        CanNavigate && _rosterHasNext && _rosterPage < 100000
+            ? LoadRosterPageAsync(_rosterPage + 1, ct) : Task.CompletedTask;
+
+    public Task PreviousRosterPageAsync(CancellationToken ct = default) =>
+        CanNavigate && _rosterPage > 1
+            ? LoadRosterPageAsync(_rosterPage - 1, ct) : Task.CompletedTask;
+
+    private async Task LoadRosterPageAsync(int page, CancellationToken ct)
+    {
+        if (!CanNavigate || _actor is not { } actor || _pageReader is null) return;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _rosterPending = linked;
+        _pagingBusy = true;
+        _pageSelection = [];
+        InvalidateLoadedResult();
+        try
+        {
+            var result = await _pageReader(actor, page, linked.Token);
+            if (!ReferenceEquals(_rosterPending, linked)) return;
+            if (!CanRead) { Close(); return; }
+            linked.Token.ThrowIfCancellationRequested();
+            if (result is null || result.Page != page ||
+                result.Rows is not { Count: >= 1 and <= 100 } ||
+                result.Rows.Any(row => row is null || row.PersonId is not { Length: >= 3 and <= 128 } ||
+                    row.PersonId.Any(char.IsControl)) ||
+                result.Rows.Select(row => row.PersonId).Distinct(StringComparer.Ordinal).Count() != result.Rows.Count)
+                throw new InvalidDataException("Invalid authorized roster page.");
+            _candidateRows = result.Rows;
+            _rosterPage = result.Page;
+            _rosterHasNext = result.HasNext;
+            Changed();
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            if (ReferenceEquals(_rosterPending, linked)) Close();
+        }
+        catch
+        {
+            if (ReferenceEquals(_rosterPending, linked))
+            {
+                Close();
+                _error = "تعذر التحقق من صفحة الكشف؛ أعد فتح التقرير الجماعي.";
+                Changed();
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_rosterPending, linked))
+            {
+                _rosterPending = null;
+                _pagingBusy = false;
+                Changed();
+            }
+        }
+    }
+
     public async Task RunAsync(CancellationToken ct = default)
     {
         if (!CanRead) { Close(); return; }
+        if (_pagingBusy) return;
         if (_selectedRows.Count is < 1 or > 100)
         {
-            _error = "حدد فردا واحدا على الأقل من الصفحة الحالية لإنشاء تقرير جماعي.";
+            _error = IsPagedPicker ? "أضف فردا واحدا على الأقل إلى المجموعة." : "حدد فردا واحدا على الأقل من الصفحة الحالية لإنشاء تقرير جماعي.";
             Changed();
             return;
         }
@@ -338,6 +494,12 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         ++_generation;
         _pending?.Cancel();
         _pending = null;
+        _rosterPending?.Cancel();
+        _rosterPending = null;
+        _pagingBusy = _rosterHasNext = false;
+        _rosterPage = 1;
+        _candidateRows = _pageSelection = [];
+        _approvedRows.Clear();
         _actor = null;
         _openedRows = null;
         _selectedRows = [];
@@ -461,7 +623,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage),
             nameof(Report), nameof(CandidateRows), nameof(SelectedCount),
-            nameof(SelectedCountLabel), nameof(DateFromDraft), nameof(DateToDraft),
+            nameof(SelectedCountLabel), nameof(IsPagedPicker), nameof(CanSelectRosterRows), nameof(RosterPage),
+            nameof(RosterPageLabel), nameof(SelectedPeople), nameof(DateFromDraft), nameof(DateToDraft),
             nameof(MovementTypeDraft), nameof(MovementTypeOptions),
             nameof(SiteFilterOptions), nameof(StatusFilterOptions), nameof(SiteIdDraft), nameof(StatusIdDraft),
             nameof(DailySummaryPageLabel), nameof(AppliedFiltersLabel),
@@ -472,7 +635,9 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         foreach (ICommand command in new[]
         {
             CloseCommand, RunCommand, ClearFiltersCommand,
-            NextSummaryCommand, PreviousSummaryCommand
+            NextSummaryCommand, PreviousSummaryCommand,
+            NextRosterPageCommand, PreviousRosterPageCommand, AddPageSelectionCommand,
+            RemoveSelectedPersonCommand
         })
             ((NativeCommand)command).NotifyAvailabilityChanged();
     }

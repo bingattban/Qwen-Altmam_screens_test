@@ -2111,3 +2111,22 @@ metadata drift between source sweeps. No new SQL, schema, wire contract,
 workbook sheet count, host or CI changes. Cross-page group selection and
 manual clean-machine Windows acceptance remain pending. Both exact-head
 Windows workflows, four package acceptances and SHA-256 audit must pass.
+
+## Phase 9 — multi-page group selection
+
+Base: `190a5323d4dc21abe0bab2301bf8c1f72ac2f822` (merged #59).
+
+The native group picker reads additional pages through the existing authorized
+personnel directory reader using the original site, search and organizational
+status. Parent directory refresh, session replacement or an invalid page
+closes the picker. The explicit selection basket accepts only verified row
+references, deduplicates immutable PersonIds, preserves selection order and
+limits the entire group to 100. Page highlighting alone never adds people.
+Changing the basket or paging revokes prior report and Excel approval.
+Observed roster total changes or incomplete pages fail closed; this is not a
+transactional snapshot of concurrent roster changes. No new SQL, schema,
+legacy wire response, packaging or workflow changes. Four test-first cases
+and strengthened existing static guards cover multi-page selection, removal,
+forged rows, limits and revoked/late results. Manual Windows acceptance is
+still pending. Both exact-head Windows workflows and all four package gates
+must pass before merge. Next: daily attendance mutations and monthly parity.
