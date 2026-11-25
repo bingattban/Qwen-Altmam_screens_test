@@ -101,6 +101,8 @@
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Administration}"/>
                         <Button Content="التقارير" Style="{StaticResource NavButton}"
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Reports}"/>
+                        <Button Content="سجل العمليات" Style="{StaticResource NavButton}"
+                                Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.AuditLog}"/>
                         <Button Content="الإعدادات" Style="{StaticResource NavButton}"
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Settings}"/>
                     </StackPanel>
