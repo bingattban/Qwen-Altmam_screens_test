@@ -1,9 +1,9 @@
 namespace AlTamam.NativePresentation;
 
 /// <summary>
-/// Shared native page base. Reports/Settings are still placeholders; the real
-/// Dashboard, Daily, Monthly and Administration people register use dedicated
-/// SQLCipher-backed view models. No placeholder may mutate domain data.
+/// Shared native page base. Reports and unconverted settings remain placeholders;
+/// connected pages and administrative catch-up use canonical SQLCipher services.
+/// No placeholder may mutate domain data.
 /// Domain operations remain in the existing audited Application/Domain/Infrastructure.
 /// </summary>
 public abstract class NativePageViewModel(NativeScreen screen, string title)
@@ -32,11 +32,24 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     public NativeAdministrativeCatchUpReview CatchUp { get; }
     public System.Windows.Input.ICommand OpenCatchUpCommand { get; }
-    public bool CanOpenCatchUp => _backend is not null && !CatchUp.IsOpen &&
+    public bool CanOpenCatchUp => IsDataConnected && !CatchUp.IsOpen;
+    public override bool IsDataConnected => _backend is not null &&
         _liveActor?.Invoke() is { } actor &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
-    public override bool IsDataConnected => _backend is not null && _liveActor?.Invoke() is not null;
-    public override string StatusMessage => "استدراك التحضير الناقص متاح للإدارة؛ بقية الإعدادات قيد التحويل.";
+    public override string StatusMessage
+    {
+        get
+        {
+            var actor = _liveActor?.Invoke();
+            if (actor is null)
+                return "لم يتم تسجيل الدخول أو ربط جلسة معتمدة بخدمات الإعدادات.";
+            if (!AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role))
+                return "لا تملك صلاحية استدراك التحضير الناقص؛ بقية الإعدادات قيد التحويل.";
+            return _backend is null
+                ? "لم يتم ربط خدمة استدراك التحضير الناقص بعد."
+                : "استدراك التحضير الناقص متاح للإدارة؛ بقية الإعدادات قيد التحويل.";
+        }
+    }
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public void AttachCatchUp(INativeAdministrativeCatchUpBackend backend,Func<NativeIdentity?> liveActor)
     {
@@ -49,6 +62,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     {
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenCatchUp)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(StatusMessage)));
         ((NativeCommand)OpenCatchUpCommand).NotifyAvailabilityChanged();
     }
     public void Clear() => CatchUp.ForceClear();

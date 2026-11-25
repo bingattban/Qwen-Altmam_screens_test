@@ -120,6 +120,50 @@ public sealed class NativeAdministrativeCatchUpReviewPhase10Tests
         Assert.Null(page.CatchUp.Preview);
     }
 
+    [Fact]
+    public void Settings_status_and_connection_follow_live_authorized_session()
+    {
+        var page = new SettingsPageViewModel();
+        Assert.False(page.IsDataConnected);
+        Assert.Contains("لم يتم",page.StatusMessage);
+        NativeIdentity? live = null;
+        var fake = new Fake();
+        var notifications = new List<string?>();
+        page.PropertyChanged += (_,e) => notifications.Add(e.PropertyName);
+        page.AttachCatchUp(fake,()=>live);
+        Assert.False(page.IsDataConnected);
+        Assert.Contains("لم يتم",page.StatusMessage);
+
+        live = Admin with { Role=UserRole.Supervisor };
+        notifications.Clear();
+        page.NotifySessionChanged();
+        Assert.False(page.IsDataConnected);
+        Assert.False(page.OpenCatchUpCommand.CanExecute(null));
+        Assert.Contains("لا تملك صلاحية",page.StatusMessage);
+        Assert.Contains(nameof(SettingsPageViewModel.StatusMessage),notifications);
+
+        live = Admin;
+        notifications.Clear();
+        page.NotifySessionChanged();
+        Assert.True(page.IsDataConnected);
+        Assert.True(page.CanOpenCatchUp);
+        Assert.Contains("متاح للإدارة",page.StatusMessage);
+        Assert.Contains(nameof(SettingsPageViewModel.StatusMessage),notifications);
+        page.OpenCatchUpCommand.Execute(null);
+        Assert.True(page.IsDataConnected);
+        Assert.False(page.CanOpenCatchUp);
+
+        live = null;
+        notifications.Clear();
+        page.Clear();
+        Assert.False(page.IsDataConnected);
+        Assert.False(page.CatchUp.IsOpen);
+        Assert.Contains("لم يتم",page.StatusMessage);
+        Assert.Contains(nameof(SettingsPageViewModel.StatusMessage),notifications);
+        Assert.Equal(0,fake.Previews);
+        Assert.Empty(fake.Commits);
+    }
+
     private sealed class Fake : INativeAdministrativeCatchUpBackend
     {
         public int Previews;

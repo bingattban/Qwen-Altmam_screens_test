@@ -144,7 +144,8 @@ def problems(content):
     for token in ("Catch_up_requires_admin_valid_date_reason_and_separate_confirmation",
                   "Catch_up_rejects_mismatched_preview_and_retries_exact_uncertain_operation",
                   "Catch_up_discards_late_preview_on_logout_and_never_commits_as_replaced_actor",
-                  "Settings_catch_up_is_disabled_for_supervisor_and_cleared_on_session_reset"):
+                  "Settings_catch_up_is_disabled_for_supervisor_and_cleared_on_session_reset",
+                  "Settings_status_and_connection_follow_live_authorized_session"):
         require("catchup_review_tests",token)
     for token in ("today.DayNumber - BusinessDate.DayNumber is >= 1 and <= 7",
                   "PendingCount > 0 && EligibleCount >= PendingCount",
