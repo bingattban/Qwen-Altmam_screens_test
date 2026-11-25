@@ -40,6 +40,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     {
         Excel = new NativeMonthlyExcelExportViewModel();
         Correction = new NativeClosedDayCorrectionReview();
+        RangeCorrection = new NativeHistoricalRangeReview();
         RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead && CanChangeMonthlyScope);
         SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanRead && CanChangeMonthlyScope);
         ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanRead && CanChangeMonthlyScope);
@@ -48,19 +49,25 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
             _ => CanRead && CanChangeMonthlyScope && !_loading && _hasNext);
         CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
-            _ => IsCellDetailsOpen && !Correction.IsOpen);
+            _ => IsCellDetailsOpen && CanChangeMonthlyScope);
         OpenCorrectionCommand = new NativeCommand(_ => _ = OpenCorrectionAsync(), _ => CanOpenCorrection);
         CloseCorrectionCommand = new NativeCommand(_ => _ = CloseCorrectionAsync(), _ => Correction.CanClose);
+        OpenRangeCorrectionCommand = new NativeCommand(_ => _ = OpenRangeCorrectionAsync(), _ => CanOpenRangeCorrection);
+        CloseRangeCorrectionCommand = new NativeCommand(_ => _ = CloseRangeCorrectionAsync(), _ => RangeCorrection.CanClose);
         Correction.PropertyChanged += (_, _) => NotifyCorrection();
+        RangeCorrection.PropertyChanged += (_, _) => NotifyCorrection();
     }
 
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
     public NativeClosedDayCorrectionReview Correction { get; }
     public ICommand OpenCorrectionCommand { get; }
     public ICommand CloseCorrectionCommand { get; }
-    public bool CanChangeMonthlyScope => !Correction.IsOpen;
+    public bool CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen;
+    public NativeHistoricalRangeReview RangeCorrection { get; }
+    public ICommand OpenRangeCorrectionCommand { get; }
+    public ICommand CloseRangeCorrectionCommand { get; }
     public bool CanOpenCorrection => _reader is INativeClosedDayCorrectionBackend && _connected && !_loading &&
-        _detailOpen && !_detailLoading && !Correction.IsOpen && !Excel.IsOpen && !Excel.IsBusy &&
+        _detailOpen && !_detailLoading && CanChangeMonthlyScope && !Excel.IsOpen && !Excel.IsBusy &&
         _liveActor?.Invoke() is { } actor && actor == _boundActor &&
         RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
         _selectedDetail is { } detail && detail.BusinessDate < DateOnly.FromDateTime(DateTime.Now) &&
@@ -80,9 +87,33 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         if (committed) await RefreshAsync(ct);
     }
 
+    public bool CanOpenRangeCorrection => _reader is INativeHistoricalRangeBackend &&
+        _reader is INativeClosedDayCorrectionBackend && _connected && !_loading &&
+        _detailOpen && !_detailLoading && CanChangeMonthlyScope && !Excel.IsOpen && !Excel.IsBusy &&
+        _liveActor?.Invoke() is { } actor && actor == _boundActor &&
+        RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
+        _selectedDetail is { } detail && detail.BusinessDate <= DateOnly.FromDateTime(DateTime.Now);
+
+    public async Task OpenRangeCorrectionAsync(CancellationToken ct = default)
+    {
+        if (!CanOpenRangeCorrection || _reader is not INativeHistoricalRangeBackend backend ||
+            _reader is not INativeClosedDayCorrectionBackend catalogue || _selectedDetail is not { } detail) return;
+        if (RangeCorrection.Open(backend, catalogue, () => _liveActor?.Invoke(), () => _selectedDetail, detail))
+            await RangeCorrection.LoadChoicesAsync(ct);
+    }
+
+    public async Task CloseRangeCorrectionAsync(CancellationToken ct = default)
+    {
+        bool committed = RangeCorrection.Receipt is not null;
+        if (!RangeCorrection.Close()) return;
+        if (committed) await RefreshAsync(ct);
+    }
+
     private void NotifyCorrection()
     {
-        Changed(nameof(CanOpenCorrection), nameof(CanChangeMonthlyScope));
+        Changed(nameof(CanOpenCorrection), nameof(CanOpenRangeCorrection), nameof(CanChangeMonthlyScope));
+        ((NativeCommand)OpenRangeCorrectionCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)CloseRangeCorrectionCommand).NotifyAvailabilityChanged();
         ((NativeCommand)OpenCorrectionCommand).NotifyAvailabilityChanged();
         ((NativeCommand)CloseCorrectionCommand).NotifyAvailabilityChanged();
         ((NativeCommand)CloseCellDetailsCommand).NotifyAvailabilityChanged();
@@ -255,13 +286,15 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             nameof(CellDetailsError), nameof(SelectedCellDetails),
             nameof(SelectedCellDateLabel));
         ((NativeCommand)CloseCellDetailsCommand).NotifyAvailabilityChanged();
-        Changed(nameof(CanOpenCorrection));
+        Changed(nameof(CanOpenCorrection), nameof(CanOpenRangeCorrection));
         ((NativeCommand)OpenCorrectionCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)OpenRangeCorrectionCommand).NotifyAvailabilityChanged();
     }
 
     public void Clear()
     {
         Correction.ForceClear();
+        RangeCorrection.ForceClear();
         ++_generation;
         _pending?.Cancel();
         _pending = null;

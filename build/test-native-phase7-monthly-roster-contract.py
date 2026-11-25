@@ -13,6 +13,8 @@ FILES = {
     "vm": "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
+    "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
+    "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
@@ -104,7 +106,25 @@ def problems(content):
                   "INativeClosedDayCorrectionBackend.PreviewAsync(",
                   "INativeClosedDayCorrectionBackend.CommitAsync("):
         require("backend", token)
-    require("shell", "screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen")
+    for token in ("CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen",
+                  "RangeCorrection.Open(backend, catalogue", "RangeCorrection.LoadChoicesAsync(ct)",
+                  "RangeCorrection.ForceClear();", "bool committed = RangeCorrection.Receipt is not null;"):
+        require("vm", token)
+    for token in ("INativeHistoricalRangeBackend.PreviewRangeAsync(", "INativeHistoricalRangeBackend.CommitRangeAsync("):
+        require("backend", token)
+    require("shell", "screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen")
+    for token in ("ReferenceEquals(_currentDetail?.Invoke(), detail)", "response.Matches(request, Today)",
+                  "approved.MatchesReceipt(result)", "_uncertain = true;", "_pending?.Cancel()",
+                  "_backend.CommitRangeAsync(_actor!, approved, _operationId", "RevokePreview();"):
+        require("range_vm",token)
+    for token in ("Range_requires_explicit_approval_and_draft_edits_revoke_preview",
+                  "Range_uncertain_commit_retries_only_identical_approved_operation",
+                  "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
+        require("range_tests",token)
+    require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("OpenRangeCorrectionCommand","RangeCorrection.FromText","RangeCorrection.ToText",
+                  "RangeCorrection.Preview.Days","RangeCorrection.ConfirmCommand","CloseRangeCorrectionCommand"):
+        require("xaml",token)
     for token in ("OpenCorrectionCommand", "Correction.StatusChoices", "Correction.Reason",
                   "Correction.PreviewCommand", "Correction.ConfirmCommand", "CloseCorrectionCommand",
                   "Correction.Preview.BeforeStatusName", "Correction.Preview.AfterStatusName",
@@ -195,6 +215,13 @@ if __name__ == "__main__":
     for key, token in (
         ("vm", "_boundActor != actor"),
         ("vm", "Correction.ForceClear();"),
+        ("vm", "RangeCorrection.ForceClear();"),
+        ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen"),
+        ("range_vm", "approved.MatchesReceipt(result)"),
+        ("range_vm", "response.Matches(request, Today)"),
+        ("xaml", "RangeCorrection.ConfirmCommand"),
+        ("backend", "INativeHistoricalRangeBackend.CommitRangeAsync("),
+        ("detail_tests", "Range_review_freezes_scope_and_refreshes_only_after_verified_receipt"),
         ("vm", "CanChangeMonthlyScope => !Correction.IsOpen"),
         ("shell", "screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen"),
         ("backend", "INativeClosedDayCorrectionBackend.CommitAsync("),
