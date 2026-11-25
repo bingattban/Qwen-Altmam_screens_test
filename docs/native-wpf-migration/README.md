@@ -1935,3 +1935,32 @@ in the reader. No guard or workflow is weakened. Integration regressions
 cover metadata-only audit persistence and changed principal after
 publication with cleanup. New full Core and Release evidence is required
 on the corrected head; the original green shards are not sufficient.
+
+
+## Phase 9 — individual history Excel, part 5: native WPF/MVVM workflow
+
+Base: `9503a9547efcb7dc9020d4e2575645d6a037c4a5` (merged #51).
+
+The existing native individual report now attaches an independent
+NativeIndividualExcelViewModel when its reader implements the audited
+INativeIndividualExcelBackend. A verified current report, manager session
+and fully applied filters are required before preview. The RTL panel
+displays the identity, six history counts and approved directory; a
+separate explicit confirmation sends only the backend-issued one-use
+approval token and exact immutable request. No UI file writing or SQL
+is introduced. Draft/filter/report changes, paging and closing invalidate
+the preview, cancel pending work and clear the sensitive result. The VM
+validates the identity and all six counters against the displayed
+snapshot, and the receipt against the approved fingerprint, request,
+nine-sheet count and configured directory. Uncertain or failed
+confirmation never automatically retries.
+
+Five test-first xUnit cases exercise explicit confirmation, context
+changes, forged preview/receipt, a late preview after closure, and
+failed-confirmation retry prevention. The existing architectural guards
+and Windows workflows remain unchanged. This provides the native pilot
+UI path; it does not claim full parity for the 69 routes or customer
+release readiness. Real Windows manual accessibility/DPI/offline
+acceptance and remaining report parity (including legacy custom columns)
+still need evidence. No production host switch or database change.
+Both exact-head Windows workflows and four-package gates remain required.
