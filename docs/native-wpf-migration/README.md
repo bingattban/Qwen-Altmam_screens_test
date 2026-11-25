@@ -1892,3 +1892,31 @@ Physical Windows acceptance remains pending; no measured speedup claimed.
 
 Both Windows workflows on the exact final PR SHA and four-package acceptance
 and SHA-256 audit must succeed before merging.
+
+
+## Phase 9 — individual history Excel, part 4: native authorization and audit
+
+Base: `1e5e2a46af52a83aa9fa92e4e0e266ee50a32afb` (merged #50).
+The native adapter now implements INativeIndividualExcelBackend. Preview
+requires the existing SQLCipher manager-session resolver, validates the
+canonical identity and filter echoes and issues a random in-memory token
+bound to the precise actor/session and immutable request. The approval
+expires after two minutes, is consumed under a lock before confirmation,
+and is invalidated by a new preview or explicit cancellation. Reuse,
+changed scope, expired approvals and concurrent duplicate confirmations
+are denied. A failed attempt requires a fresh preview.
+
+The export service accepts a publication audit callback; the native adapter
+uses the existing transactional BridgeAuditWriter to record export metadata
+without names, session secrets or historical row content. Audit failure
+prevents a success receipt and invokes best-effort cleanup of the new
+file. This is not a distributed transaction across filesystem and database.
+Existing callers of the backend-only service retain their signatures via
+the optional callback. No database schema or bridge action changes.
+
+Test-first approval cases cover session/person/filter/token mismatch,
+replacement, invalidation, expiry and concurrent single consumption.
+The WPF view-model and controls still need to invoke the new backend and
+cancel stale requests; no claim of UI availability or physical acceptance.
+Both exact-head Windows workflows and all four package acceptance/SHA-256
+gates remain mandatory before merge.
