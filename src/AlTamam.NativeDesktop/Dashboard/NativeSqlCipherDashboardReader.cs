@@ -278,6 +278,26 @@ public sealed class NativeSqlCipherDashboardReader(
             sourceTotals.Count > 5000 || sourceDaily.Count > 100)
             throw new InvalidDataException("Canonical group source was truncated or unbounded.");
 
+        var customSource = RequiredArray(data, "customColumns");
+        if (customSource.Count > 500)
+            throw new InvalidDataException("Canonical group custom column limit exceeded.");
+        var customColumns = customSource.Select(node =>
+        {
+            JsonObject column = RequireObject(node);
+            return new NativeDashboardColumn(
+                RequiredText(column, "columnId"), RequiredText(column, "caption"));
+        }).ToArray();
+        if (customColumns.Any(column =>
+                column.ColumnId is not { Length: >= 1 and <= 128 } ||
+                column.ColumnId.Any(char.IsControl) ||
+                string.IsNullOrWhiteSpace(column.Caption) ||
+                column.Caption.Length > 240 || column.Caption.Any(char.IsControl)) ||
+            customColumns.Select(column => column.ColumnId)
+                .Distinct(StringComparer.Ordinal).Count() != customColumns.Length)
+            throw new InvalidDataException("Invalid canonical group custom columns.");
+        var customIds = customColumns.Select(column => column.ColumnId)
+            .ToHashSet(StringComparer.Ordinal);
+
         var persons = sourcePersons.Select((node, index) =>
         {
             JsonObject item = RequireObject(node);
@@ -287,6 +307,9 @@ public sealed class NativeSqlCipherDashboardReader(
             var statusTotals = RequiredArray(item, "statusTotals");
             if (statusTotals.Count > 5000)
                 throw new InvalidDataException("Canonical person historical statuses exceeded limit.");
+            var custom = RequireObject(item["customFields"]);
+            if (custom.Any(field => !customIds.Contains(field.Key)))
+                throw new InvalidDataException("Unrecognized canonical group custom field.");
             return new NativePersonnelGroupPerson(
                 id, RequiredText(item, "name"),
                 RequiredText(item, "serviceNumberA"),
@@ -302,7 +325,12 @@ public sealed class NativeSqlCipherDashboardReader(
                         RequiredText(s, "statusId"),
                         RequiredText(s, "statusName"),
                         RequiredNumber(s, "count"));
-                }).ToArray());
+                }).ToArray())
+            {
+                CustomFields = customColumns.Select(column => new NativeGroupCustomField(
+                    column.ColumnId, column.Caption,
+                    custom[column.ColumnId]?.GetValue<string>() ?? "")).ToArray()
+            };
         }).ToArray();
 
         var totals = sourceTotals.Select(node =>
@@ -338,6 +366,7 @@ public sealed class NativeSqlCipherDashboardReader(
             RequiredBoolean(data, "dailyStatusHasNext"),
             persons, totals, daily)
         {
+            CustomColumns = customColumns,
             AvailableSites = ParseChoices(RequiredArray(data, "filterSites"), "group site"),
             AvailableStatuses = ParseChoices(RequiredArray(data, "filterStatuses"), "group status")
         };
