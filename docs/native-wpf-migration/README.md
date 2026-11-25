@@ -2130,3 +2130,21 @@ and strengthened existing static guards cover multi-page selection, removal,
 forged rows, limits and revoked/late results. Manual Windows acceptance is
 still pending. Both exact-head Windows workflows and all four package gates
 must pass before merge. Next: daily attendance mutations and monthly parity.
+
+## Phase 10 — daily attendance reviewed-scope isolation
+
+Base: `1eab3e4ceddf41f6acf3bde60eeb1140c6b834b6` (group selection #60).
+
+The existing native daily single-person and bulk status changes already use
+the canonical reviewed attendance pipeline. This slice freezes the parent
+roster filters, search, pagination and manual refresh during a review,
+including an uncertain commit, rather than introducing a second writer.
+Only a verified successful receipt triggers the internal refresh; the
+receipt remains visible until the operator closes it. Logout and changed
+session still clear sensitive state. Three test-first scenarios cover
+scope freeze, verified receipt refresh and uncertain-response replay using
+the same operation ID. The existing fatal static guard is strengthened.
+No SQL, schema, application service, host or packaging workflow changes.
+Remaining: verify native closed-day exception and initial/revision parity,
+monthly lifecycle controls, and manual Windows acceptance. Both exact-head
+Windows workflows and all four package gates are required before merge.

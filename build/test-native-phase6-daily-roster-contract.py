@@ -71,11 +71,19 @@ def check(content):
                   "selection.Any(row => row is null", "ResetSelection(\"\");",
                   "ReviewSelectedCommand", "SelectedCount =>"):
         needs("vm", token)
-    for token in ("Two_selected_persons_are_previewed_together_and_never_committed_implicitly",
+    for token in ("CanChangeRosterScope => CanRead && !Review.IsOpen",
+                  "if (!CanChangeRosterScope) return;",
+                  "Review.IsCompleted && !Review.HasUnverifiedCommit",
+                  "RefreshAfterVerifiedCommitAsync()"):
+        needs("vm", token)
+    for token in ("Daily_review_freezes_roster_scope_until_cancelled",
+                  "Verified_commit_refreshes_once_and_clears_selection_but_keeps_receipt",
+                  "Unverified_commit_freezes_scope_and_preserves_original_intent",
+                  "Two_selected_persons_are_previewed_together_and_never_committed_implicitly",
                   "Duplicate_forged_and_expired_group_members_fail_closed",
                   "Selection_is_frozen_during_approved_preview_and_cleared_on_session_logout"):
         needs("bulk_tests", token)
-    if content["bulk_tests"].count("[Fact]") < 3:
+    if content["bulk_tests"].count("[Fact]") < 6:
         issues.append("Missing bulk-selection xUnit positive/negative coverage.")
     for token in ("DailyAttendance = new DailyAttendancePageViewModel()",
                   "DailyAttendance.AttachReader(reader, () => _active)",
@@ -94,6 +102,7 @@ def check(content):
                   "ReviewSelectedCommand", 'SelectionMode="Extended"',
                   'SelectionChanged="OnDailySelectionChanged"',
                   "SelectedLabel", "SelectionError",
+                  'IsEnabled="{Binding CanChangeRosterScope}"',
                   'CommandParameter="{Binding SelectedItem, ElementName=DailyGrid}"'):
         needs("xaml", token)
     for token in ("IsDataConnected", "CustomColumns",
@@ -140,6 +149,10 @@ if __name__ == "__main__":
         ("review_tests", "Forged_or_expired_daily_selection_cannot_open_review"),
         ("bulk_tests", "Duplicate_forged_and_expired_group_members_fail_closed"),
         ("vm", "SetSelectedRows("),
+        ("vm", "CanChangeRosterScope => CanRead && !Review.IsOpen"),
+        ("vm", "Review.IsCompleted && !Review.HasUnverifiedCommit"),
+        ("xaml", 'IsEnabled="{Binding CanChangeRosterScope}"'),
+        ("bulk_tests", "Unverified_commit_freezes_scope_and_preserves_original_intent"),
         ("vm", "_selected.All(row => CanReviewPerson(row))"),
         ("xaml", 'SelectionMode="Extended"'),
         ("view", "OnDailySelectionChanged("),
