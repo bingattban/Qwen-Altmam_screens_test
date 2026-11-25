@@ -87,6 +87,10 @@
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenImportHistoryCommand}"
                         AutomationProperties.Name="عرض دفعات Excel المحفوظة والأسماء المرفوضة دون تعديل"/>
+                <Button Content="تعديل تمام سابق" Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding DataContext.OpenAdministrativeHistoricalCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                        AutomationProperties.Name="فتح البحث التاريخي وتصحيح التمام السابق من الإدارة"/>
                 <Button Content="إدارة حالات التحضير" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenStatusCatalogCommand}"

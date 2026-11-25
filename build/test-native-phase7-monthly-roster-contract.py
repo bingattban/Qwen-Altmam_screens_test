@@ -36,6 +36,9 @@ FILES = {
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
     "canonical": "src/AlTamam.Application/Bridge/DailyMonthlyReadService.cs",
+    "admin_vm": "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
+    "admin_xaml": "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+    "admin_tests": "tests/AlTamam.UnitTests/NativePersonnelDirectoryPhase8Tests.cs",
     "shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
     "pages": "src/AlTamam.NativePresentation/NativePageViewModels.cs",
     "templates": "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
@@ -54,7 +57,7 @@ def problems(content):
         if token not in content[k]:
             errors.append(f"{k}: required invariant missing: {token}")
 
-    for key in ("templates", "xaml"):
+    for key in ("templates", "xaml", "admin_xaml"):
         try:
             ET.fromstring(content[key])
         except ET.ParseError as e:
@@ -155,6 +158,16 @@ def problems(content):
         require("pages",token)
     require("shell","Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active)")
     require("period_review","_scopeLocked?.Invoke()!=true")
+    for token in ("ReferenceEquals(CurrentPage,Administration)", "Administration.CanLeaveForHistoricalReview",
+                  "Settings.CanOpenHistorical", "CanNavigate(NativeScreen.Settings)",
+                  "_navigateCommand.Execute(NativeScreen.Settings)", "Settings.OpenHistoricalCommand.Execute(null)"):
+        require("shell",token)
+    for token in ("CanLeaveForHistoricalReview => !_loading", "!Mutation.HasUnverifiedCommit",
+                  "!ReportHistory.IsOpen && !GroupReport.IsOpen", "Changed(nameof(CanLeaveForHistoricalReview))"):
+        require("admin_vm",token)
+    require("admin_xaml","DataContext.OpenAdministrativeHistoricalCommand")
+    require("historical_settings_tests","Administration_shortcut_reuses_settings_review_and_obeys_session_and_navigation")
+    require("admin_tests","Historical_shortcut_preserves_open_personnel_profile_and_group_selection")
     for token in ("CanUsePeriod(", "period.Request.SpanDays==1", "period.Days[0].HasSavedRecord",
                   "ReferenceEquals(_currentPeriod?.Invoke(),period)", "response.PreviousRevision!=day.Revision",
                   "NeedsPeriodReload=true;", "_backend.CommitAsync(_actor!, preview.Token, _operationId"):

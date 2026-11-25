@@ -16,6 +16,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private readonly IReadOnlyDictionary<NativeScreen, NativePageViewModel> _pages;
     private readonly NativeCommand _navigateCommand;
     private readonly NativeCommand _logoutCommand;
+    private readonly NativeCommand _openAdministrativeHistoricalCommand;
     private NativePageViewModel _currentPage;
     private INativeAuthenticationBackend? _backend;
     private NativeIdentity? _active;
@@ -87,6 +88,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
+        _openAdministrativeHistoricalCommand = new NativeCommand(
+            _ => OpenAdministrativeHistorical(), _ => CanOpenAdministrativeHistorical());
+        _navigateCommand.CanExecuteChanged += (_, _) => _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+        Administration.PropertyChanged += (_, _) => _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
@@ -121,6 +126,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
+    public ICommand OpenAdministrativeHistoricalCommand => _openAdministrativeHistoricalCommand;
     public ICommand LogoutCommand => _logoutCommand;
     public NativePageViewModel CurrentPage
     {
@@ -130,6 +136,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             if (ReferenceEquals(_currentPage, value)) return;
             _currentPage = value;
             Changed(nameof(CurrentPage));
+            _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
         }
     }
 
@@ -143,6 +150,20 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public string RoleLabel => _active?.Role.ToArabicLabel() ?? "لم يتم تسجيل الدخول";
     public bool CanManageAccounts => _active is { } person &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(person.Role);
+
+    private bool CanOpenAdministrativeHistorical() =>
+        !IsBusy && ReferenceEquals(CurrentPage,Administration) &&
+        _active is { } actor && RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
+        Administration.CanLeaveForHistoricalReview && Settings.CanOpenHistorical &&
+        CanNavigate(NativeScreen.Settings);
+
+    private void OpenAdministrativeHistorical()
+    {
+        if (!CanOpenAdministrativeHistorical()) return;
+        _navigateCommand.Execute(NativeScreen.Settings);
+        if (ReferenceEquals(CurrentPage,Settings))
+            Settings.OpenHistoricalCommand.Execute(null);
+    }
 
     private bool CanNavigate(NativeScreen screen)
         => IsAuthenticated && _pages.ContainsKey(screen) &&
@@ -335,6 +356,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         _isBusy = value;
         Changed(nameof(IsBusy));
         _logoutCommand.NotifyAvailabilityChanged();
+        _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)

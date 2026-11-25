@@ -147,7 +147,21 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                 }
             },
             row => row is NativePersonnelDisplayRow person && CanOpenEdit(person));
+
+        foreach (var review in new object[] { Mutation, Movement, BulkMovement,
+            BulkExternalMovement, Archive, Separation, SeparationArchive, Return,
+            SiteCatalog, StatusCatalog, ExcelImport, ImportHistory, ReportHistory, GroupReport }
+            .OfType<INotifyPropertyChanged>())
+            review.PropertyChanged += (_, _) => Changed(nameof(CanLeaveForHistoricalReview));
     }
+
+    // The historical shortcut must not discard a live personnel workflow.
+    public bool CanLeaveForHistoricalReview => !_loading && !_profileOpen && !_profileLoading &&
+        !Mutation.IsOpen && !Mutation.HasUnverifiedCommit && !Movement.IsOpen &&
+        !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !Archive.IsOpen &&
+        !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen &&
+        !SiteCatalog.IsOpen && !StatusCatalog.IsOpen && !ExcelImport.IsOpen &&
+        !ImportHistory.IsOpen && !ReportHistory.IsOpen && !GroupReport.IsOpen;
 
     private bool CanRead =>
         _reader is not null && _liveActor?.Invoke() is { } actor &&
@@ -800,13 +814,14 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     private void NotifyProfile()
     {
         Changed(nameof(IsProfileOpen), nameof(IsProfileLoading),
-            nameof(ProfileError), nameof(SelectedProfile));
+            nameof(ProfileError), nameof(SelectedProfile), nameof(CanLeaveForHistoricalReview));
         ((NativeCommand)OpenProfileCommand).NotifyAvailabilityChanged();
         ((NativeCommand)CloseProfileCommand).NotifyAvailabilityChanged();
     }
 
     private void UpdateCommands()
     {
+        Changed(nameof(CanLeaveForHistoricalReview));
         foreach (ICommand command in new[] {
             RefreshCommand, SearchCommand, ClearSearchCommand,
             PreviousPageCommand, NextPageCommand, OpenProfileCommand,

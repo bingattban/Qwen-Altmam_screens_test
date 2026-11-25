@@ -203,6 +203,28 @@ public sealed class NativePersonnelDirectoryPhase8Tests
         Assert.True(vm.IsDataConnected);
     }
 
+    [Fact]
+    public async Task Historical_shortcut_preserves_open_personnel_profile_and_group_selection()
+    {
+        var reader=new Reader();
+        var vm=new AdministrationPageViewModel();
+        vm.AttachReader(reader,()=>Manager);
+        await vm.RefreshAsync();
+        Assert.True(vm.CanLeaveForHistoricalReview);
+        var notifications=0;
+        vm.PropertyChanged+=(_,e)=>{ if(e.PropertyName==nameof(vm.CanLeaveForHistoricalReview)) notifications++; };
+        await vm.OpenProfileAsync(Assert.Single(vm.Rows));
+        Assert.False(vm.CanLeaveForHistoricalReview);
+        vm.CloseProfile();
+        Assert.True(vm.CanLeaveForHistoricalReview);
+        vm.OpenGroupReportCommand.Execute(null);
+        Assert.True(vm.GroupReport.IsOpen);
+        Assert.False(vm.CanLeaveForHistoricalReview);
+        vm.GroupReport.Close();
+        Assert.True(vm.CanLeaveForHistoricalReview);
+        Assert.True(notifications>=4);
+    }
+
     private sealed class Reader : INativePersonnelDirectoryReader, INativePersonnelGroupReportReader
     {
         public int Profiles;
