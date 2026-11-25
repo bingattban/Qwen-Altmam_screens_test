@@ -2167,3 +2167,28 @@ entry points remain compatible. Both exact-head Windows workflows and four
 package acceptance/SHA-256 gates are required before merge.
 Closed-day and monthly lifecycle parity and manual native Windows acceptance
 remain pending. No database, SQL, legacy response or packaging changes.
+
+## Phase 10 — single closed-day correction, review foundation
+
+Base: `566bdf3ed1d73ab6ef369fee4a2694f036c72da1` (merged #62).
+
+The native presentation now contains a typed single-day correction review
+state and an explicit adapter to the existing ClosedDayCorrectionService.
+Only an authorized administration principal and the exact current historical
+cell with saved attendance can initiate this review. A 10–400 character
+reason, matched preview, explicit confirm and stable operation ID are
+required. The canonical service retains authority for the enabled policy,
+closed day, historical assignment, revision and audit/idempotency checks.
+The adapter checks live principal and action permission before and after
+requests and rejects range-shaped previews. Four new xUnit regressions and
+stronger existing preflight guards cover role, context, preview identity,
+reason, receipt and uncertain-response replay. No SQL, schema, policy switch,
+legacy wire contract or release workflow change.
+
+This is the foundation only: no correction button or monthly-page lifecycle
+binding is exposed yet. Next: wire the monthly view, active status catalogue,
+session/navigation invalidation and receipt refresh, including late-response
+and unverified-intent safeguards, before enabling the workflow. Historical
+range and monthly lifecycle parity remain separate. Both exact-head Windows
+workflows and four-package acceptance/SHA-256 gates must pass; manual Windows
+acceptance is still pending.
