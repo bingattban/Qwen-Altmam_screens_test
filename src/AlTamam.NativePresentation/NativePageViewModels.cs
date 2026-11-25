@@ -134,7 +134,11 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     {
         bool committed=HistoricalRange.Receipt is not null;
         if (!HistoricalRange.Close()) return;
-        if (committed) await Historical.ReadAsync(ct);
+        if (committed)
+        {
+            Historical.InvalidateEvidence();
+            await Historical.ReadAsync(ct);
+        }
     }
 
     private void OpenPolicy(bool enabled)
