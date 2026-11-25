@@ -70,6 +70,34 @@ public sealed class NativeIndividualExcelSourcePhase9Tests
         Assert.Equal(64,PersonnelIndividualExcelSource.Fingerprint(source).Length);
     }
 
+    [Fact]
+    public async Task Collects_current_custom_metadata_and_binds_it_to_fingerprint()
+    {
+        JsonObject WithCustom(JsonObject request)
+        {
+            var data = Page(request);
+            data["customColumns"] = new JsonArray(
+                new JsonObject { ["columnId"]="FIELD-RANK", ["caption"]="الرتبة" });
+            data["person"]!["customFields"] = new JsonObject { ["FIELD-RANK"]="رقيب" };
+            return data;
+        }
+        var source = await PersonnelIndividualExcelSource.CollectAsync(Request(),
+            (request,ct) => Task.FromResult(Ok(WithCustom(request))),
+            _=>Task.CompletedTask,CancellationToken.None);
+        Assert.Equal("FIELD-RANK", source["customColumns"]![0]!["columnId"]!.GetValue<string>());
+        string fingerprint = PersonnelIndividualExcelSource.Fingerprint(source);
+        source["customColumns"]![0]!["caption"] = "رتبة جديدة";
+        Assert.NotEqual(fingerprint, PersonnelIndividualExcelSource.Fingerprint(source));
+        int reads = 0;
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            PersonnelIndividualExcelSource.CollectAsync(Request(), (request,ct) =>
+            {
+                var data = WithCustom(request);
+                if (++reads == 5) data["customColumns"]![0]!["caption"] = "رتبة جديدة";
+                return Task.FromResult(Ok(data));
+            }, _=>Task.CompletedTask,CancellationToken.None));
+    }
+
     [Theory]
     [InlineData("person")]
     [InlineData("filter")]
