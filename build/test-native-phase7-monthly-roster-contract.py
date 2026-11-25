@@ -13,6 +13,7 @@ FILES = {
     "vm": "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs",
     "tests": "tests/AlTamam.UnitTests/NativeMonthlyAttendancePhase7Tests.cs",
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
+    "single_vm": "src/AlTamam.NativePresentation/NativeClosedDayCorrectionReview.cs",
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
     "period_review": "src/AlTamam.NativePresentation/NativeHistoricalPeriodReview.cs",
     "historical_settings_tests": "tests/AlTamam.UnitTests/NativeHistoricalSettingsPhase10Tests.cs",
@@ -146,14 +147,26 @@ def problems(content):
                   "Direct_search_discards_late_results_after_clear_and_session_replacement",
                   "Direct_period_rejects_mismatched_evidence_and_invalidates_on_search_edit"):
         require("period_review_tests",token)
-    for token in ("Historical.Open(_historicalReader,_historicalActor,()=>HistoricalRange.IsOpen)",
+    for token in ("Historical.Open(_historicalReader,_historicalActor,()=>HistoricalRange.IsOpen || HistoricalSingle.IsOpen)",
                   "HistoricalRange.OpenForPeriod(", "HistoricalRange.LoadChoicesAsync(ct)",
                   "Historical.InvalidateEvidence();", "await Historical.ReadAsync(ct);",
                   "HistoricalRange.ForceClear();", "Historical.ForceClear();",
-                  "CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen"):
+                  "CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen"):
         require("pages",token)
     require("shell","Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active)")
     require("period_review","_scopeLocked?.Invoke()!=true")
+    for token in ("CanUsePeriod(", "period.Request.SpanDays==1", "period.Days[0].HasSavedRecord",
+                  "ReferenceEquals(_currentPeriod?.Invoke(),period)", "response.PreviousRevision!=day.Revision",
+                  "NeedsPeriodReload=true;", "_backend.CommitAsync(_actor!, preview.Token, _operationId"):
+        require("single_vm",token)
+    for token in ("HistoricalSingle.OpenForPeriod(", "HistoricalSingle.LoadChoicesAsync(ct)",
+                  "HistoricalSingle.Receipt is not null || HistoricalSingle.NeedsPeriodReload",
+                  "HistoricalSingle.ForceClear();"):
+        require("pages",token)
+    for token in ("OpenHistoricalSingleCommand", "HistoricalSingle.PreviewCommand",
+                  "HistoricalSingle.ConfirmCommand", "CloseHistoricalSingleCommand"):
+        require("templates",token)
+    require("historical_settings_tests","Settings_direct_single_closed_day_uses_single_service_and_reloads_on_stale_or_receipt")
     for token in ("Historical.Candidates", "Historical.SelectedPerson", "Historical.Evidence.Days",
                   "HistoricalRange.Preview.Days", "HistoricalRange.ConfirmCommand",
                   "CloseHistoricalRangeCommand", "Historical.CloseCommand"):
