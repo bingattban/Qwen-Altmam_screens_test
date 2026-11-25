@@ -356,6 +356,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         _isBusy = value;
         Changed(nameof(IsBusy));
         _logoutCommand.NotifyAvailabilityChanged();
+        _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)
