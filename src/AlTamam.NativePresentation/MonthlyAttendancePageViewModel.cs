@@ -38,6 +38,8 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public MonthlyAttendancePageViewModel()
         : base(NativeScreen.MonthlyAttendance, "التمام الشهري")
     {
+        Excel = new NativeMonthlyExcelExportViewModel();
+        Correction = new NativeClosedDayCorrectionReview();
         RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead && CanChangeMonthlyScope);
         SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanRead && CanChangeMonthlyScope);
         ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanRead && CanChangeMonthlyScope);
@@ -47,8 +49,6 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             _ => CanRead && CanChangeMonthlyScope && !_loading && _hasNext);
         CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
             _ => IsCellDetailsOpen && !Correction.IsOpen);
-        Excel = new NativeMonthlyExcelExportViewModel();
-        Correction = new NativeClosedDayCorrectionReview();
         OpenCorrectionCommand = new NativeCommand(_ => _ = OpenCorrectionAsync(), _ => CanOpenCorrection);
         CloseCorrectionCommand = new NativeCommand(_ => _ = CloseCorrectionAsync(), _ => Correction.CanClose);
         Correction.PropertyChanged += (_, _) => NotifyCorrection();
