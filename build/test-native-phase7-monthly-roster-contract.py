@@ -142,6 +142,16 @@ def problems(content):
                   '["enabled"] = approved.Enabled', '["reason"] = approved.Reason',
                   "enabled != approved.Enabled"):
         require("catchup_adapter",token)
+    for token in ("Settings.AttachClosedDayPolicy(policyBackend, () => _active)", "Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();"):
+        require("shell",token)
+    for token in ("INativeClosedDayPolicyBackend.SetClosedDayPolicyAsync(", "_review.SetClosedDayPolicyAsync(actor,approved,operationId,ct)"):
+        require("backend",token)
+    for token in ("EnablePolicyCommand","DisablePolicyCommand","Policy.PrepareCommand","Policy.ConfirmCommand",
+                  "Policy.HasApprovedIntent","Policy.CloseCommand","Policy.CompletionMessage"):
+        require("templates",token)
+    for token in ("Settings_policy_and_catch_up_reviews_are_mutually_exclusive",
+                  "Settings_policy_uncertain_commit_blocks_other_review_and_logout_clears_late_result"):
+        require("catchup_review_tests",token)
     for token in ("Policy_reason_is_optional_but_nonempty_reason_must_be_valid",
                   "Policy_requires_authorized_explicit_confirmation_and_invalidates_edited_intent",
                   "Policy_wrong_receipt_freezes_intent_and_retries_same_operation",
@@ -155,7 +165,7 @@ def problems(content):
                   "CanExecuteClosedDayEmergencyOverride(actor.Role)", "_liveActor?.Invoke() == actor"):
         require("catchup_review",token)
     for token in ("Settings.AttachCatchUp(catchUpBackend, () => _active)", "Settings.Clear();",
-                  "screen == NativeScreen.Settings || !Settings.CatchUp.IsOpen"):
+                  "screen == NativeScreen.Settings || !Settings.IsReviewOpen"):
         require("shell",token)
     for token in ("INativeAdministrativeCatchUpBackend.PreviewCatchUpAsync(", "INativeAdministrativeCatchUpBackend.CommitCatchUpAsync("):
         require("backend",token)
@@ -287,6 +297,8 @@ if __name__ == "__main__":
         ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
         ("catchup_review", "approved.MatchesReceipt(result)"),
         ("policy_review", "result.Enabled != approved.Enabled"),
+        ("shell", "screen == NativeScreen.Settings || !Settings.IsReviewOpen"),
+        ("templates", "Policy.ConfirmCommand"),
         ("policy_review", "SetClosedDayPolicyAsync(_actor!,approved,_operationId"),
         ("policy_sql_tests", "JsonNode.DeepEquals(firstReceipt,replayedReceipt)"),
         ("shell", "Settings.Clear();"),

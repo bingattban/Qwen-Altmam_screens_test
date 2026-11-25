@@ -78,6 +78,38 @@
                     <Button Content="إغلاق مراجعة الاستدراك" Command="{Binding CatchUp.CloseCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
+            <TextBlock Text="إذن التصحيح الاستثنائي للأيام المغلقة" FontWeight="Bold"
+                       Foreground="#123752" Margin="6,12,6,4"/>
+            <TextBlock Text="تغيير الإذن لا يعدل أي سجل حضور بذاته. العملية المسجلة لا تثبت الحالة الحالية للإعداد."
+                       TextWrapping="Wrap" Margin="6,0,6,6"/>
+            <UniformGrid Columns="2">
+                <Button Content="تفعيل الإذن الاستثنائي" Command="{Binding EnablePolicyCommand}" Padding="10,8" Margin="6"/>
+                <Button Content="إيقاف الإذن الاستثنائي" Command="{Binding DisablePolicyCommand}" Padding="10,8" Margin="6"/>
+            </UniformGrid>
+            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="6" Padding="14" Margin="6"
+                    Visibility="{Binding Policy.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding Policy.TargetLabel}" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="سيتم تسجيل تغيير الإذن في سجل العمليات. راجع الإجراء قبل التأكيد."
+                               TextWrapping="Wrap" Margin="0,6"/>
+                    <TextBlock Text="ملاحظة اختيارية (10 إلى 400 حرف عند إدخالها)" Margin="0,8,0,2"/>
+                    <TextBox Text="{Binding Policy.Reason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             MaxLength="400" TextWrapping="Wrap" MinHeight="45"
+                             IsEnabled="{Binding Policy.CanEdit}" AutomationProperties.Name="ملاحظة تغيير إذن التصحيح"/>
+                    <Button Content="مراجعة تغيير الإذن" Command="{Binding Policy.PrepareCommand}" Padding="10,6" Margin="0,8"/>
+                    <StackPanel Visibility="{Binding Policy.HasApprovedIntent, Converter={StaticResource VisibilityIfTrue}}">
+                        <TextBlock Text="الإجراء المطلوب تأكيده" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Policy.TargetLabel}"/>
+                        <TextBlock Text="{Binding Policy.Approved.Reason}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Policy.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                    <TextBlock Text="{Binding Policy.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <Button Content="{Binding Policy.ConfirmLabel}" Command="{Binding Policy.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
+                    <TextBlock Text="{Binding Policy.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                    <Button Content="إغلاق مراجعة الإذن" Command="{Binding Policy.CloseCommand}" Padding="10,6"/>
+                </StackPanel>
+            </Border>
             <UniformGrid Columns="2" IsEnabled="False">
                 <Button Content="النسخ الاحتياطي" Height="55" Margin="6" />
                 <Button Content="استعادة نسخة احتياطية" Height="55" Margin="6" />

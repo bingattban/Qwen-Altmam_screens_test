@@ -89,7 +89,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
-        Settings.CatchUp.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         _logoutCommand = new NativeCommand(
             _ => _ = LogoutAsync(),
             _ => IsAuthenticated && !IsBusy);
@@ -114,6 +114,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeAdministrativeCatchUpBackend catchUpBackend)
             Settings.AttachCatchUp(catchUpBackend, () => _active);
+        if (reader is INativeClosedDayPolicyBackend policyBackend)
+            Settings.AttachClosedDayPolicy(policyBackend, () => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
@@ -148,7 +150,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
            (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
-           (screen == NativeScreen.Settings || !Settings.CatchUp.IsOpen);
+           (screen == NativeScreen.Settings || !Settings.IsReviewOpen);
 
     public async Task InitializeAuthenticationAsync(
         INativeAuthenticationBackend backend, CancellationToken ct = default)
