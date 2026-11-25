@@ -110,6 +110,91 @@
                     <Button Content="إغلاق مراجعة الإذن" Command="{Binding Policy.CloseCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
+            <Button Content="البحث التاريخي وتصحيح تمام فرد"
+                    Command="{Binding OpenHistoricalCommand}" Padding="12,8" Margin="6"/>
+            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="6" Padding="14" Margin="6"
+                    Visibility="{Binding Historical.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <StackPanel>
+                    <TextBlock Text="البحث عن فرد وقراءة تمامه التاريخي — للإدارة فقط" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="يشمل البحث الأفراد المؤرشفين. عدم وجود سجل محفوظ لا يعني الأهلية للتعديل." TextWrapping="Wrap" Margin="0,6"/>
+                    <StackPanel IsEnabled="{Binding Historical.CanEdit}">
+                        <TextBlock Text="الاسم أو الرقم (ع)" Margin="0,6,0,2"/>
+                        <TextBox Text="{Binding Historical.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 MaxLength="100" AutomationProperties.Name="البحث التاريخي عن فرد"/>
+                        <Button Content="بحث" Command="{Binding Historical.SearchCommand}" Padding="10,6" Margin="0,6"/>
+                        <DataGrid ItemsSource="{Binding Historical.Candidates}" SelectedItem="{Binding Historical.SelectedPerson, Mode=TwoWay}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow"
+                                  CanUserAddRows="False" CanUserDeleteRows="False" Height="180" AutomationProperties.Name="نتائج البحث التاريخي">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="100"/>
+                                <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBlock Text="من تاريخ (yyyy-MM-dd)" Margin="0,8,0,2"/>
+                        <TextBox Text="{Binding Historical.FromText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 MaxLength="10" FlowDirection="LeftToRight" AutomationProperties.Name="بداية الفترة التاريخية"/>
+                        <TextBlock Text="إلى تاريخ (yyyy-MM-dd)" Margin="0,6,0,2"/>
+                        <TextBox Text="{Binding Historical.ToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 MaxLength="10" FlowDirection="LeftToRight" AutomationProperties.Name="نهاية الفترة التاريخية"/>
+                        <Button Content="قراءة الفترة (1–62 يوما)" Command="{Binding Historical.ReadCommand}" Padding="10,6" Margin="0,6"/>
+                    </StackPanel>
+                    <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Historical.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                    <TextBlock Text="{Binding Historical.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <StackPanel Visibility="{Binding Historical.HasEvidence, Converter={StaticResource VisibilityIfTrue}}">
+                        <TextBlock Text="{Binding Historical.Evidence.PersonName}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Historical.Evidence.ServiceNumberA}"/>
+                        <DataGrid ItemsSource="{Binding Historical.Evidence.Days}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" Height="240"
+                                  AutomationProperties.Name="سجل الفترة التاريخية">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="التاريخ" Binding="{Binding BusinessDate, StringFormat=yyyy-MM-dd}" Width="120"/>
+                                <DataGridTextColumn Header="الحالة المحفوظة" Binding="{Binding StatusName}" Width="*"/>
+                                <DataGridTextColumn Header="الموقع التاريخي" Binding="{Binding SiteName}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Button Content="فتح مراجعة تعديل الفترة" Command="{Binding OpenHistoricalRangeCommand}" Padding="10,6" Margin="0,8"/>
+                    </StackPanel>
+                    <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                            Visibility="{Binding HistoricalRange.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                        <StackPanel>
+                            <TextBlock Text="مراجعة تصحيح الفترة المحددة" FontWeight="Bold" Foreground="#123752"/>
+                            <TextBlock Text="الفرد والتواريخ ثابتة أثناء المراجعة. لا يعدل إلا ما يظهر في المعاينة المعتمدة." TextWrapping="Wrap" Margin="0,6"/>
+                            <TextBlock Text="{Binding HistoricalRange.FromText}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding HistoricalRange.ToText}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="الحالة الجديدة" Margin="0,6,0,2"/>
+                            <ComboBox ItemsSource="{Binding HistoricalRange.StatusChoices}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="StatusId" SelectedValue="{Binding HistoricalRange.SelectedStatusId, Mode=TwoWay}"
+                                      IsEnabled="{Binding HistoricalRange.CanEdit}" AutomationProperties.Name="حالة التصحيح التاريخي"/>
+                            <TextBlock Text="سبب التعديل (10 إلى 400 حرف)" Margin="0,6,0,2"/>
+                            <TextBox Text="{Binding HistoricalRange.Reason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     MaxLength="400" TextWrapping="Wrap" MinHeight="45" IsEnabled="{Binding HistoricalRange.CanEdit}"
+                                     AutomationProperties.Name="سبب التصحيح التاريخي"/>
+                            <Button Content="معاينة الأيام قبل التعديل" Command="{Binding HistoricalRange.PreviewCommand}" Padding="10,6" Margin="0,8"/>
+                            <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding HistoricalRange.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <TextBlock Text="{Binding HistoricalRange.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalRange.Preview.PersonName}" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding HistoricalRange.Preview.ServiceNumberA}"/>
+                            <TextBlock Text="{Binding HistoricalRange.PreviewSummary}" FontWeight="Bold" TextWrapping="Wrap"/>
+                            <DataGrid ItemsSource="{Binding HistoricalRange.Preview.Days}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" Height="220" AutomationProperties.Name="معاينة أيام التصحيح">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="التاريخ" Binding="{Binding BusinessDate, StringFormat=yyyy-MM-dd}" Width="120"/>
+                                    <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="*"/>
+                                    <DataGridTextColumn Header="قبل" Binding="{Binding BeforeStatusName}" Width="*"/>
+                                    <DataGridTextColumn Header="بعد" Binding="{Binding AfterStatusName}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock Text="{Binding HistoricalRange.Preview.Request.Reason}" TextWrapping="Wrap"/>
+                            <Button Content="{Binding HistoricalRange.ConfirmLabel}" Command="{Binding HistoricalRange.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
+                            <TextBlock Text="{Binding HistoricalRange.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                            <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseHistoricalRangeCommand}" Padding="10,6"/>
+                        </StackPanel>
+                    </Border>
+                    <Button Content="إغلاق البحث التاريخي" Command="{Binding Historical.CloseCommand}" Padding="10,6" Margin="0,8"/>
+                </StackPanel>
+            </Border>
             <UniformGrid Columns="2" IsEnabled="False">
                 <Button Content="النسخ الاحتياطي" Height="55" Margin="6" />
                 <Button Content="استعادة نسخة احتياطية" Height="55" Margin="6" />

@@ -12,6 +12,7 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
     private INativeHistoricalPeriodReader? _reader;
     private NativeIdentity? _actor;
     private Func<NativeIdentity?>? _liveActor;
+    private Func<bool>? _scopeLocked;
     private CancellationTokenSource? _pending;
     private int _generation;
     private bool _busy;
@@ -31,8 +32,10 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
     public ICommand CloseCommand { get; }
     public bool IsOpen => _actor is not null;
     public bool IsBusy => _busy;
-    public bool CanEdit => IsOpen && !_busy && ContextValid();
-    public bool CanClose => IsOpen && !_busy;
+    public bool CanEdit => IsOpen && !_busy && _scopeLocked?.Invoke()!=true && ContextValid();
+    public bool CanClose => IsOpen && !_busy && _scopeLocked?.Invoke()!=true;
+    public bool HasEvidence => Evidence is not null;
+    public void NotifyScopeChanged() => Notify();
     public string Error { get; private set; }="";
     public IReadOnlyList<NativeHistoricalPersonCandidate> Candidates { get; private set; }=[];
     public NativeHistoricalPeriodEvidence? Evidence { get; private set; }
@@ -66,7 +69,7 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
     private bool ContextValid()=>_actor is { } actor && _liveActor?.Invoke()==actor &&
         RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
 
-    public bool Open(INativeHistoricalPeriodReader reader,Func<NativeIdentity?> liveActor)
+    public bool Open(INativeHistoricalPeriodReader reader,Func<NativeIdentity?> liveActor,Func<bool>? scopeLocked=null)
     {
         var actor=liveActor();
         if (IsOpen || _busy || actor is null ||
@@ -74,6 +77,7 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
         _reader=reader;
         _actor=actor;
         _liveActor=liveActor;
+        _scopeLocked=scopeLocked;
         _from=_to=Today.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
         Notify();
         return true;
@@ -83,6 +87,13 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
     {
         if (!CanEdit || field==(value??"")) return;
         field=value??"";
+        ClearEvidence();
+        Notify();
+    }
+
+    public void InvalidateEvidence()
+    {
+        if (!CanEdit) return;
         ClearEvidence();
         Notify();
     }
@@ -177,7 +188,7 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
 
     public bool Close()
     {
-        if (_busy) return false;
+        if (!CanClose) return false;
         ForceClear();
         return true;
     }
@@ -190,6 +201,7 @@ public sealed class NativeHistoricalPeriodReview : INotifyPropertyChanged
         _reader=null;
         _actor=null;
         _liveActor=null;
+        _scopeLocked=null;
         _busy=false;
         _search=_from=_to="";
         ClearSearchResults();

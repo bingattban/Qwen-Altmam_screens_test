@@ -15,6 +15,7 @@ FILES = {
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
     "period_review": "src/AlTamam.NativePresentation/NativeHistoricalPeriodReview.cs",
+    "historical_settings_tests": "tests/AlTamam.UnitTests/NativeHistoricalSettingsPhase10Tests.cs",
     "period_review_tests": "tests/AlTamam.UnitTests/NativeHistoricalPeriodReviewPhase10Tests.cs",
     "period_evidence": "src/AlTamam.NativePresentation/NativeHistoricalPeriodEvidence.cs",
     "period_tests": "tests/AlTamam.UnitTests/NativeHistoricalPeriodEvidencePhase10Tests.cs",
@@ -145,6 +146,21 @@ def problems(content):
                   "Direct_search_discards_late_results_after_clear_and_session_replacement",
                   "Direct_period_rejects_mismatched_evidence_and_invalidates_on_search_edit"):
         require("period_review_tests",token)
+    for token in ("Historical.Open(_historicalReader,_historicalActor,()=>HistoricalRange.IsOpen)",
+                  "HistoricalRange.OpenForPeriod(", "HistoricalRange.LoadChoicesAsync(ct)",
+                  "Historical.InvalidateEvidence();", "await Historical.ReadAsync(ct);",
+                  "HistoricalRange.ForceClear();", "Historical.ForceClear();",
+                  "CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen"):
+        require("pages",token)
+    require("shell","Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active)")
+    require("period_review","_scopeLocked?.Invoke()!=true")
+    for token in ("Historical.Candidates", "Historical.SelectedPerson", "Historical.Evidence.Days",
+                  "HistoricalRange.Preview.Days", "HistoricalRange.ConfirmCommand",
+                  "CloseHistoricalRangeCommand", "Historical.CloseCommand"):
+        require("templates",token)
+    for token in ("Settings_historical_range_freezes_evidence_and_refreshes_after_verified_receipt",
+                  "Settings_historical_uncertain_commit_blocks_close_and_logout_clears_reviews"):
+        require("historical_settings_tests",token)
     for token in ("INativeHistoricalPeriodReader","SpanDays is >= 1 and <= 62",
                   "report.AttendanceTotal != report.Attendance.Count","saved.TryAdd(date",
                   "Array.AsReadOnly(days)","لا يوجد سجل تحضير"):

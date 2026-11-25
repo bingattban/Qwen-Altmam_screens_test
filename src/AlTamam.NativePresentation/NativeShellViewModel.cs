@@ -116,6 +116,9 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Settings.AttachCatchUp(catchUpBackend, () => _active);
         if (reader is INativeClosedDayPolicyBackend policyBackend)
             Settings.AttachClosedDayPolicy(policyBackend, () => _active);
+        if (reader is INativeHistoricalPeriodReader historicalReader && reader is INativeHistoricalRangeBackend historicalBackend &&
+            reader is INativeClosedDayCorrectionBackend historicalCatalogue)
+            Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
