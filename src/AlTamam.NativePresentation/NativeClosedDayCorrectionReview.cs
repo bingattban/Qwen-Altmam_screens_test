@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Windows.Input;
 using AlTamam.Domain.Policies;
 
 namespace AlTamam.NativePresentation;
@@ -18,6 +19,10 @@ public sealed record NativeClosedDayCorrectionReceipt(
 
 public interface INativeClosedDayCorrectionBackend
 {
+    Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadCorrectionChoicesAsync(
+        NativeIdentity actor, CancellationToken ct = default) =>
+        Task.FromException<IReadOnlyList<NativeAttendanceStatusChoice>>(
+            new NotSupportedException("Historical correction catalogue unavailable."));
     Task<NativeClosedDayCorrectionPreview> PreviewAsync(NativeIdentity actor,
         NativeClosedDayCorrectionRequest request, CancellationToken ct = default);
     Task<NativeClosedDayCorrectionReceipt> CommitAsync(NativeIdentity actor,
@@ -40,6 +45,63 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
     private bool _busy;
     private bool _uncertain;
     private int _generation;
+    private string _status = "", _reason = "";
+    private IReadOnlyList<NativeAttendanceStatusChoice> _choices = [];
+    private CancellationTokenSource? _choicesPending;
+
+    public NativeClosedDayCorrectionReview()
+    {
+        PreviewCommand = new NativeCommand(_ => _ = PreviewSelectedAsync(), _ => CanEdit && _choices.Any(x => x.StatusId == _status));
+        ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(), _ => !_busy && Preview is not null && ContextValid());
+    }
+
+    public ICommand PreviewCommand { get; }
+    public ICommand ConfirmCommand { get; }
+    public IReadOnlyList<NativeAttendanceStatusChoice> StatusChoices => _choices;
+    public bool CanEdit => IsOpen && !_busy && !_uncertain && Receipt is null && ContextValid();
+    public bool CanClose => IsOpen && !_busy && !_uncertain;
+    public string SelectedStatusId
+    {
+        get => _status;
+        set { if (!CanEdit || _status == value) return; _status = value ?? ""; RevokePreview(); }
+    }
+    public string Reason
+    {
+        get => _reason;
+        set { if (!CanEdit || _reason == value) return; _reason = value ?? ""; RevokePreview(); }
+    }
+    public string CompletionMessage => Receipt is null ? "" : $"تم التصحيح؛ رقم المراجعة {Receipt.RevisionNumber}. أغلق المراجعة لتحديث الكشف.";
+    public string ConfirmLabel => _uncertain ? "إعادة تأكيد العملية نفسها" : "تأكيد التصحيح";
+    private void RevokePreview() { Preview = null; _operationId = ""; Error = ""; Notify(); }
+
+    public async Task LoadChoicesAsync(CancellationToken ct = default)
+    {
+        if (!CanEdit || _backend is null) return;
+        int generation = ++_generation;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _choicesPending = linked;
+        _busy = true;
+        _choices = [];
+        RevokePreview();
+        try
+        {
+            var choices = await _backend.ReadCorrectionChoicesAsync(_actor!, linked.Token);
+            if (generation != _generation || linked.IsCancellationRequested || !ContextValid()) return;
+            if (choices is null || choices.Count > 300 || choices.Any(x => x is null || !ValidId(x.StatusId) || string.IsNullOrWhiteSpace(x.DisplayName)) ||
+                choices.Select(x => x.StatusId).Distinct(StringComparer.Ordinal).Count() != choices.Count)
+                throw new InvalidDataException("Invalid historical correction catalogue.");
+            _choices = choices.ToArray();
+        }
+        catch { if (generation == _generation) Error = "تعذر تحميل الحالات المعتمدة للتصحيح."; }
+        finally
+        {
+            if (generation == _generation) { _choicesPending = null; _busy = false; Notify(); }
+        }
+    }
+
+    public Task PreviewSelectedAsync(CancellationToken ct = default) =>
+        CanEdit && _choices.Any(x => x.StatusId == _status)
+            ? PreviewAsync(_status, _reason, ct) : Task.CompletedTask;
     public event PropertyChangedEventHandler? PropertyChanged;
     public NativeClosedDayCorrectionPreview? Preview { get; private set; }
     public NativeClosedDayCorrectionReceipt? Receipt { get; private set; }
@@ -179,7 +241,23 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
     public bool Close()
     {
         if (_busy || _uncertain) return false;
+        Reset();
+        return true;
+    }
+
+    // Only the owner page's authenticated logout/session replacement calls this.
+    // Late replies cannot publish data into another session.
+    public void ForceClear() => Reset();
+
+    private void Reset()
+    {
         ++_generation;
+        _choicesPending?.Cancel();
+        _choicesPending = null;
+        _busy = false;
+        _uncertain = false;
+        _choices = [];
+        _status = _reason = "";
         _backend = null;
         _actor = null;
         _detail = null;
@@ -190,9 +268,12 @@ public sealed class NativeClosedDayCorrectionReview : INotifyPropertyChanged
         _operationId = "";
         Error = "";
         Notify();
-        return true;
     }
 
-    private void Notify() =>
+    private void Notify()
+    {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+        ((NativeCommand)PreviewCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)ConfirmCommand).NotifyAvailabilityChanged();
+    }
 }
