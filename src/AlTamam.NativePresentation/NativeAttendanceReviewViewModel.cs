@@ -19,6 +19,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     private DateOnly _businessDate;
     private string _site = "";
     private string[] _personIds = [];
+    private bool _initial;
     private IReadOnlyList<NativeAttendanceStatusChoice> _choices = [];
     private NativeAttendanceRevisionPreview? _preview;
     private string _selectedStatusId = "";
@@ -42,6 +43,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     }
 
     public bool IsOpen => _open;
+    public bool IsInitial => _initial;
+    public string ReviewTitle => _initial ? "اعتماد التحضير الأولي" : "تعديل حالة التحضير";
     public bool IsBusy => _busy;
     public bool IsCommitting => _committing;
     public bool IsCompleted => _completed;
@@ -88,7 +91,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         ? "إعادة تأكيد نفس العملية" : "تأكيد واعتماد التغييرات";
     public string TargetStatusName => _preview?.TargetStatusName ?? "";
     public string PreviewMessage => _preview is null ? "" :
-        $"ستُغيّر حالة {_preview.Persons.Count} فرداً إلى {_preview.TargetStatusName}" +
+        (_initial ? $"سيُعتمد تحضير {_preview.Persons.Count} فرداً بالحالة {_preview.TargetStatusName}" :
+            $"ستُغيّر حالة {_preview.Persons.Count} فرداً إلى {_preview.TargetStatusName}") +
         (_preview.RangeStartDate is not null
             ? $" خلال المدة من {_preview.RangeStartDate} إلى {_preview.RangeEndDate}. "
             : ". ") +
@@ -118,8 +122,16 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         => OpenPersonsAsync(date, site,
             selected?.Select(row => row.PersonId).ToArray() ?? [], ct);
 
-    public async Task OpenPersonsAsync(DateOnly date, string site,
-        IReadOnlyList<string> personIds, CancellationToken ct = default)
+    public Task OpenPersonsAsync(DateOnly date, string site,
+        IReadOnlyList<string> personIds, CancellationToken ct = default) =>
+        OpenCoreAsync(date, site, personIds, false, ct);
+
+    public Task OpenInitialPersonsAsync(DateOnly date, string site,
+        IReadOnlyList<string> personIds, CancellationToken ct = default) =>
+        OpenCoreAsync(date, site, personIds, true, ct);
+
+    private async Task OpenCoreAsync(DateOnly date, string site,
+        IReadOnlyList<string> personIds, bool initial, CancellationToken ct)
     {
         // Never replace an approved intent after a possibly lost commit reply.
         if (_committing || _unverifiedCommit) { Cancel(); return; }
@@ -132,6 +144,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             personIds.Distinct(StringComparer.Ordinal).Count() != personIds.Count)
             return;
 
+        _initial = initial;
         _businessDate = date;
         _site = site ?? "";
         _actor = actor;
@@ -207,14 +220,18 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         Update();
         try
         {
-            NativeAttendanceRevisionPreview draft = await _backend.PreviewAsync(
-                actor, _businessDate, _site, _personIds, _selectedStatusId,
-                linked.Token, range);
+            NativeAttendanceRevisionPreview draft = _initial
+                ? await _backend.PreviewInitialAsync(actor, _businessDate, _site, _personIds,
+                    _selectedStatusId, linked.Token, range)
+                : await _backend.PreviewAsync(actor, _businessDate, _site, _personIds, _selectedStatusId,
+                    linked.Token, range);
             if (version != _generation || linked.IsCancellationRequested ||
                 !HasValidActor(actor)) return;
             string[] returned = draft.Persons.Select(x => x.PersonId)
                 .Order(StringComparer.Ordinal).ToArray();
-            if (draft.BusinessDate != _businessDate ||
+            if (draft.IsInitial != _initial ||
+                (_initial && draft.Persons.Any(person => person.PreviousStatusId != "")) ||
+                draft.BusinessDate != _businessDate ||
                 draft.TargetStatusId != _selectedStatusId ||
                 draft.RangeStartDate != range?.StartDate ||
                 draft.RangeEndDate != range?.EndDate ||
@@ -263,8 +280,9 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         {
             // Only this explicit action makes the canonical audited write.
             // NEVER manufacture a new preview or operation ID on failure.
-            NativeAttendanceCommitReceipt receipt = await _backend.CommitAsync(
-                actor, draft.PreviewToken, _operationId, ct);
+            NativeAttendanceCommitReceipt receipt = _initial
+                ? await _backend.CommitInitialAsync(actor, draft.PreviewToken, _operationId, ct)
+                : await _backend.CommitAsync(actor, draft.PreviewToken, _operationId, ct);
             if (version != _generation || !HasValidActor(actor)) return;
             if (receipt.Count != _personIds.Length ||
                 string.IsNullOrWhiteSpace(receipt.AuditEventId))
@@ -330,6 +348,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         _businessDate = default;
         _site = "";
         _personIds = [];
+        _initial = false;
         _choices = [];
         _preview = null;
         _selectedStatusId = "";
@@ -363,7 +382,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     private void Update()
     {
         foreach (string name in new[] {
-            nameof(IsOpen), nameof(IsBusy), nameof(IsCommitting),
+            nameof(IsOpen), nameof(IsInitial), nameof(ReviewTitle), nameof(IsBusy), nameof(IsCommitting),
             nameof(IsCompleted), nameof(HasUnverifiedCommit),
             nameof(HasPreview), nameof(ErrorMessage),
             nameof(AuditEventId), nameof(CommittedCount), nameof(SelectedCount),
