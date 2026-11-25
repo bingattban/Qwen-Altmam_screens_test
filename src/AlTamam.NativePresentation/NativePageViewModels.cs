@@ -32,6 +32,10 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         Policy = new NativeClosedDayPolicyReview();
         Historical = new NativeHistoricalPeriodReview();
         HistoricalRange = new NativeHistoricalRangeReview();
+        HistoricalSingle = new NativeClosedDayCorrectionReview();
+        OpenHistoricalSingleCommand = new NativeCommand(_ => _ = OpenHistoricalSingleAsync(), _ => CanOpenHistoricalSingle);
+        CloseHistoricalSingleCommand = new NativeCommand(_ => _ = CloseHistoricalSingleAsync(), _ => HistoricalSingle.CanClose);
+        HistoricalSingle.PropertyChanged += (_, _) => Historical.NotifyScopeChanged();
         OpenHistoricalCommand = new NativeCommand(_ => OpenHistorical(), _ => CanOpenHistorical);
         OpenHistoricalRangeCommand = new NativeCommand(_ => _ = OpenHistoricalRangeAsync(), _ => CanOpenHistoricalRange);
         CloseHistoricalRangeCommand = new NativeCommand(_ => _ = CloseHistoricalRangeAsync(), _ => HistoricalRange.CanClose);
@@ -54,10 +58,13 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand DisablePolicyCommand { get; }
     public NativeHistoricalPeriodReview Historical { get; }
     public NativeHistoricalRangeReview HistoricalRange { get; }
+    public NativeClosedDayCorrectionReview HistoricalSingle { get; }
+    public System.Windows.Input.ICommand OpenHistoricalSingleCommand { get; }
+    public System.Windows.Input.ICommand CloseHistoricalSingleCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen;
+    public bool IsReviewOpen => CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -68,7 +75,9 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         _historicalCatalogue is not null && Authorized(_historicalActor?.Invoke());
     public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen;
     public bool CanOpenHistoricalRange => HasHistoricalAccess && Historical.CanEdit && Historical.HasEvidence &&
-        !CatchUp.IsOpen && !Policy.IsOpen && !HistoricalRange.IsOpen;
+        !CatchUp.IsOpen && !Policy.IsOpen && !HistoricalRange.IsOpen && !HistoricalSingle.IsOpen;
+    public bool CanOpenHistoricalSingle => CanOpenHistoricalRange && Historical.Evidence is { } evidence &&
+        NativeClosedDayCorrectionReview.CanUsePeriod(evidence);
     public override bool IsDataConnected => HasCatchUpAccess || HasPolicyAccess || HasHistoricalAccess;
     public override string StatusMessage
     {
@@ -119,7 +128,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     private void OpenHistorical()
     {
         if (CanOpenHistorical && _historicalReader is not null && _historicalActor is not null)
-            Historical.Open(_historicalReader,_historicalActor,()=>HistoricalRange.IsOpen);
+            Historical.Open(_historicalReader,_historicalActor,()=>HistoricalRange.IsOpen || HistoricalSingle.IsOpen);
     }
 
     public async Task OpenHistoricalRangeAsync(CancellationToken ct=default)
@@ -134,6 +143,25 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     {
         bool reload=HistoricalRange.Receipt is not null || HistoricalRange.NeedsPeriodReload;
         if (!HistoricalRange.Close()) return;
+        if (reload)
+        {
+            Historical.InvalidateEvidence();
+            await Historical.ReadAsync(ct);
+        }
+    }
+
+    public async Task OpenHistoricalSingleAsync(CancellationToken ct=default)
+    {
+        if (!CanOpenHistoricalSingle || _historicalCatalogue is null ||
+            _historicalActor is null || Historical.Evidence is not { } evidence) return;
+        if (HistoricalSingle.OpenForPeriod(_historicalCatalogue,_historicalActor,()=>Historical.Evidence,evidence))
+            await HistoricalSingle.LoadChoicesAsync(ct);
+    }
+
+    public async Task CloseHistoricalSingleAsync(CancellationToken ct=default)
+    {
+        bool reload=HistoricalSingle.Receipt is not null || HistoricalSingle.NeedsPeriodReload;
+        if (!HistoricalSingle.Close()) return;
         if (reload)
         {
             Historical.InvalidateEvidence();
@@ -161,12 +189,16 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         ((NativeCommand)OpenHistoricalCommand).NotifyAvailabilityChanged();
         ((NativeCommand)OpenHistoricalRangeCommand).NotifyAvailabilityChanged();
         ((NativeCommand)CloseHistoricalRangeCommand).NotifyAvailabilityChanged();
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenHistoricalSingle)));
+        ((NativeCommand)OpenHistoricalSingleCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)CloseHistoricalSingleCommand).NotifyAvailabilityChanged();
     }
     public void Clear()
     {
         CatchUp.ForceClear();
         Policy.ForceClear();
         HistoricalRange.ForceClear();
+        HistoricalSingle.ForceClear();
         Historical.ForceClear();
     }
 }
