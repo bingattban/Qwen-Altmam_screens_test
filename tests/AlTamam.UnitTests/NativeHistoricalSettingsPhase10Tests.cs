@@ -113,11 +113,58 @@ public sealed class NativeHistoricalSettingsPhase10Tests
         Assert.True(page.CanOpenHistoricalRange);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Settings_direct_single_closed_day_uses_single_service_and_reloads_on_stale_or_receipt(bool stale)
+    {
+        var fake=new Fake { Stale=stale };
+        var page=new SettingsPageViewModel();
+        page.AttachHistorical(fake,fake,fake,()=>Admin);
+        await Load(page);
+        Assert.False(page.CanOpenHistoricalSingle);
+        page.Historical.ToText=Iso(Day);
+        await page.Historical.ReadAsync();
+        Assert.True(page.CanOpenHistoricalSingle);
+        await page.OpenHistoricalSingleAsync();
+        Assert.True(page.HistoricalSingle.IsOpen);
+        Assert.False(page.Historical.CanEdit);
+        Assert.False(page.CanOpenHistoricalRange);
+        Assert.False(page.Historical.Close());
+        page.HistoricalSingle.SelectedStatusId="STS-ABSENT";
+        page.HistoricalSingle.Reason="تصحيح معتمد للسجل التاريخي";
+        await page.HistoricalSingle.ConfirmAsync();
+        Assert.Empty(fake.SingleCommits);
+        await page.HistoricalSingle.PreviewSelectedAsync();
+        if (stale)
+        {
+            Assert.True(page.HistoricalSingle.NeedsPeriodReload);
+            Assert.Null(page.HistoricalSingle.Preview);
+        }
+        else
+        {
+            Assert.NotNull(page.HistoricalSingle.Preview);
+            await page.HistoricalSingle.ConfirmAsync();
+            Assert.NotNull(page.HistoricalSingle.Receipt);
+        }
+        Assert.Equal(stale?0:1,fake.SingleCommits.Count);
+        Assert.Empty(fake.Commits);
+        fake.Stale=false;
+        await page.CloseHistoricalSingleAsync();
+        Assert.Equal(3,fake.Reads);
+        Assert.False(page.HistoricalSingle.IsOpen);
+        Assert.True(page.CanOpenHistoricalSingle);
+        page.Clear();
+        Assert.False(page.IsReviewOpen);
+        Assert.Null(page.Historical.Evidence);
+    }
+
     private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
     {
         public int Reads;
         public bool Lose,Stale;
         public List<string> Commits=[];
+        public List<string> SingleCommits=[];
         public Task<IReadOnlyList<NativeHistoricalPersonCandidate>> SearchHistoricalPeopleAsync(NativeIdentity actor,string term,CancellationToken ct=default)
             => Task.FromResult<IReadOnlyList<NativeHistoricalPersonCandidate>>([new("P-1","أحمد","123","المركز",3)]);
         public Task<NativeHistoricalPeriodEvidence> ReadHistoricalPeriodAsync(NativeIdentity actor,NativeHistoricalPeriodRequest request,CancellationToken ct=default)
@@ -140,7 +187,13 @@ public sealed class NativeHistoricalSettingsPhase10Tests
             if (Lose) throw new IOException("Lost reply");
             return Task.FromResult(new NativeHistoricalRangeReceipt(approved.Request.PersonId,approved.Request.From,8));
         }
-        public Task<NativeClosedDayCorrectionPreview> PreviewAsync(NativeIdentity actor,NativeClosedDayCorrectionRequest request,CancellationToken ct=default) => throw new NotSupportedException();
-        public Task<NativeClosedDayCorrectionReceipt> CommitAsync(NativeIdentity actor,string token,string operationId,CancellationToken ct=default) => throw new NotSupportedException();
+        public Task<NativeClosedDayCorrectionPreview> PreviewAsync(NativeIdentity actor,NativeClosedDayCorrectionRequest request,CancellationToken ct=default)
+            => Task.FromResult(new NativeClosedDayCorrectionPreview(request,new string('b',64),7,"أحمد","123","الموقع الثاني",
+                "STS-PRESENT","موجود","غياب",true));
+        public Task<NativeClosedDayCorrectionReceipt> CommitAsync(NativeIdentity actor,string token,string operationId,CancellationToken ct=default)
+        {
+            SingleCommits.Add(operationId);
+            return Task.FromResult(new NativeClosedDayCorrectionReceipt("P-1",Day,8));
+        }
     }
 }
