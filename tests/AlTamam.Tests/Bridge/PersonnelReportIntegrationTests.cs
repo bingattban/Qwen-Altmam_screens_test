@@ -131,7 +131,7 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         {
             ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
             ["dateFrom"]="2026-02-01",["statusId"]="STS-PRESENT"
-        },CancellationToken.None);
+        },CancellationToken.None,includeGroupFilterChoices:true);
         Assert.True(filtered.Success,filtered.UserMessage);
         var data=Assert.IsType<JsonObject>(filtered.Data);
         Assert.Equal(0L,data["attendanceTotal"]!.GetValue<long>());
@@ -144,11 +144,27 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         var other=await service.ReportAsync(new JsonObject
         {
             ["personIds"]=new JsonArray("TST-REPORT-2")
-        },CancellationToken.None);
+        },CancellationToken.None,includeGroupFilterChoices:true);
         Assert.True(other.Success,other.UserMessage);
         var otherData=Assert.IsType<JsonObject>(other.Data);
         var otherStatuses=Assert.IsType<JsonArray>(otherData["filterStatuses"]);
         Assert.Equal("STS-PRESENT",Assert.Single(otherStatuses)!["id"]!.GetValue<string>());
+
+        // The established bridge and export callers must keep their exact
+        // legacy group wire contract and not incur the new selector reads.
+        var legacy=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-02-01",["statusId"]="STS-PRESENT"
+        },CancellationToken.None);
+        Assert.True(legacy.Success,legacy.UserMessage);
+        var legacyData=Assert.IsType<JsonObject>(legacy.Data);
+        Assert.False(legacyData.ContainsKey("filterSites"));
+        Assert.False(legacyData.ContainsKey("filterStatuses"));
+        var nativeWithoutChoices=(JsonObject)data.DeepClone();
+        nativeWithoutChoices.Remove("filterSites");
+        nativeWithoutChoices.Remove("filterStatuses");
+        Assert.True(JsonNode.DeepEquals(legacyData,nativeWithoutChoices));
     }
 
     [Fact]
