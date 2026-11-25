@@ -17,6 +17,9 @@ FILES = {
     "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
     "catchup_contract": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpContracts.cs",
     "catchup_review": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpReview.cs",
+    "policy_review": "src/AlTamam.NativePresentation/NativeClosedDayPolicyReview.cs",
+    "policy_review_tests": "tests/AlTamam.UnitTests/NativeClosedDayPolicyReviewPhase10Tests.cs",
+    "policy_sql_tests": "tests/AlTamam.Tests/Bridge/ClosedDayCorrectionIntegrationTests.cs",
     "catchup_review_tests": "tests/AlTamam.UnitTests/NativeAdministrativeCatchUpReviewPhase10Tests.cs",
     "catchup_tests": "tests/AlTamam.UnitTests/NativeAdministrativeCatchUpPhase10Tests.cs",
     "catchup_adapter": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
@@ -129,6 +132,24 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("NativeClosedDayPolicyRequest", "if (!CanEdit) return;", "Approved=request;",
+                  "result.Enabled != approved.Enabled", "_busy=_uncertain=true;",
+                  "_pending?.Cancel()", "_liveActor?.Invoke() == actor",
+                  "SetClosedDayPolicyAsync(_actor!,approved,_operationId"):
+        require("policy_review",token)
+    for token in ("INativeClosedDayPolicyBackend", 'const string action = "SetClosedDayCorrectionPolicy"',
+                  "new ClosedDayCorrectionService(database).SetPolicyAsync(",
+                  '["enabled"] = approved.Enabled', '["reason"] = approved.Reason',
+                  "enabled != approved.Enabled"):
+        require("catchup_adapter",token)
+    for token in ("Policy_reason_is_optional_but_nonempty_reason_must_be_valid",
+                  "Policy_requires_authorized_explicit_confirmation_and_invalidates_edited_intent",
+                  "Policy_wrong_receipt_freezes_intent_and_retries_same_operation",
+                  "Policy_session_replacement_and_late_reply_never_publish_another_users_state"):
+        require("policy_review_tests",token)
+    for token in ("CorrectionPolicy_ExactRetryMustNotGenerateSecondAuditEvent",
+                  "JsonNode.DeepEquals(firstReceipt,replayedReceipt)"):
+        require("policy_sql_tests",token)
     for token in ("answer.Matches(request,Today)", "approved.MatchesReceipt(result)",
                   "_busy = _uncertain = true;", "_pending?.Cancel()", "Guid.NewGuid().ToString",
                   "CanExecuteClosedDayEmergencyOverride(actor.Role)", "_liveActor?.Invoke() == actor"):
@@ -265,6 +286,9 @@ if __name__ == "__main__":
         ("range_vm", "approved.MatchesReceipt(result)"),
         ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
         ("catchup_review", "approved.MatchesReceipt(result)"),
+        ("policy_review", "result.Enabled != approved.Enabled"),
+        ("policy_review", "SetClosedDayPolicyAsync(_actor!,approved,_operationId"),
+        ("policy_sql_tests", "JsonNode.DeepEquals(firstReceipt,replayedReceipt)"),
         ("shell", "Settings.Clear();"),
         ("templates", "CatchUp.ConfirmCommand"),
         ("catchup_adapter", "approved.MatchesReceipt(receipt)"),
