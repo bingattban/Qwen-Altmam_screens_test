@@ -405,6 +405,24 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
                 s.PersonCount > report.PersonCount || s.Count < s.PersonCount))
             throw new InvalidDataException("Forged, incomplete or mismatched canonical group report.");
 
+        // Metadata order and immutable field IDs are authoritative; do not
+        // use a mutable caption or displayed personnel number as a key.
+        if (report.CustomColumns is not { Count: <= 500 } ||
+            report.CustomColumns.Any(column => column is null ||
+                column.ColumnId is not { Length: >= 1 and <= 128 } ||
+                column.ColumnId.Any(char.IsControl) ||
+                string.IsNullOrWhiteSpace(column.Caption) ||
+                column.Caption.Length > 240 || column.Caption.Any(char.IsControl)) ||
+            report.CustomColumns.Select(column => column.ColumnId)
+                .Distinct(StringComparer.Ordinal).Count() != report.CustomColumns.Count ||
+            report.Persons.Any(person => person.CustomFields is null ||
+                person.CustomFields.Count != report.CustomColumns.Count ||
+                person.CustomFields.Where((field, index) => field is null ||
+                    field.ColumnId != report.CustomColumns[index].ColumnId ||
+                    field.Caption != report.CustomColumns[index].Caption ||
+                    field.Value is null).Any()))
+            throw new InvalidDataException("Invalid group custom field projection.");
+
         static bool ValidOptions(IReadOnlyList<NativeReportFilterOption>? options) =>
             options is { Count: <= 500 } &&
             options.All(option => option is not null &&
