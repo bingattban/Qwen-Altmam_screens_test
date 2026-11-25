@@ -31,6 +31,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         DailyAttendance = new DailyAttendancePageViewModel();
         MonthlyAttendance = new MonthlyAttendancePageViewModel();
         Administration = new AdministrationPageViewModel();
+        Settings = new SettingsPageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
@@ -38,7 +39,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             MonthlyAttendance,
             Administration,
             new ReportsPageViewModel(),
-            new SettingsPageViewModel()
+            Settings
         };
         _pages = Pages.ToDictionary(page => page.Screen);
         _currentPage = _pages[NativeScreen.Dashboard];
@@ -75,6 +76,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                          Administration.Archive.Close();
                     }
                     CurrentPage = _pages[screen];
+                    if (screen == NativeScreen.Dashboard)
+                        _ = Dashboard.RefreshAsync();
                     if (screen == NativeScreen.DailyAttendance)
                         _ = DailyAttendance.RefreshAsync();
                     if (screen == NativeScreen.MonthlyAttendance)
@@ -86,6 +89,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        Settings.CatchUp.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         _logoutCommand = new NativeCommand(
             _ => _ = LogoutAsync(),
             _ => IsAuthenticated && !IsBusy);
@@ -95,6 +99,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public DailyAttendancePageViewModel DailyAttendance { get; }
     public MonthlyAttendancePageViewModel MonthlyAttendance { get; }
     public AdministrationPageViewModel Administration { get; }
+    public SettingsPageViewModel Settings { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -107,6 +112,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             MonthlyAttendance.AttachReader(archiveReader, () => _active);
         if (reader is INativePersonnelDirectoryReader personnelReader)
             Administration.AttachReader(personnelReader, () => _active);
+        if (reader is INativeAdministrativeCatchUpBackend catchUpBackend)
+            Settings.AttachCatchUp(catchUpBackend, () => _active);
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand LogoutCommand => _logoutCommand;
@@ -140,7 +147,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
            // Never hide a live or ambiguous audited commit by leaving its page.
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
-           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen);
+           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
+           (screen == NativeScreen.Settings || !Settings.CatchUp.IsOpen);
 
     public async Task InitializeAuthenticationAsync(
         INativeAuthenticationBackend backend, CancellationToken ct = default)
@@ -209,6 +217,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             }
 
             _active = confirmed;
+            Settings.NotifySessionChanged();
             _isFirstRun = false;
             CurrentPage = _pages[NativeScreen.Dashboard];
             Changed(nameof(IsAuthenticated), nameof(Username), nameof(ActiveRole),
@@ -299,6 +308,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         MonthlyAttendance.Clear();
         Administration.Clear();
         _active = null;
+        Settings.Clear();
+        Settings.NotifySessionChanged();
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
         _loginError = message;
         CurrentPage = _pages[NativeScreen.Dashboard];

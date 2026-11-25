@@ -16,7 +16,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
-      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend,
+      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
@@ -2540,6 +2540,14 @@ public sealed class NativeSqlCipherDashboardReader(
     Task<NativeHistoricalRangeReceipt> INativeHistoricalRangeBackend.CommitRangeAsync(
         NativeIdentity actor, NativeHistoricalRangePreview approved, string operationId, CancellationToken ct) =>
         _review.CommitRangeAsync(actor, approved, operationId, ct);
+
+    Task<NativeAdministrativeCatchUpPreview> INativeAdministrativeCatchUpBackend.PreviewCatchUpAsync(
+        NativeIdentity actor, NativeAdministrativeCatchUpRequest request, CancellationToken ct) =>
+        _review.PreviewCatchUpAsync(actor,request,ct);
+
+    Task<NativeAdministrativeCatchUpReceipt> INativeAdministrativeCatchUpBackend.CommitCatchUpAsync(
+        NativeIdentity actor, NativeAdministrativeCatchUpPreview approved, string operationId, CancellationToken ct) =>
+        _review.CommitCatchUpAsync(actor,approved,operationId,ct);
 
     public async Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
         NativeIdentity actor, NativeMonthlyCellRequest request,

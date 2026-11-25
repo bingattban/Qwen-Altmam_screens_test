@@ -30,6 +30,7 @@ public sealed class NativeAdministrativeCatchUpReview : INotifyPropertyChanged
     public NativeAdministrativeCatchUpPreview? Preview { get; private set; }
     public NativeAdministrativeCatchUpReceipt? Receipt { get; private set; }
     public bool IsOpen => _actor is not null;
+    public bool HasPreview => Preview is not null;
     public bool IsBusy => _busy;
     public bool HasUnverifiedCommit => _uncertain;
     public bool CanEdit => IsOpen && !_busy && !_uncertain && Receipt is null && ContextValid();

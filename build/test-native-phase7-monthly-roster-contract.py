@@ -16,6 +16,8 @@ FILES = {
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
     "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
     "catchup_contract": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpContracts.cs",
+    "catchup_review": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpReview.cs",
+    "catchup_review_tests": "tests/AlTamam.UnitTests/NativeAdministrativeCatchUpReviewPhase10Tests.cs",
     "catchup_tests": "tests/AlTamam.UnitTests/NativeAdministrativeCatchUpPhase10Tests.cs",
     "catchup_adapter": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
     "catchup_service": "src/AlTamam.Application/Bridge/AdministrativeAttendanceCatchUpService.cs",
@@ -127,6 +129,23 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("answer.Matches(request,Today)", "approved.MatchesReceipt(result)",
+                  "_busy = _uncertain = true;", "_pending?.Cancel()", "Guid.NewGuid().ToString",
+                  "CanExecuteClosedDayEmergencyOverride(actor.Role)", "_liveActor?.Invoke() == actor"):
+        require("catchup_review",token)
+    for token in ("Settings.AttachCatchUp(catchUpBackend, () => _active)", "Settings.Clear();",
+                  "screen == NativeScreen.Settings || !Settings.CatchUp.IsOpen"):
+        require("shell",token)
+    for token in ("INativeAdministrativeCatchUpBackend.PreviewCatchUpAsync(", "INativeAdministrativeCatchUpBackend.CommitCatchUpAsync("):
+        require("backend",token)
+    for token in ("CatchUp.PreviewCommand","CatchUp.ConfirmCommand","CatchUp.CloseCommand",
+                  "CatchUp.Preview.PendingCount","CatchUp.Preview.EligibleCount","OpenCatchUpCommand"):
+        require("templates",token)
+    for token in ("Catch_up_requires_admin_valid_date_reason_and_separate_confirmation",
+                  "Catch_up_rejects_mismatched_preview_and_retries_exact_uncertain_operation",
+                  "Catch_up_discards_late_preview_on_logout_and_never_commits_as_replaced_actor",
+                  "Settings_catch_up_is_disabled_for_supervisor_and_cleared_on_session_reset"):
+        require("catchup_review_tests",token)
     for token in ("today.DayNumber - BusinessDate.DayNumber is >= 1 and <= 7",
                   "PendingCount > 0 && EligibleCount >= PendingCount",
                   "receipt.PendingBefore == PendingCount", "receipt.AppliedCount <= PendingCount",
@@ -244,6 +263,9 @@ if __name__ == "__main__":
         ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen"),
         ("range_vm", "approved.MatchesReceipt(result)"),
         ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
+        ("catchup_review", "approved.MatchesReceipt(result)"),
+        ("shell", "Settings.Clear();"),
+        ("templates", "CatchUp.ConfirmCommand"),
         ("catchup_adapter", "approved.MatchesReceipt(receipt)"),
         ("catchup_service", "ADMIN_ATTENDANCE_CATCHUP_APPROVED"),
         ("catchup_sql_tests", "JsonNode.DeepEquals(receipt,replayedReceipt)"),
