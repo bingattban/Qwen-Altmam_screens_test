@@ -2236,3 +2236,25 @@ ordering. These tests require CI confirmation; native range UI and monthly
 lifecycle integration remain next, after the prerequisite passes.
 Manual Windows acceptance is still pending. Both exact-head workflows and
 all four package acceptance/SHA-256 checks are mandatory before merge.
+
+## Phase 10 — native historical range contract and canonical adapter
+
+Base: `9852c8bf87256e93ee3f64dbd11d8de8ad5feb36` (merged #65).
+
+Add a distinct typed native historical range boundary for the existing
+ClosedDayCorrectionService range mode, preserving the original inclusive
+62-day limit, allowed end date (today), and canonical role/transaction rules.
+The native request requires a clear reason; the preview validates person,
+range, target status, reason, ordered unique actual changed days, previous
+revision/existence, historical assignment/site and revision checksum. Days
+omitted by the canonical service remain omitted, not treated as writes.
+The original range receipt carries the start date and the final changed
+day's revision (including revision 1 for a newly prepared day), not the
+number of changed days. The adapter validates that exact receipt and passes
+only the original token and operation ID to the canonical writer.
+Four test-first contract regressions and strengthened existing fatal guards.
+No SQL, schema, canonical service, legacy response or workflow changes.
+This slice does not expose the range operation to the WPF page yet: the
+next slice wires reviewed period selection, per-day preview, same-intent
+retry, session revocation and refresh. Manual Windows acceptance remains
+pending; both exact-head workflows and all four package gates are required.

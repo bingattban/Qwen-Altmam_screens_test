@@ -25,6 +25,8 @@ FILES={
  "closed_vm":"src/AlTamam.NativePresentation/NativeClosedDayCorrectionReview.cs",
  "closed_tests":"tests/AlTamam.UnitTests/NativeClosedDayCorrectionPhase10Tests.cs",
  "closed_service":"src/AlTamam.Application/Bridge/ClosedDayCorrectionService.cs",
+ "range_contract":"src/AlTamam.NativePresentation/NativeHistoricalRangeContracts.cs",
+ "range_tests":"tests/AlTamam.UnitTests/NativeHistoricalRangePhase10Tests.cs",
  "closed_integration":"tests/AlTamam.Tests/Bridge/ClosedDayCorrectionIntegrationTests.cs",
  "reader":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
  "register_vm":"src/AlTamam.NativePresentation/NativeAutoPreparedRegisterViewModel.cs",
@@ -154,7 +156,21 @@ def problems(contents):
     if not (0 <= verified < consume < writes < end) or "return Deny(" in source[writes:end]:
         errors.append("Historical range must validate every day before any mutation; no partial conflict return.")
     need("closed_integration", "HistoricalRangeCorrection_StaleLastDayRejectsEntireRangeWithoutPartialWrites")
-    for key in ("register_vm","review_vm","closed_vm","host"):
+    for token in ("SpanDays is >= 1 and <= 62 && To <= today",
+                  "day.BusinessDate <= previous", "day.HasExistingRecord != (day.PreviousRevision > 0)",
+                  "day.BeforeStatusId == expected.StatusId", "MatchesReceipt(",
+                  "receipt.FinalRevisionNumber == Days[^1].PreviousRevision + 1"):
+        need("range_contract",token)
+    for token in ("PreviewRangeAsync(", "CommitRangeAsync(", 'RequiredText(data, "mode") != "range"',
+                  '["dateFrom"] = from', '["dateTo"] = to',
+                  "revisionSum != aggregate", "approved.MatchesReceipt(receipt)"):
+        need("review_backend",token)
+    for token in ("Request_bounds_match_canonical_inclusive_62_day_policy",
+                  "Preview_preserves_skipped_days_and_accepts_new_or_existing_records",
+                  "Preview_rejects_duplicate_out_of_range_or_forged_days",
+                  "Range_receipt_must_match_person_start_and_final_approved_revision"):
+        need("range_tests",token)
+    for key in ("register_vm","review_vm","closed_vm","range_contract","host"):
         for forbidden in ("new AttendanceCommitService", "ExecuteInWriteTransactionAsync(",
                           "RunPendingAsync(", "new BridgePrincipal("):
             if forbidden in contents[key]:
@@ -174,6 +190,11 @@ if __name__=="__main__":
         ("review_vm","draft.IsInitial != _initial"),
         ("closed_vm","response.Request != request"),
         ("closed_service","verifiedDays.Add(live);"),
+        ("range_contract","SpanDays is >= 1 and <= 62 && To <= today"),
+        ("range_contract","day.BusinessDate <= previous"),
+        ("review_backend","approved.MatchesReceipt(receipt)"),
+        ("review_backend","revisionSum != aggregate"),
+        ("range_tests","Preview_rejects_duplicate_out_of_range_or_forged_days"),
         ("closed_service","foreach (var live in verifiedDays)"),
         ("closed_integration","HistoricalRangeCorrection_StaleLastDayRejectsEntireRangeWithoutPartialWrites"),
         ("closed_vm","result.RevisionNumber != preview.PreviousRevision + 1"),
