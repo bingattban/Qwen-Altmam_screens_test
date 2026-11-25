@@ -2494,7 +2494,10 @@ public sealed class NativeSqlCipherDashboardReader(
                 if (movement.Length > 0) description += " — " + movement;
                 monthly[date.Day - 1] = new NativeMonthlyCell(
                     RequiredText(info, "symbol"), description,
-                    info["color"]?.GetValue<string>(), movement);
+                    info["color"]?.GetValue<string>(), movement)
+                {
+                    MovementKind = info["movementKind"]?.GetValue<string>() ?? ""
+                };
             }
             return new NativeMonthlyRow(
                 RequiredText(row, "personId"),

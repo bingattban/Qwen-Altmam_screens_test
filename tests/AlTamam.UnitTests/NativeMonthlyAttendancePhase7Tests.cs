@@ -201,12 +201,71 @@ public sealed class NativeMonthlyAttendancePhase7Tests
         Assert.False(vm.IsDataConnected);
     }
 
+    [Theory]
+    [InlineData("#000000", "#FFFFFF")]
+    [InlineData("#FFFFFF", "#000000")]
+    [InlineData("#0d9488", "#000000")]
+    public void Monthly_cell_preserves_saved_color_with_readable_ink(string color, string ink)
+    {
+        var cell = NativeMonthlyCellDisplay.From(new NativeMonthlyCell("ح", "حضور", color, ""));
+        Assert.Equal(color.ToUpperInvariant(), cell.BackgroundColor);
+        Assert.Equal(ink, cell.ForegroundColor);
+        Assert.Equal("ح", cell.DisplaySymbol);
+    }
+
+    [Theory]
+    [InlineData("red")]
+    [InlineData("#XYZ123")]
+    [InlineData("#AA112233")]
+    [InlineData(null)]
+    public void Monthly_cell_invalid_or_missing_color_has_safe_neutral_display(string? color)
+    {
+        var cell = NativeMonthlyCellDisplay.From(new NativeMonthlyCell("غ", "غياب", color, ""));
+        Assert.Equal("Transparent", cell.BackgroundColor);
+        Assert.Equal("#0F2942", cell.ForegroundColor);
+        Assert.Equal("غ", cell.DisplaySymbol);
+    }
+
+    [Theory]
+    [InlineData("return", "↩")]
+    [InlineData("internal-transfer", "↔")]
+    [InlineData("external-transfer", "↗")]
+    [InlineData("separation", "⊗")]
+    [InlineData("unknown", "")]
+    public void Monthly_movement_marker_uses_only_canonical_kind(string kind, string marker)
+    {
+        var cell = NativeMonthlyCellDisplay.From(new NativeMonthlyCell("ح", "حضور — واقعة", "#FFFFFF", "واقعة")
+            { MovementKind = kind });
+        Assert.Equal("ح", cell.Symbol);
+        Assert.Equal(marker.Length == 0 ? "ح" : "ح " + marker, cell.DisplaySymbol);
+        Assert.Equal("حضور — واقعة", cell.Description);
+        var movementOnly = NativeMonthlyCellDisplay.From(new NativeMonthlyCell("", "واقعة", null, "واقعة")
+            { MovementKind = kind });
+        Assert.Equal(marker, movementOnly.DisplaySymbol);
+    }
+
+    [Fact]
+    public async Task Monthly_grid_preserves_saved_cell_color_and_movement_without_fabricating_empty_days()
+    {
+        var reader = new Reader { MovementKind = "internal-transfer" };
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => Actor);
+        await vm.RefreshAsync();
+        var row = Assert.Single(vm.Rows);
+        Assert.Equal("#0D9488", row.Days[0].BackgroundColor);
+        Assert.Equal("ح ↔", row.Days[0].DisplaySymbol);
+        Assert.Equal("", row.Days[1].Symbol);
+        Assert.Equal("", row.Days[1].DisplaySymbol);
+        Assert.Equal("Transparent", row.Days[1].BackgroundColor);
+    }
+
     private sealed class Reader : INativeMonthlyAttendanceReader
     {
         public int Catalogues;
         public List<NativeMonthlyFilter> Requests = [];
         public Task<NativeMonthlySnapshot>? Pending;
         public bool ChangeEcho;
+        public string MovementKind = "";
         public long Total = 1;
 
         public Task<NativeMonthlyCatalogue> ReadCatalogueAsync(
@@ -234,7 +293,7 @@ public sealed class NativeMonthlyAttendancePhase7Tests
             int days = DateTime.DaysInMonth(year, month);
             NativeMonthlyCell?[] cells = Enumerable.Range(0, days)
                 .Select(i => i == 0
-                    ? new NativeMonthlyCell("ح", "حضور", "#0D9488", "")
+                    ? new NativeMonthlyCell("ح", "حضور", "#0D9488", "") { MovementKind = MovementKind }
                     : null).ToArray();
             NativeMonthlyRow[] rows =
             [

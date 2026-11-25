@@ -25,7 +25,10 @@ public sealed record NativeMonthlyFilter(
 }
 
 public sealed record NativeMonthlyCell(
-    string Symbol, string Description, string? Color, string MovementNote);
+    string Symbol, string Description, string? Color, string MovementNote)
+{
+    public string MovementKind { get; init; } = "";
+}
 
 public sealed record NativeMonthlyRow(
     string PersonId, string ServiceNumberA, string Name, string SiteName,
@@ -41,7 +44,55 @@ public sealed record NativeMonthlySnapshot(
 
 public sealed record NativeMonthlyPeriodOption(string Period, string Label);
 
-public sealed record NativeMonthlyCellDisplay(string Symbol, string Description);
+public sealed record NativeMonthlyCellDisplay(string Symbol, string Description)
+{
+    public string BackgroundColor { get; init; } = "Transparent";
+    public string ForegroundColor { get; init; } = "#0F2942";
+    public string MovementKind { get; init; } = "";
+    public string DisplaySymbol
+    {
+        get
+        {
+            string marker = MovementKind switch
+            {
+                "return" => "↩",
+                "internal-transfer" => "↔",
+                "external-transfer" => "↗",
+                "separation" => "⊗",
+                _ => ""
+            };
+            return marker.Length == 0 ? Symbol : Symbol.Length == 0 ? marker : Symbol + " " + marker;
+        }
+    }
+
+    // Only opaque RGB snapshots are accepted, matching the original browser UI.
+    // No status or movement is inferred from a caption, current catalogue or color.
+    public static NativeMonthlyCellDisplay From(NativeMonthlyCell? saved)
+    {
+        if (saved is null) return new("", "");
+        string background = "Transparent";
+        string foreground = "#0F2942";
+        if (saved.Color is { Length: 7 } color && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit))
+        {
+            background = color.ToUpperInvariant();
+            static double Linear(string rgb, int offset)
+            {
+                double s = Convert.ToInt32(rgb.Substring(offset, 2), 16) / 255.0;
+                return s <= 0.04045 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+            }
+            double luminance = 0.2126 * Linear(background, 1) +
+                               0.7152 * Linear(background, 3) +
+                               0.0722 * Linear(background, 5);
+            foreground = luminance > 0.179 ? "#000000" : "#FFFFFF";
+        }
+        return new(saved.Symbol, saved.Description)
+        {
+            BackgroundColor = background,
+            ForegroundColor = foreground,
+            MovementKind = saved.MovementKind
+        };
+    }
+}
 
 public sealed record NativeMonthlyDisplayRow(
     int RowNumber, string PersonId, string ServiceNumberA, string Rank,

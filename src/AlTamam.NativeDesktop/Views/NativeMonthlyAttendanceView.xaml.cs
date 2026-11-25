@@ -51,12 +51,14 @@ public partial class NativeMonthlyAttendanceView : UserControl
             // A native WPF button gives each day cell keyboard/mouse access to
             // the SAME canonical read-only SQLCipher MonthlyCellDetailsAsync.
             var text = new FrameworkElementFactory(typeof(Button));
-            text.SetBinding(Button.ContentProperty, new Binding($"Days[{i}].Symbol"));
+            text.SetBinding(Button.ContentProperty, new Binding($"Days[{i}].DisplaySymbol"));
             text.SetBinding(FrameworkElement.ToolTipProperty,
                 new Binding($"Days[{i}].Description"));
             text.SetValue(FrameworkElement.TagProperty, i + 1);
             text.SetValue(Control.BorderThicknessProperty, new Thickness(0));
-            text.SetValue(Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+            text.SetBinding(Control.BackgroundProperty, new Binding($"Days[{i}].BackgroundColor"));
+            text.SetBinding(Control.ForegroundProperty, new Binding($"Days[{i}].ForegroundColor"));
+            text.SetValue(Control.PaddingProperty, new Thickness(0));
             text.SetValue(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Center);
             text.SetValue(System.Windows.Automation.AutomationProperties.NameProperty,
                 "عرض تفاصيل يوم التمام الشهري");

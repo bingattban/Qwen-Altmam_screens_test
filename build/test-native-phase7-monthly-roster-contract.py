@@ -133,6 +133,12 @@ def problems(content):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
     require("contracts","public bool ExplicitArchive { get; init; }")
+    for token in ("NativeMonthlyCellDisplay From(", "color.Skip(1).All(Uri.IsHexDigit)",
+                  "luminance > 0.179", '"internal-transfer" => "↔"',
+                  '"external-transfer" => "↗"', '"separation" => "⊗"', '"return" => "↩"'):
+        require("contracts",token)
+    require("backend", 'MovementKind = info["movementKind"]?.GetValue<string>() ?? ""')
+    require("vm","NativeMonthlyCellDisplay.From(cell)")
     for token in ("ExplicitArchive = IsArchiveMode", "SwitchCurrentMonthModeAsync",
                   "CanSwitchMonthMode", "_explicitArchive = false;", "nameof(MonthModeLabel)"):
         require("vm",token)
@@ -238,7 +244,8 @@ def problems(content):
 
         require("xaml", token)
     for token in ("RenderColumns()", "MonthlyGrid.Columns.Add(",
-                  "Days[{i}].Symbol", "Days[{i}].Description",
+                  "Days[{i}].DisplaySymbol", "Days[{i}].Description",
+                  "Days[{i}].BackgroundColor", "Days[{i}].ForegroundColor",
                   "CustomCells[{i}]", "OnPeriodChanged(",
                   "OnSiteChanged(",
                   "OnDayCellClick(", "Button.ClickEvent",
@@ -247,6 +254,10 @@ def problems(content):
         require("view", token)
     for token in ("No_live_session_does_not_read_months_or_people",
                   "Native_monthly_page_uses_real_historical_cells",
+                  "Monthly_cell_preserves_saved_color_with_readable_ink",
+                  "Monthly_cell_invalid_or_missing_color_has_safe_neutral_display",
+                  "Monthly_movement_marker_uses_only_canonical_kind",
+                  "Monthly_grid_preserves_saved_cell_color_and_movement_without_fabricating_empty_days",
                   "Site_search_archive_and_pagination",
                   "Explicit_current_month_archive_is_distinct_from_live_month_and_preserves_scope",
                   "Archive_mode_commands_require_live_session_and_catalogue",
@@ -344,6 +355,9 @@ if __name__ == "__main__":
         ("backend", "DateOnly.TryParseExact(saved.Key"),
         ("xaml", 'IsReadOnly="True"'),
         ("view", "Days[{i}].Description"),
+        ("view", "Days[{i}].DisplaySymbol"),
+        ("view", "Days[{i}].BackgroundColor"),
+        ("contracts", "NativeMonthlyCellDisplay From("),
         ("shell", "MonthlyAttendance.Clear();"),
         ("core", "python build/test-native-phase7-monthly-roster-contract.py"),
         ("release", "python build/test-native-phase7-monthly-roster-contract.py"),
