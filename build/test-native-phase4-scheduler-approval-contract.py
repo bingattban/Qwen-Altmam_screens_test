@@ -22,6 +22,8 @@ FILES={
  "review_vm":"src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
  "review_backend":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
  "review_tests":"tests/AlTamam.UnitTests/NativeAttendanceReviewPhase4Tests.cs",
+ "closed_vm":"src/AlTamam.NativePresentation/NativeClosedDayCorrectionReview.cs",
+ "closed_tests":"tests/AlTamam.UnitTests/NativeClosedDayCorrectionPhase10Tests.cs",
  "reader":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
  "register_vm":"src/AlTamam.NativePresentation/NativeAutoPreparedRegisterViewModel.cs",
  "register_xaml":"src/AlTamam.NativeDesktop/Views/NativeAutoPreparedRegisterView.xaml",
@@ -117,7 +119,21 @@ def problems(contents):
     if contents["review_tests"].count("[Fact]") < 10:
         errors.append("Operator-intent review gate lost xUnit regression coverage")
     need("release","dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj")
-    for key in ("register_vm","review_vm","host"):
+    for token in ("CanExecuteClosedDayEmergencyOverride(actor.Role)",
+                  "ReferenceEquals(_currentDetail?.Invoke(), detail)",
+                  "response.Request != request", "response.RequiresExplicitConfirmation",
+                  "result.RevisionNumber != preview.PreviousRevision + 1",
+                  "_uncertain = true", "preview.Token, _operationId"):
+        need("closed_vm",token)
+    for token in ("PreviewClosedDayCorrection", "CommitClosedDayCorrection",
+                  "new ClosedDayCorrectionService(database)", 'data.ContainsKey("days")'):
+        need("review_backend",token)
+    for token in ("Historical_review_requires_valid_reason_and_explicit_confirmation",
+                  "Wrong_role_future_day_and_missing_saved_record_are_rejected",
+                  "Forged_preview_and_changed_context_cannot_commit",
+                  "Uncertain_receipt_reuses_same_operation_and_disallows_new_preview"):
+        need("closed_tests",token)
+    for key in ("register_vm","review_vm","closed_vm","host"):
         for forbidden in ("new AttendanceCommitService", "ExecuteInWriteTransactionAsync(",
                           "RunPendingAsync(", "new BridgePrincipal("):
             if forbidden in contents[key]:
@@ -135,6 +151,9 @@ if __name__=="__main__":
         ("review_backend",'"operationId"'),
         ("review_backend",'revise ? "ReviseTodayAttendance" : "SubmitAttendance"'),
         ("review_vm","draft.IsInitial != _initial"),
+        ("closed_vm","response.Request != request"),
+        ("closed_vm","result.RevisionNumber != preview.PreviousRevision + 1"),
+        ("review_backend",'data.ContainsKey("days")'),
         ("review_backend","AttendanceDateRangePolicy.TryParse"),
         ("review_backend","NativeAttendanceDateRange.TryCreate"),
         ("review_backend","actualStart != validatedRange?.StartDate"),
