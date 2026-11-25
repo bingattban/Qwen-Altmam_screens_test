@@ -319,11 +319,47 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.False(vm.IsLoading);
     }
 
+    [Fact]
+    public async Task Individual_status_breakdown_is_preserved_for_each_immutable_person()
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader { DistinctStatuses = true };
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows([Two, One]);
+        await vm.RunAsync();
+        var people = vm.Report!.Persons;
+        Assert.Equal(Two.PersonId, people[0].PersonId);
+        Assert.Equal(One.PersonId, people[1].PersonId);
+        Assert.Equal(people[0].ServiceNumberA, people[1].ServiceNumberA);
+        Assert.Equal("STS-P", Assert.Single(people[0].StatusTotals).StatusId);
+        Assert.Equal("STS-L", Assert.Single(people[1].StatusTotals).StatusId);
+        vm.SelectRows([One]);
+        Assert.Null(vm.Report);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Inconsistent_or_duplicate_status_breakdowns_fail_closed(bool duplicate)
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader { ForgeStatusBreakdown = !duplicate, DuplicateStatus = duplicate };
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows(roster);
+        await vm.RunAsync();
+        Assert.Null(vm.Report);
+        Assert.NotEmpty(vm.ErrorMessage);
+        Assert.False(vm.CanNextSummary);
+    }
+
     private sealed class FakeReader : INativePersonnelGroupReportReader
     {
         public NativePersonnelGroupReportRequest? Last;
         public int Reads;
         public bool ForgePersonOrder, ForgeTotals, ForgePage, ForgeDate;
+        public bool DistinctStatuses, ForgeStatusBreakdown, DuplicateStatus;
         public Task<NativePersonnelGroupReportSnapshot>? Pending;
         public Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(
             NativeIdentity actor, NativePersonnelGroupReportRequest request,
@@ -333,6 +369,27 @@ public sealed class NativePersonnelGroupReportPhase9Tests
             ++Reads;
             if (Pending is { } pending) return pending;
             var result = Snapshot(request);
+            if (DistinctStatuses && result.Persons.Count == 2)
+            {
+                var people = result.Persons.ToArray();
+                people[1] = people[1] with { StatusTotals = [new("STS-L", "إجازة", 101)] };
+                result = result with
+                {
+                    Persons = people,
+                    StatusTotals = [new("STS-P", "حاضر", 101), new("STS-L", "إجازة", 101)]
+                };
+            }
+            if (ForgeStatusBreakdown)
+                result = result with { StatusTotals = [new("STS-L", "إجازة", result.AttendanceTotal)] };
+            if (DuplicateStatus)
+            {
+                var people = result.Persons.ToArray();
+                people[0] = people[0] with
+                {
+                    StatusTotals = [new("STS-P", "حاضر", 50), new("STS-P", "حاضر", 51)]
+                };
+                result = result with { Persons = people };
+            }
             if (ForgePersonOrder)
                 result = result with { PersonIds = result.PersonIds.Reverse().ToArray() };
             if (ForgeTotals)
