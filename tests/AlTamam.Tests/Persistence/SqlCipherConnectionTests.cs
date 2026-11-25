@@ -126,6 +126,33 @@ public sealed class SqlCipherConnectionTests : IDisposable
     }
 
     [Fact]
+    public async Task ClearConnectionPool_ReleasesOnlySyntheticDatabaseWithoutChangingEncryption()
+    {
+        using var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex,
+            useConnectionPooling: true);
+        await context.InitializeAsync();
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            using var connection = context.CreateOpenConnection();
+            Assert.True(new SqliteConnectionStringBuilder(connection.ConnectionString).Pooling);
+            using var query = connection.CreateCommand();
+            query.CommandText = "PRAGMA cipher_version;";
+            Assert.False(string.IsNullOrWhiteSpace(query.ExecuteScalar()?.ToString()));
+            query.CommandText = "SELECT COUNT(*) FROM Sites;";
+            Assert.True(Convert.ToInt64(query.ExecuteScalar()) >= 1);
+        }
+        context.ClearConnectionPool();
+        Assert.True(context.HasValidIntegrity());
+        context.ClearConnectionPool();
+
+        // On Windows the actual pooled SQLCipher file handles must be released
+        // before deleting the isolated test folder; do not use global ClearAllPools.
+        string folder = Path.GetDirectoryName(_dbPath)!;
+        Directory.Delete(folder, recursive: true);
+        Assert.False(Directory.Exists(folder));
+    }
+
+    [Fact]
     public void Constructor_RejectsNullDatabasePath()
     {
         var ex = Assert.Throws<ArgumentNullException>(() =>

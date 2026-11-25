@@ -13,6 +13,40 @@ CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):
+    def test_bridge_only_fixture_pooling_preserves_real_encryption_and_scoped_cleanup(self):
+        # Recovery/restore/reset still use unpooled handles. Only the explicit
+        # split-recovery process uses production-equivalent encrypted pooling.
+        host_fixture = HOST.split('string fixtureFolder = Path.Combine(Path.GetTempPath(),', 1)[1].split('else await CheckActualWebViewNavigationAsync(core)', 1)[0]
+        policy = host_fixture.split("bool poolFixtureConnections =", 1)[1].split(";", 1)[0]
+        self.assertIn('"--webview-split-recovery-e2e", StringComparer.Ordinal) &&', policy)
+        self.assertIn('!Environment.GetCommandLineArgs().Contains(', policy)
+        self.assertIn('"--webview-recovery-only-e2e", StringComparer.Ordinal)', policy)
+        self.assertIn("useConnectionPooling: poolFixtureConnections", host_fixture)
+        self.assertLess(host_fixture.index("StopReceivingAndDrainAsync()"),
+                        host_fixture.index("fixture.ClearConnectionPool()"))
+        self.assertLess(host_fixture.index("fixture.ClearConnectionPool()"),
+                        host_fixture.index("fixture.Dispose()"))
+        self.assertLess(host_fixture.index("fixture.Dispose()"),
+                        host_fixture.index("Directory.Delete(fixtureFolder"))
+        self.assertNotIn("ClearAllPools(", host_fixture)
+        context = (ROOT / "src/AlTamam.Infrastructure/Persistence/AlTamamDbContext.cs").read_text(encoding="utf-8")
+        cleanup = context.split("public void ClearConnectionPool()", 1)[1].split("public SqliteConnection CreateOpenConnection()", 1)[0]
+        self.assertIn("if (!_useConnectionPooling) return;", cleanup)
+        self.assertIn("using var connection = CreateConnection();", cleanup)
+        self.assertIn("SqliteConnection.ClearPool(connection);", cleanup)
+        self.assertNotIn("ClearAllPools(", cleanup)
+        self.assertNotIn("connection.Open(", cleanup)
+        self.assertIn("Password = _databaseKey,", context)
+        self.assertIn("Pooling = _useConnectionPooling,", context)
+        self.assertIn("PRAGMA cipher_version;", context)
+        self.assertIn("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=15000;", context)
+        tests = (ROOT / "tests/AlTamam.Tests/Persistence/SqlCipherConnectionTests.cs").read_text(encoding="utf-8")
+        self.assertIn("ClearConnectionPool_ReleasesOnlySyntheticDatabaseWithoutChangingEncryption", tests)
+        # Keep all real bridge, route and recovery evidence requirements.
+        self.assertIn("Phase04BridgeRoundTripSelfCheck.RunAsync(", HOST)
+        self.assertIn("Phase04ManifestRouteSelfCheck.RunAsync(", HOST)
+        self.assertIn("Phase04RecoveryUiSelfCheck.RunAsync(", HOST)
+
     def test_disposable_bridge_and_browser_share_business_clock(self):
         self.assertIn("new WebViewSelfCheckTimeProvider(TimeProvider.System)", HOST)
         self.assertIn("new BridgeSharedServices(fixture, clock)", HOST)

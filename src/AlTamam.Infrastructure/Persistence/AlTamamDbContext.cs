@@ -58,9 +58,8 @@ public sealed class AlTamamDbContext : IDisposable
 
     public string DatabasePath => _databasePath;
 
-    public SqliteConnection CreateOpenConnection()
+    private SqliteConnection CreateConnection()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = _databasePath,
@@ -70,7 +69,22 @@ public sealed class AlTamamDbContext : IDisposable
             ForeignKeys = true,
             DefaultTimeout = 15
         };
-        var connection = new SqliteConnection(builder.ConnectionString);
+        return new SqliteConnection(builder.ConnectionString);
+    }
+
+    /// <summary>Release only this database's exact connection pool after all
+    /// work is drained, without opening a connection or clearing other pools.</summary>
+    public void ClearConnectionPool()
+    {
+        if (!_useConnectionPooling) return;
+        using var connection = CreateConnection();
+        SqliteConnection.ClearPool(connection);
+    }
+
+    public SqliteConnection CreateOpenConnection()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);
+        var connection = CreateConnection();
         try
         {
             connection.Open();
