@@ -13,6 +13,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
     private INativeClosedDayCorrectionBackend? _catalogue;
     private NativeIdentity? _actor;
     private NativeMonthlyCellDetails? _detail;
+    private NativeHistoricalPeriodEvidence? _period;
+    private Func<NativeHistoricalPeriodEvidence?>? _currentPeriod;
     private Func<NativeIdentity?>? _liveActor;
     private Func<NativeMonthlyCellDetails?>? _currentDetail;
     private CancellationTokenSource? _pending;
@@ -32,7 +34,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
     public ICommand ConfirmCommand { get; }
     public NativeHistoricalRangePreview? Preview { get; private set; }
     public NativeHistoricalRangeReceipt? Receipt { get; private set; }
-    public bool IsOpen => _detail is not null;
+    public bool IsOpen => _detail is not null || _period is not null;
+    public bool CanEditDates => CanEdit && _period is null;
     public bool IsBusy => _busy;
     public bool HasUnverifiedCommit => _uncertain;
     public bool CanEdit => IsOpen && !_busy && !_uncertain && Receipt is null && ContextValid();
@@ -41,8 +44,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
     public string CompletionMessage { get; private set; } = "";
     public string ConfirmLabel => _uncertain ? "إعادة تأكيد العملية نفسها" : "تأكيد تعديل الفترة";
     public IReadOnlyList<NativeAttendanceStatusChoice> StatusChoices => _choices;
-    public string FromText { get => _from; set => Edit(ref _from, value); }
-    public string ToText { get => _to; set => Edit(ref _to, value); }
+    public string FromText { get => _from; set { if (CanEditDates) Edit(ref _from,value); } }
+    public string ToText { get => _to; set { if (CanEditDates) Edit(ref _to,value); } }
     public string SelectedStatusId { get => _status; set => Edit(ref _status, value); }
     public string Reason { get => _reason; set => Edit(ref _reason, value); }
     public string PreviewSummary => Preview is { } preview
@@ -52,8 +55,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
     private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
     private bool ContextValid() => _actor is { } actor && _liveActor?.Invoke() == actor &&
         RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) &&
-        _detail is { } detail && ReferenceEquals(_currentDetail?.Invoke(), detail) &&
-        detail.BusinessDate <= Today;
+        ((_detail is { } detail && ReferenceEquals(_currentDetail?.Invoke(), detail) && detail.BusinessDate <= Today) ||
+         (_period is { } period && ReferenceEquals(_currentPeriod?.Invoke(),period) && period.Matches(period.Request,Today)));
 
     public bool Open(INativeHistoricalRangeBackend backend, INativeClosedDayCorrectionBackend catalogue,
         Func<NativeIdentity?> liveActor, Func<NativeMonthlyCellDetails?> currentDetail, NativeMonthlyCellDetails detail)
@@ -70,6 +73,25 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
         _liveActor = liveActor;
         _currentDetail = currentDetail;
         _from = _to = detail.BusinessDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        Notify();
+        return true;
+    }
+
+    public bool OpenForPeriod(INativeHistoricalRangeBackend backend, INativeClosedDayCorrectionBackend catalogue,
+        Func<NativeIdentity?> liveActor,Func<NativeHistoricalPeriodEvidence?> currentPeriod,NativeHistoricalPeriodEvidence period)
+    {
+        var actor=liveActor();
+        if (IsOpen || _busy || _uncertain || actor is null ||
+            !RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role) ||
+            !ReferenceEquals(currentPeriod(),period) || !period.Matches(period.Request,Today)) return false;
+        _backend=backend;
+        _catalogue=catalogue;
+        _actor=actor;
+        _period=period;
+        _currentPeriod=currentPeriod;
+        _liveActor=liveActor;
+        _from=period.Request.From.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+        _to=period.Request.To.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
         Notify();
         return true;
     }
@@ -128,7 +150,13 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
             Notify();
             return;
         }
-        var request = new NativeHistoricalRangeRequest(_detail!.PersonId, from, to, _status, _reason.Trim());
+        var request = new NativeHistoricalRangeRequest(_detail?.PersonId ?? _period!.Request.PersonId, from, to, _status, _reason.Trim());
+        if (_period is { } period && (from != period.Request.From || to != period.Request.To))
+        {
+            Error = "أعد قراءة الفترة قبل تغيير نطاقها.";
+            Notify();
+            return;
+        }
         if (!request.IsValid(Today))
         {
             Error = "الفترة من يوم إلى 62 يوما دون تواريخ مستقبلية؛ السبب من 10 إلى 400 حرف.";
@@ -210,6 +238,8 @@ public sealed class NativeHistoricalRangeReview : INotifyPropertyChanged
         _catalogue = null;
         _actor = null;
         _detail = null;
+        _period = null;
+        _currentPeriod = null;
         _liveActor = null;
         _currentDetail = null;
         _busy = _uncertain = false;
