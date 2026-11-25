@@ -95,6 +95,24 @@ def problems(content):
                   "new NativeMonthlyExcelFilter(_period, _site, _term)"):
 
         require("vm", token)
+    for token in ("CanOpenCorrection", "Correction.Open(backend", "Correction.LoadChoicesAsync(ct)",
+                  "Correction.ForceClear();", "CanChangeMonthlyScope => !Correction.IsOpen",
+                  "if (!CanChangeMonthlyScope) return;", "bool committed = Correction.Receipt is not null;",
+                  "if (committed) await RefreshAsync(ct)"):
+        require("vm", token)
+    for token in ("INativeClosedDayCorrectionBackend.ReadCorrectionChoicesAsync(",
+                  "INativeClosedDayCorrectionBackend.PreviewAsync(",
+                  "INativeClosedDayCorrectionBackend.CommitAsync("):
+        require("backend", token)
+    require("shell", "screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen")
+    for token in ("OpenCorrectionCommand", "Correction.StatusChoices", "Correction.Reason",
+                  "Correction.PreviewCommand", "Correction.ConfirmCommand", "CloseCorrectionCommand",
+                  "Correction.Preview.BeforeStatusName", "Correction.Preview.AfterStatusName",
+                  "CanChangeMonthlyScope"):
+        require("xaml", token)
+    for token in ("Correction_uses_selected_historical_cell_and_refreshes_only_after_verified_receipt",
+                  "Correction_rejects_supervisor_and_discards_late_statuses_on_logout"):
+        require("detail_tests", token)
     for token in ("MonthlyAttendance = new MonthlyAttendancePageViewModel()",
                   "MonthlyAttendance.AttachReader(archiveReader, () => _active)",
                   "MonthlyAttendance.RefreshAsync()", "MonthlyAttendance.Clear();",
@@ -139,7 +157,7 @@ def problems(content):
                   "Logout_and_nonce_change_revoke_in_flight_historical_details",
                   "Invalid_canonical_detail_echo_cannot_show_old_or_foreign_person"):
         require("detail_tests", token)
-    if content["detail_tests"].count("[Fact]") < 4:
+    if content["detail_tests"].count("[Fact]") < 6:
         errors.append("Monthly canonical detail security/replay tests are missing.")
     for token in ("PreviewAsync(", "ExportAsync(",
                   "OutputDirectorySettings.IsSafeDirectory",
@@ -176,6 +194,12 @@ if __name__ == "__main__":
         raise SystemExit("PHASE 7 MONTHLY NATIVE CONTRACT FAILED:\n" + "\n".join(errors))
     for key, token in (
         ("vm", "_boundActor != actor"),
+        ("vm", "Correction.ForceClear();"),
+        ("vm", "CanChangeMonthlyScope => !Correction.IsOpen"),
+        ("shell", "screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen"),
+        ("backend", "INativeClosedDayCorrectionBackend.CommitAsync("),
+        ("xaml", "Correction.ConfirmCommand"),
+        ("detail_tests", "Correction_rejects_supervisor_and_discards_late_statuses_on_logout"),
         ("vm", "request != _generation"),
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),

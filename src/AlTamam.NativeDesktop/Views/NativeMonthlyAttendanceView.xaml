@@ -31,7 +31,7 @@
                            Foreground="#475569" Text="{Binding SelectedPeriod}"/>
             </DockPanel>
         </Border>
-        <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0"
+        <Border Grid.Row="1" IsEnabled="{Binding CanChangeMonthlyScope}" Background="White" BorderBrush="#E2E8F0"
                 BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
             <WrapPanel>
                 <StackPanel Margin="4" MinWidth="140">
@@ -78,7 +78,7 @@
             <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
                          Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
         </StackPanel>
-        <DataGrid x:Name="MonthlyGrid" Grid.Row="3" ItemsSource="{Binding Rows}"
+        <DataGrid x:Name="MonthlyGrid" Grid.Row="3" ItemsSource="{Binding Rows}" IsEnabled="{Binding CanChangeMonthlyScope}"
                   IsReadOnly="True" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   CanUserSortColumns="False" HeadersVisibility="Column"
@@ -94,7 +94,7 @@
                 <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="*"/>
             </DataGrid.Columns>
         </DataGrid>
-        <DockPanel Grid.Row="4" Margin="0,8,0,0">
+        <DockPanel Grid.Row="4" Margin="0,8,0,0" IsEnabled="{Binding CanChangeMonthlyScope}">
             <TextBlock Text="{Binding PageLabel}" DockPanel.Dock="Right"
                        Foreground="#475569" VerticalAlignment="Center"
                        FontWeight="SemiBold"/>
@@ -193,7 +193,35 @@
                             </ItemsControl>
                             <TextBlock Margin="0,10,0,0" Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="عرض تاريخي للقراءة فقط. لا يغير هذا العرض بيانات التحضير أو الصلاحيات."/>
+                                       Text="العرض التاريخي لا يغير السجلات. التصحيح الاستثنائي يخضع للصلاحيات وسياسة اليوم المغلق."/>
+                            <Button Content="تصحيح استثنائي لليوم المحدد" Style="{StaticResource MonthlyButton}"
+                                    Command="{Binding OpenCorrectionCommand}"
+                                    Visibility="{Binding CanOpenCorrection, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                                    Visibility="{Binding Correction.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                                <StackPanel>
+                                    <TextBlock Text="تصحيح استثنائي — يوم تاريخي واحد" FontWeight="Bold" Foreground="#0F2942"/>
+                                    <TextBlock Text="اختر الحالة الجديدة وأدخل السبب (10 إلى 400 حرف). لا اعتماد قبل المعاينة." TextWrapping="Wrap"/>
+                                    <ComboBox ItemsSource="{Binding Correction.StatusChoices}" DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="StatusId" SelectedValue="{Binding Correction.SelectedStatusId, Mode=TwoWay}"
+                                              IsEnabled="{Binding Correction.CanEdit}" Margin="0,6" AutomationProperties.Name="الحالة الجديدة"/>
+                                    <TextBox Text="{Binding Correction.Reason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             MaxLength="400" TextWrapping="Wrap" MinHeight="40"
+                                             IsEnabled="{Binding Correction.CanEdit}" AutomationProperties.Name="سبب التصحيح الاستثنائي"/>
+                                    <Button Content="معاينة التصحيح" Command="{Binding Correction.PreviewCommand}" Style="{StaticResource MonthlyButton}"/>
+                                    <TextBlock Text="{Binding Correction.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                                    <ProgressBar Height="4" IsIndeterminate="True"
+                                                 Visibility="{Binding Correction.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                                    <TextBlock Text="الحالة السابقة:" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Correction.Preview.BeforeStatusName}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="الحالة الجديدة:" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Correction.Preview.AfterStatusName}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Correction.Preview.Request.Reason}" TextWrapping="Wrap"/>
+                                    <Button Content="{Binding Correction.ConfirmLabel}" Command="{Binding Correction.ConfirmCommand}" Style="{StaticResource MonthlyButton}"/>
+                                    <TextBlock Text="{Binding Correction.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                                    <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseCorrectionCommand}" Style="{StaticResource MonthlyButton}"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
