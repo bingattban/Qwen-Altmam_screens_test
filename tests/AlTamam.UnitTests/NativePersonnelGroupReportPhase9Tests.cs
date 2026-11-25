@@ -407,12 +407,49 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.Null(vm.Report);
     }
 
+    [Fact]
+    public async Task Current_custom_fields_are_bound_to_each_person_not_display_number()
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader { WithCustomFields = true };
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows([Two, One]);
+        await vm.RunAsync();
+        var report = Assert.IsType<NativePersonnelGroupReportSnapshot>(vm.Report);
+        Assert.Equal("FIELD-RANK", Assert.Single(report.CustomColumns).ColumnId);
+        Assert.Equal(report.Persons[0].ServiceNumberA, report.Persons[1].ServiceNumberA);
+        Assert.Equal(Two.PersonId, report.Persons[0].PersonId);
+        Assert.Equal("رقيب", report.Persons[0].Rank);
+        Assert.Equal("", report.Persons[1].Rank);
+        Assert.Equal("الرتبة", Assert.Single(report.Persons[0].CustomFields).Caption);
+        vm.Close();
+        Assert.Null(vm.Report);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Invalid_custom_field_metadata_or_person_mapping_hides_report(bool duplicate)
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader { WithCustomFields = true, DuplicateCustomColumn = duplicate,
+            WrongCustomField = !duplicate };
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows(roster);
+        await vm.RunAsync();
+        Assert.Null(vm.Report);
+        Assert.NotEmpty(vm.ErrorMessage);
+    }
+
     private sealed class FakeReader : INativePersonnelGroupReportReader
     {
         public NativePersonnelGroupReportRequest? Last;
         public int Reads;
         public bool ForgePersonOrder, ForgeTotals, ForgePage, ForgeDate;
         public bool DistinctStatuses, ForgeStatusBreakdown, DuplicateStatus;
+        public bool WithCustomFields, DuplicateCustomColumn, WrongCustomField;
         public Task<NativePersonnelGroupReportSnapshot>? Pending;
         public Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(
             NativeIdentity actor, NativePersonnelGroupReportRequest request,
@@ -422,6 +459,21 @@ public sealed class NativePersonnelGroupReportPhase9Tests
             ++Reads;
             if (Pending is { } pending) return pending;
             var result = Snapshot(request);
+            if (WithCustomFields)
+            {
+                var people = result.Persons.Select((person, index) => person with
+                {
+                    CustomFields = [new(WrongCustomField ? "FIELD-OTHER" : "FIELD-RANK",
+                        "الرتبة", index == 0 ? "رقيب" : "")]
+                }).ToArray();
+                result = result with
+                {
+                    Persons = people,
+                    CustomColumns = DuplicateCustomColumn
+                        ? [new("FIELD-RANK", "الرتبة"), new("FIELD-RANK", "الرتبة")]
+                        : [new("FIELD-RANK", "الرتبة")]
+                };
+            }
             if (DistinctStatuses && result.Persons.Count == 2)
             {
                 var people = result.Persons.ToArray();
