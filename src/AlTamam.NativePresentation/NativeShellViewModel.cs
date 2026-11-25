@@ -33,6 +33,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         MonthlyAttendance = new MonthlyAttendancePageViewModel();
         Administration = new AdministrationPageViewModel();
         Settings = new SettingsPageViewModel();
+        Audit = new NativeAuditPageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
@@ -40,6 +41,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             MonthlyAttendance,
             Administration,
             new ReportsPageViewModel(),
+            Audit,
             Settings
         };
         _pages = Pages.ToDictionary(page => page.Screen);
@@ -76,6 +78,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         Administration.StatusCatalog.ForceCancel();
                          Administration.Archive.Close();
                     }
+                    if (screen != NativeScreen.AuditLog)
+                        Audit.Clear();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.Dashboard)
                         _ = Dashboard.RefreshAsync();
@@ -85,13 +89,19 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         _ = MonthlyAttendance.RefreshAsync();
                     if (screen == NativeScreen.Administration)
                         _ = Administration.RefreshAsync();
+                    if (screen == NativeScreen.AuditLog)
+                        _ = Audit.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         _openAdministrativeHistoricalCommand = new NativeCommand(
             _ => OpenAdministrativeHistorical(), _ => CanOpenAdministrativeHistorical());
         _navigateCommand.CanExecuteChanged += (_, _) => _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
-        Administration.PropertyChanged += (_, _) => _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+        Administration.PropertyChanged += (_, _) =>
+        {
+            _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+            _navigateCommand.NotifyAvailabilityChanged();
+        };
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
@@ -105,6 +115,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public MonthlyAttendancePageViewModel MonthlyAttendance { get; }
     public AdministrationPageViewModel Administration { get; }
     public SettingsPageViewModel Settings { get; }
+    public NativeAuditPageViewModel Audit { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -113,6 +124,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         Dashboard.AttachReader(reader, () => _active);
         DailyAttendance.AttachReader(reader, () => _active);
+        if (reader is INativeAuditReader auditReader)
+            Audit.AttachReader(auditReader, () => _active);
         if (reader is INativeMonthlyAttendanceReader archiveReader)
             MonthlyAttendance.AttachReader(archiveReader, () => _active);
         if (reader is INativePersonnelDirectoryReader personnelReader)
@@ -168,6 +181,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private bool CanNavigate(NativeScreen screen)
         => IsAuthenticated && _pages.ContainsKey(screen) &&
            _active is { } identity && RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role) &&
+           (screen != NativeScreen.AuditLog || Audit.CanRead &&
+            (!ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview)) &&
            (screen != NativeScreen.Administration ||
             RoleAuthorizationPolicy.CanAccessUsersManagement(identity.Role)) &&
            // Never hide a live or ambiguous audited commit by leaving its page.
@@ -243,6 +258,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             }
 
             _active = confirmed;
+            Audit.Clear();
             Settings.NotifySessionChanged();
             _isFirstRun = false;
             CurrentPage = _pages[NativeScreen.Dashboard];
@@ -334,6 +350,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         MonthlyAttendance.Clear();
         Administration.Clear();
         _active = null;
+        Audit.Clear();
         Settings.Clear();
         Settings.NotifySessionChanged();
         _lastNativeInputRefresh = DateTimeOffset.MinValue;
