@@ -1789,3 +1789,37 @@ Both Windows workflows on the final PR head, all existing release test and
 package gates, and SHA-256 audit remain mandatory before merge. Individual
 historical Excel, group site/status selectors, cross-page selection, route
 parity and physical Windows acceptance remain unfinished.
+
+
+## Phase 9 — individual history Excel, part 1: complete-workbook renderer
+
+Base: `ef7c6fb66e7f97378550b2b1850a3d7691c13422` (merged #47).
+
+This is the pure workbook layer, not a connected WPF export command yet.
+It projects the canonical individual report into nine RTL OOXML worksheets:
+identity/summary, status totals, monthly totals, attendance, identity history,
+movements, revisions, visible audit records and site membership history.
+The existing group workbook's package/layout writer is reused without
+changing its four sheet projections. All cells remain inline strings;
+historical null identities are blank, never replaced by current identity.
+
+Each of the six history arrays must match its canonical count in full,
+with an explicit 20,000-row per-history bound and 5,000-row per-summary
+bound. The status and monthly counts must both reconcile to attendance.
+Missing/oversized tables, malformed fields and invalid XML text fail
+before ZIP creation. Raw audit old/new JSON and current custom columns
+are not included in this first visible-history projection.
+
+Test-first xUnit cases verify real OOXML, nine RTL sheets, leading-zero
+IDs and formula-like names as literal text, null historical identity,
+six incomplete histories, missing tables, inconsistent monthly totals
+and unsafe characters. Existing group workbook tests remain in place.
+No database change, optimization claim or production package switch.
+The next part must assemble and validate complete canonical source pages,
+verify authorization and source stability, then integrate a separate
+operator preview/confirm and atomic local file publication. No UI export
+availability or full individual report parity is claimed yet.
+
+Required: both Windows workflows on the exact final PR SHA, all automated
+release gates and four-package SHA-256 audit. Physical Windows acceptance
+remains separate.
