@@ -41,6 +41,28 @@ public sealed class NativeIndividualExcelViewModel : INotifyPropertyChanged
     public string Error => _error;
     public string CompletionMessage => _receipt is null ? "" :
         "تم تصدير التقرير الفردي إلى Excel (9 أوراق عمل).";
+    // Display only the scope of an accepted preview, never the editable draft.
+    public string PreviewScope
+    {
+        get
+        {
+            if (_preview is not { } preview || _report is not { } report) return "";
+            var request = preview.Request;
+            string from = request.DateFrom.Length == 0 ? "من البداية" : request.DateFrom;
+            string to = request.DateTo.Length == 0 ? "حتى النهاية" : request.DateTo;
+            string movement = NativePersonnelReportViewModel.SharedMovementTypeOptions
+                .FirstOrDefault(option => option.Value == request.MovementType)?.Title
+                ?? $"النوع {request.MovementType}";
+            string site = request.SiteId.Length == 0 ? "جميع المواقع" :
+                report.AvailableSites.FirstOrDefault(option => option.Id == request.SiteId)?.Title
+                ?? $"معرف الموقع: {request.SiteId}";
+            string status = request.StatusId.Length == 0 ? "جميع الحالات" :
+                report.AvailableStatuses.FirstOrDefault(option => option.Id == request.StatusId)?.Title
+                ?? $"معرف الحالة: {request.StatusId}";
+            return $"الفترة: {from} — {to}\nنوع الحركة: {movement}\nالموقع: {site}\nالحالة: {status}";
+        }
+    }
+
     private bool CanOpen => _backend is not null && !_open && !_busy &&
         _liveActor?.Invoke() is { } actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) &&
@@ -227,7 +249,7 @@ public sealed class NativeIndividualExcelViewModel : INotifyPropertyChanged
     private void Changed()
     {
         foreach (var name in new[] { nameof(IsOpen), nameof(IsBusy), nameof(Preview),
-            nameof(Receipt), nameof(Error), nameof(CanConfirm), nameof(CompletionMessage) })
+            nameof(Receipt), nameof(Error), nameof(CanConfirm), nameof(CompletionMessage), nameof(PreviewScope) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         foreach (ICommand command in new[] { OpenPreviewCommand, ConfirmCommand, CloseCommand })
             ((NativeCommand)command).NotifyAvailabilityChanged();

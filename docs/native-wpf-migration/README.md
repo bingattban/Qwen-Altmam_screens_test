@@ -1982,3 +1982,20 @@ guard changes. This is a bounded correctness slice, not completion of
 legacy custom-column parity or real Windows manual acceptance. Both exact-
 head Windows workflows and automated four-package acceptance and SHA-256
 audit must pass before merging.
+
+## Phase 9 — individual history Excel, part 7: applied export scope
+
+Base: `1672bfeb603e65857e81ead2c073e8d4b1ac2318` (merged #53).
+
+Three test-first xUnit regressions cover verified applied date, movement,
+site and status filters, explicit unrestricted scope, and removal of stale
+scope when the report changes, closes or confirmation consumes the preview.
+The native RTL confirmation panel now shows the accepted request's scope
+using the verified report's filter option names and shared movement labels.
+Unrestricted bounds are explicit; unknown labels fall back to their IDs,
+never to an unrestricted label. The display is not derived from draft inputs.
+The scope explanation preserves the existing history/filter semantics.
+No backend request, authorization, publication, database, host, workflow or
+architectural guard changes. Legacy custom-column parity and manual Windows
+acceptance remain pending. Require both exact-head Windows workflows and all
+four package acceptance/SHA-256 gates before merge.
