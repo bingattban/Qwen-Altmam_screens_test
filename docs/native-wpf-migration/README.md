@@ -1823,3 +1823,42 @@ availability or full individual report parity is claimed yet.
 Required: both Windows workflows on the exact final PR SHA, all automated
 release gates and four-package SHA-256 audit. Physical Windows acceptance
 remains separate.
+
+
+## Phase 9 — individual history Excel, part 2: canonical complete-source reader
+
+Base: `75aae47a17267a386688721c5da4ebd5616b0c57` (merged #48).
+
+The new PersonnelIndividualExcelSource calls the existing
+PersonnelReportService.ReportAsync, never an alternative SQL projection.
+It requires an explicit immutable PersonId and exact date/site/status/
+movement filters. In each request it advances the six history page
+indices together, checking all six echoed indices, page size, counts and
+has-next flags, even for streams already exhausted. The maximum stream
+length determines the number of source calls per sweep. Status/monthly
+totals must independently reconcile with the attendance count.
+
+Before and after each original canonical call, a caller-supplied live
+authorization callback must succeed; cancellation stops further reads.
+The reader assembles the full visible projection and independently
+re-reads every page to detect observed drift, including changes with
+unchanged totals. SHA-256 covers the complete assembled report, not only
+aggregate counts. The two sweeps are not a database transaction and do
+not prove snapshot isolation under concurrent changes; confirmation must
+re-read the complete source and compare its fingerprint. Raw old/new audit
+JSON is excluded from exported evidence. Safety limits: 20,000 rows per
+history, 5,000 rows per aggregate, 64 MiB serialized visible page evidence.
+Excess or inconsistency is a failure, never silent truncation.
+
+Test-first xUnit cases cover six independent streams with 0/1/2/100/101/
+201 rows, exact row ordering, wrong person/filter/page/count/has-next,
+partial pages, unchanged-count drift, summary mismatch, revoked
+authorization and cancellation. No database schema or canonical SQL
+change, no file writes and no UI export button yet. This is a correctness
+feature, not a measured performance optimization: two verified sweeps
+intentionally cost extra reads. The next slice must wire actual native
+authorization, preview/confirm, full fingerprint revalidation and atomic
+local workbook publication, then expose the WPF controls and receipts.
+
+Both exact-head Windows workflows and all automated four-package gates
+remain mandatory before merge. Physical Windows acceptance is separate.
