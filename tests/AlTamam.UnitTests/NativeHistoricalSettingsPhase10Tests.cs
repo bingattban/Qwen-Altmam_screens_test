@@ -175,8 +175,51 @@ public sealed class NativeHistoricalSettingsPhase10Tests
             { Request=request with { To=Day.AddDays(1) } }));
     }
 
-    private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration,true)]
+    [InlineData(UserRole.OrdinaryAdministration,true)]
+    [InlineData(UserRole.Supervisor,false)]
+    public async Task Administration_shortcut_reuses_settings_review_and_obeys_session_and_navigation(UserRole role,bool allowed)
     {
+        var fake=new Fake { Principal=Admin with { Role=role } };
+        var shell=new NativeShellViewModel();
+        shell.Settings.AttachHistorical(fake,fake,fake,()=>shell.IsAuthenticated?fake.Principal:null);
+        Assert.False(shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        await shell.InitializeAuthenticationAsync(fake);
+        Assert.True(await shell.LoginAsync("admin","Abc123"));
+        Assert.False(shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        shell.NavigateCommand.Execute(NativeScreen.Administration);
+        Assert.Equal(allowed,shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        shell.OpenAdministrativeHistoricalCommand.Execute(null);
+        if (!allowed)
+        {
+            Assert.False(shell.Settings.Historical.IsOpen);
+            return;
+        }
+        Assert.Same(shell.Settings,shell.CurrentPage);
+        Assert.True(shell.Settings.Historical.IsOpen);
+        Assert.False(shell.NavigateCommand.CanExecute(NativeScreen.Administration));
+        Assert.False(shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        Assert.True(shell.Settings.Historical.Close());
+        shell.NavigateCommand.Execute(NativeScreen.Administration);
+        Assert.True(shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        shell.OpenAdministrativeHistoricalCommand.Execute(null);
+        await shell.LogoutAsync();
+        Assert.False(shell.Settings.Historical.IsOpen);
+        Assert.False(shell.OpenAdministrativeHistoricalCommand.CanExecute(null));
+        Assert.Empty(fake.Commits);
+        Assert.Empty(fake.SingleCommits);
+    }
+
+    private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend, INativeAuthenticationBackend
+    {
+        public NativeIdentity Principal=Admin;
+        public Task<bool> IsProvisionedAsync(CancellationToken ct=default)=>Task.FromResult(true);
+        public Task<NativeLoginResult> SignInAsync(string username,string password,bool firstRun,string confirmation,string fullName,CancellationToken ct=default)
+            =>Task.FromResult(new NativeLoginResult(Principal,null));
+        public Task<NativeIdentity?> ResolveSessionAsync(string nonce,CancellationToken ct=default)=>Task.FromResult<NativeIdentity?>(Principal);
+        public Task RefreshIdleDeadlineAsync(string nonce,CancellationToken ct=default)=>Task.CompletedTask;
+        public Task RevokeSessionAsync(string nonce,CancellationToken ct=default)=>Task.CompletedTask;
         public int Reads;
         public bool Lose,Stale;
         public List<string> Commits=[];
