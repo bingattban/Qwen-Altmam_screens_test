@@ -202,6 +202,25 @@ public sealed class NativeSqlCipherDashboardReader(
     // Phase 9 group slice: same canonical PersonnelReportService.ReportAsync,
     // not another SQL query engine, report writer or invented day counts.
     // Verify a real live manager session on both sides of the database read.
+    private static IReadOnlyList<NativeReportFilterOption> ParseChoices(
+        JsonArray source, string scope)
+    {
+        if (source.Count > 500)
+            throw new InvalidDataException("Unbounded canonical " + scope + " history selectors.");
+        var choices = source.Select(node =>
+        {
+            JsonObject item = RequireObject(node);
+            string id = RequiredText(item, "id"), title = RequiredText(item, "title");
+            if (id.Length is < 1 or > 128 || id.Any(char.IsControl) ||
+                title.Length is < 1 or > 240 || title.Any(char.IsControl))
+                throw new InvalidDataException("Invalid canonical " + scope + " history selector.");
+            return new NativeReportFilterOption(id, title);
+        }).ToArray();
+        if (choices.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != choices.Length)
+            throw new InvalidDataException("Duplicate canonical " + scope + " ID.");
+        return choices;
+    }
+
     public async Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(
         NativeIdentity actor, NativePersonnelGroupReportRequest request,
         CancellationToken ct = default)
@@ -238,7 +257,7 @@ public sealed class NativeSqlCipherDashboardReader(
                 ["statusId"] = request.StatusId,
                 ["movementType"] = request.MovementType,
                 ["summaryPage"] = request.SummaryPage
-            }, ct).ConfigureAwait(false);
+            }, ct, includeGroupFilterChoices: true).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
 
         JsonObject data = RequiredObject(original, "PersonnelReport(native-group)");
@@ -317,7 +336,11 @@ public sealed class NativeSqlCipherDashboardReader(
             checked((int)RequiredNumber(data, "movementType")),
             checked((int)RequiredNumber(data, "dailyStatusPage")),
             RequiredBoolean(data, "dailyStatusHasNext"),
-            persons, totals, daily);
+            persons, totals, daily)
+        {
+            AvailableSites = ParseChoices(RequiredArray(data, "filterSites"), "group site"),
+            AvailableStatuses = ParseChoices(RequiredArray(data, "filterStatuses"), "group status")
+        };
 
         if (report.AttendanceTotal < 0 || report.MovementTotal < 0 ||
             report.Persons.Any(x => x.AttendanceTotal < 0 || x.MovementTotal < 0 ||
@@ -404,24 +427,6 @@ public sealed class NativeSqlCipherDashboardReader(
         // Selectors originate from the SAME original encrypted individual
         // history response. No native SQL, and never infer complete lists
         // from the current 100-row attendance or assignment page.
-        static IReadOnlyList<NativeReportFilterOption> ParseChoices(
-            JsonArray source, string scope)
-        {
-            if (source.Count > 500)
-                throw new InvalidDataException("Unbounded canonical " + scope + " history selectors.");
-            var choices = source.Select(node =>
-            {
-                JsonObject item = RequireObject(node);
-                string id = RequiredText(item, "id"), title = RequiredText(item, "title");
-                if (id.Length is < 1 or > 128 || id.Any(char.IsControl) ||
-                    title.Length is < 1 or > 240 || title.Any(char.IsControl))
-                    throw new InvalidDataException("Invalid canonical " + scope + " history selector.");
-                return new NativeReportFilterOption(id, title);
-            }).ToArray();
-            if (choices.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != choices.Length)
-                throw new InvalidDataException("Duplicate canonical " + scope + " ID.");
-            return choices;
-        }
         var filterSites = ParseChoices(RequiredArray(data, "filterSites"), "site");
         var filterStatuses = ParseChoices(RequiredArray(data, "filterStatuses"), "status");
         if ((pages.SiteId.Length > 0 && !filterSites.Any(x => x.Id == pages.SiteId)) ||

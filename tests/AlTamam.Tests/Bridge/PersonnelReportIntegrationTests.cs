@@ -124,6 +124,50 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task GroupFilterCatalog_IsLifetimeScopedToSelectedImmutablePeople()
+    {
+        var service=new PersonnelReportService(_db);
+        var filtered=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-02-01",["statusId"]="STS-PRESENT"
+        },CancellationToken.None,includeGroupFilterChoices:true);
+        Assert.True(filtered.Success,filtered.UserMessage);
+        var data=Assert.IsType<JsonObject>(filtered.Data);
+        Assert.Equal(0L,data["attendanceTotal"]!.GetValue<long>());
+        var statuses=Assert.IsType<JsonArray>(data["filterStatuses"]);
+        Assert.Equal(new[]{"STS-ABSENT","STS-PRESENT"},
+            statuses.Select(x=>x!["id"]!.GetValue<string>()).ToArray());
+        var sites=Assert.IsType<JsonArray>(data["filterSites"]);
+        Assert.Equal("SITE-UNSPECIFIED",Assert.Single(sites)!["id"]!.GetValue<string>());
+
+        var other=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-2")
+        },CancellationToken.None,includeGroupFilterChoices:true);
+        Assert.True(other.Success,other.UserMessage);
+        var otherData=Assert.IsType<JsonObject>(other.Data);
+        var otherStatuses=Assert.IsType<JsonArray>(otherData["filterStatuses"]);
+        Assert.Equal("STS-PRESENT",Assert.Single(otherStatuses)!["id"]!.GetValue<string>());
+
+        // The established bridge and export callers must keep their exact
+        // legacy group wire contract and not incur the new selector reads.
+        var legacy=await service.ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-02-01",["statusId"]="STS-PRESENT"
+        },CancellationToken.None);
+        Assert.True(legacy.Success,legacy.UserMessage);
+        var legacyData=Assert.IsType<JsonObject>(legacy.Data);
+        Assert.False(legacyData.ContainsKey("filterSites"));
+        Assert.False(legacyData.ContainsKey("filterStatuses"));
+        var nativeWithoutChoices=(JsonObject)data.DeepClone();
+        nativeWithoutChoices.Remove("filterSites");
+        nativeWithoutChoices.Remove("filterStatuses");
+        Assert.True(JsonNode.DeepEquals(legacyData,nativeWithoutChoices));
+    }
+
+    [Fact]
     public async Task GroupReport_DateRangeAndInvalidInputs_AreStrictAndReadOnly()
     {
         var svc=new PersonnelReportService(_db);

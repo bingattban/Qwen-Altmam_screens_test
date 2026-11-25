@@ -67,12 +67,79 @@ public sealed class PersonnelReportService
         return true;
     }
 
+    // Reuse the individual report's exact historical evidence queries for the
+    // group. Only trusted, generated SQL parameter names expand the scope.
+    private const string HistoricalSiteChoicesSql = """
+                SELECT SiteId, MAX(SiteName) FROM (
+                    SELECT SiteIdAtEffectiveDate AS SiteId,
+                           SiteNameSnapshot AS SiteName
+                    FROM AttendanceRecords WHERE PersonId=$id
+                    UNION ALL
+                    SELECT a.SiteId,
+                           COALESCE((
+                             SELECT h.VisibleNameSnapshot FROM SiteNameHistory h
+                             WHERE h.SiteId=a.SiteId
+                               AND h.ValidFromLocalDate<=a.ValidFromLocalDate
+                               AND (h.ValidToLocalDate IS NULL
+                                    OR h.ValidToLocalDate>a.ValidFromLocalDate)
+                             ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                             'غير موثق تاريخيا')
+                    FROM PersonAssignments a WHERE a.PersonId=$id
+                    UNION ALL
+                    SELECT SourceSiteId,SourceSiteNameSnapshot
+                    FROM PersonnelMovements WHERE PersonId=$id
+                    UNION ALL
+                    SELECT DestinationSiteId,DestinationSiteNameSnapshot
+                    FROM PersonnelMovements WHERE PersonId=$id
+                ) WHERE SiteId IS NOT NULL AND SiteId<>''
+                GROUP BY SiteId ORDER BY SiteId LIMIT 501;
+                """;
+
+    private const string HistoricalStatusChoicesSql = """
+                SELECT StatusId,MAX(StatusName) FROM (
+                    SELECT StatusId,StatusNameSnapshot AS StatusName
+                    FROM AttendanceRecords WHERE PersonId=$id
+                    UNION ALL
+                    SELECT BeforeStatusId,BeforeStatusNameSnapshot
+                    FROM AttendanceRevisions WHERE PersonId=$id
+                    UNION ALL
+                    SELECT AfterStatusId,AfterStatusNameSnapshot
+                    FROM AttendanceRevisions WHERE PersonId=$id
+                ) WHERE StatusId IS NOT NULL AND StatusId<>''
+                GROUP BY StatusId ORDER BY StatusId LIMIT 501;
+                """;
+
+    private static async Task<JsonArray?> ReadGroupChoicesAsync(
+        SqliteConnection connection,string template,IReadOnlyList<string> ids,
+        string placeholders,CancellationToken ct)
+    {
+        var result=new JsonArray();
+        using var query=connection.CreateCommand();
+        query.CommandText=template.Replace("PersonId=$id",
+            $"PersonId IN ({placeholders})",StringComparison.Ordinal);
+        for(int i=0;i<ids.Count;i++)
+            query.Parameters.AddWithValue("$person"+i,ids[i]);
+        using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while(await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            if(result.Count==500)return null;
+            string label=reader.IsDBNull(1)?"غير موثق تاريخيا":reader.GetString(1);
+            result.Add(new JsonObject
+            {
+                ["id"]=reader.GetString(0),
+                ["title"]=string.IsNullOrWhiteSpace(label)?"غير موثق تاريخيا":label
+            });
+        }
+        return result;
+    }
+
     /// <summary>
     /// Combined read-only historical report. Each row is isolated by immutable
     /// PersonId even when two people have reused the same displayed الرقم (ع).
     /// The chosen date boundaries are inclusive; only committed facts are counted.
     /// </summary>
-    private async Task<BridgeResponse> GroupReportAsync(JsonObject payload,CancellationToken ct)
+    private async Task<BridgeResponse> GroupReportAsync(JsonObject payload,CancellationToken ct,
+        bool includeGroupFilterChoices)
     {
         if(payload["personIds"] is not JsonArray selected || selected.Count is <1 or >100)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
@@ -231,7 +298,7 @@ public sealed class PersonnelReportService
             });
         var customColumns = await RosterCustomFieldProjection.AttachAsync(
             connection, people.Values, ct).ConfigureAwait(false);
-        return BridgeHelpers.Ok(new JsonObject
+        var result = new JsonObject
         {
             ["customColumns"]=customColumns,
             ["mode"]="group",["personCount"]=ids.Count,
@@ -245,15 +312,35 @@ public sealed class PersonnelReportService
             ["dailyStatusTotals"]=dailySummary,
             ["dailyStatusPage"]=summaryPage,
             ["dailyStatusHasNext"]=summaryHasNext
-        });
+        };
+        // Native WPF explicitly requests the new selector catalog. Existing
+        // bridge aliases and Excel callers retain their exact response and
+        // query cost; a JSON payload cannot enable this internal option.
+        if(includeGroupFilterChoices)
+        {
+            var filterSites=await ReadGroupChoicesAsync(connection,HistoricalSiteChoicesSql,
+                ids,placeholders,ct).ConfigureAwait(false);
+            var filterStatuses=await ReadGroupChoicesAsync(connection,HistoricalStatusChoicesSql,
+                ids,placeholders,ct).ConfigureAwait(false);
+            if(filterSites is null || filterStatuses is null)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "تعذر تقديم جميع مرشحات المجموعة التاريخية دون اقتطاع.");
+            result["filterSites"]=filterSites;
+            result["filterStatuses"]=filterStatuses;
+        }
+        return BridgeHelpers.Ok(result);
     }
 
-    public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
+    public Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
+        => ReportAsync(payload,ct,includeGroupFilterChoices:false);
+
+    public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct,
+        bool includeGroupFilterChoices)
     {
         // Keep the ONE canonical reporting action and screen. A group request is
         // explicit, bounded, read-only, and keyed EXCLUSIVELY by immutable PersonId.
         if(payload?.ContainsKey("personIds")==true)
-            return await GroupReportAsync(payload,ct).ConfigureAwait(false);
+            return await GroupReportAsync(payload,ct,includeGroupFilterChoices).ConfigureAwait(false);
         if(!TryReadFilters(payload,out var filters,out var invalid))
             return invalid!;
         string personId=Text(payload,"personId");
@@ -293,31 +380,7 @@ public sealed class PersonnelReportService
         var filterSites = new JsonArray();
         using(var choices=conn.CreateCommand())
         {
-            choices.CommandText="""
-                SELECT SiteId, MAX(SiteName) FROM (
-                    SELECT SiteIdAtEffectiveDate AS SiteId,
-                           SiteNameSnapshot AS SiteName
-                    FROM AttendanceRecords WHERE PersonId=$id
-                    UNION ALL
-                    SELECT a.SiteId,
-                           COALESCE((
-                             SELECT h.VisibleNameSnapshot FROM SiteNameHistory h
-                             WHERE h.SiteId=a.SiteId
-                               AND h.ValidFromLocalDate<=a.ValidFromLocalDate
-                               AND (h.ValidToLocalDate IS NULL
-                                    OR h.ValidToLocalDate>a.ValidFromLocalDate)
-                             ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
-                             'غير موثق تاريخيا')
-                    FROM PersonAssignments a WHERE a.PersonId=$id
-                    UNION ALL
-                    SELECT SourceSiteId,SourceSiteNameSnapshot
-                    FROM PersonnelMovements WHERE PersonId=$id
-                    UNION ALL
-                    SELECT DestinationSiteId,DestinationSiteNameSnapshot
-                    FROM PersonnelMovements WHERE PersonId=$id
-                ) WHERE SiteId IS NOT NULL AND SiteId<>''
-                GROUP BY SiteId ORDER BY SiteId LIMIT 501;
-                """;
+            choices.CommandText=HistoricalSiteChoicesSql;
             choices.Parameters.AddWithValue("$id",personId);
             using var reader=await choices.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while(await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -339,19 +402,7 @@ public sealed class PersonnelReportService
         var filterStatuses = new JsonArray();
         using(var choices=conn.CreateCommand())
         {
-            choices.CommandText="""
-                SELECT StatusId,MAX(StatusName) FROM (
-                    SELECT StatusId,StatusNameSnapshot AS StatusName
-                    FROM AttendanceRecords WHERE PersonId=$id
-                    UNION ALL
-                    SELECT BeforeStatusId,BeforeStatusNameSnapshot
-                    FROM AttendanceRevisions WHERE PersonId=$id
-                    UNION ALL
-                    SELECT AfterStatusId,AfterStatusNameSnapshot
-                    FROM AttendanceRevisions WHERE PersonId=$id
-                ) WHERE StatusId IS NOT NULL AND StatusId<>''
-                GROUP BY StatusId ORDER BY StatusId LIMIT 501;
-                """;
+            choices.CommandText=HistoricalStatusChoicesSql;
             choices.Parameters.AddWithValue("$id",personId);
             using var reader=await choices.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while(await reader.ReadAsync(ct).ConfigureAwait(false))

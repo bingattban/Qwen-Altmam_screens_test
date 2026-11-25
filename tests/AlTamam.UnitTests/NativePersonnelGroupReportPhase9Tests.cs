@@ -39,7 +39,11 @@ public sealed class NativePersonnelGroupReportPhase9Tests
             request.PersonIds.Count, request.DateFrom, request.DateTo,
             request.SiteId, request.StatusId, request.MovementType,
             request.SummaryPage, request.SummaryPage == 1,
-            people, [new("STS-P", "حاضر", 101L * request.PersonIds.Count)], daily);
+            people, [new("STS-P", "حاضر", 101L * request.PersonIds.Count)], daily)
+        {
+            AvailableSites = [new("SITE-OLD", "موقع تاريخي")],
+            AvailableStatuses = [new("STS-P", "حاضر")]
+        };
     }
 
     private static NativePersonnelGroupReportViewModel VM(
@@ -352,6 +356,55 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.Null(vm.Report);
         Assert.NotEmpty(vm.ErrorMessage);
         Assert.False(vm.CanNextSummary);
+    }
+
+    [Fact]
+    public async Task Historical_group_filters_require_verified_choices_and_survive_paging()
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows(roster);
+        await vm.RunAsync();
+        Assert.Contains(vm.SiteFilterOptions, x => x.Id == "SITE-OLD");
+        Assert.Contains(vm.StatusFilterOptions, x => x.Id == "STS-P");
+        vm.SiteIdDraft = "SITE-OLD";
+        vm.StatusIdDraft = "STS-P";
+        Assert.Null(vm.Report);
+        await vm.RunAsync();
+        Assert.Equal("SITE-OLD", reader.Last!.SiteId);
+        Assert.Equal("STS-P", reader.Last.StatusId);
+        await vm.NextSummaryAsync();
+        Assert.Equal(2, reader.Last!.SummaryPage);
+        Assert.Equal("SITE-OLD", reader.Last.SiteId);
+        Assert.Equal("STS-P", reader.Last.StatusId);
+        await vm.ClearFiltersAsync();
+        Assert.Equal("", reader.Last!.SiteId);
+        Assert.Equal("", reader.Last.StatusId);
+        Assert.Equal(1, reader.Last.SummaryPage);
+    }
+
+    [Fact]
+    public async Task Group_filter_catalog_and_drafts_clear_when_selected_people_change()
+    {
+        var roster = new[] { One, Two };
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => roster);
+        vm.Open(roster);
+        vm.SelectRows([One]);
+        await vm.RunAsync();
+        vm.SiteIdDraft = "SITE-OLD";
+        vm.StatusIdDraft = "STS-P";
+        vm.SelectRows([Two]);
+        Assert.Equal("", vm.SiteIdDraft);
+        Assert.Equal("", vm.StatusIdDraft);
+        Assert.Single(vm.SiteFilterOptions);
+        Assert.Single(vm.StatusFilterOptions);
+        vm.SiteIdDraft = "SITE-FOREIGN";
+        await vm.RunAsync();
+        Assert.Equal(1, reader.Reads);
+        Assert.Null(vm.Report);
     }
 
     private sealed class FakeReader : INativePersonnelGroupReportReader
