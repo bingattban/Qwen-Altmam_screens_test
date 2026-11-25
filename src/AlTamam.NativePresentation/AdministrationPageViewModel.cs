@@ -274,7 +274,10 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                     _liveActor?.Invoke() == actor &&
                     _rows.Any(current => ReferenceEquals(current, row)));
         if (reader is INativePersonnelGroupReportReader groupBackend)
+        {
             GroupReport.AttachBackend(groupBackend, () => _liveActor?.Invoke(), () => _rows);
+            GroupReport.AttachRosterPaging(() => _page, () => _hasNext, ReadGroupRosterPageAsync);
+        }
         if (reader is INativeMovementArchiveBackend archiveBackend)
             Archive.AttachBackend(archiveBackend, () => _liveActor?.Invoke());
         if (reader is INativePersonnelSeparationBackend separationBackend)
@@ -414,19 +417,9 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                 _liveActor?.Invoke() != actor) return;
             Validate(page, filter);
 
-            int rank = -1;
-            for (int i = 0; i < page.CustomColumns.Count; i++)
-                if (page.CustomColumns[i].Caption.Trim() is "الرتبة" or "رتبة")
-                {
-                    rank = i; break;
-                }
-            _rows = page.Rows.Select(person => new NativePersonnelDisplayRow(
-                person.RowNumber, person.PersonId, person.ServiceNumberA,
-                rank < 0 ? "" : person.CustomCells[rank],
-                person.Name, person.SiteName, StatusName(person.OrganizationalStatus),
-                person.Active, person.Revision,
-                person.CustomCells.Where((_, index) => index != rank).ToArray())).ToArray();
-            _columns = page.CustomColumns.Where((_, index) => index != rank).ToArray();
+            var projection = ProjectRosterPage(page);
+            _rows = projection.Rows;
+            _columns = projection.Columns;
             _total = page.TotalRows;
             _hasNext = page.HasNext;
             _loading = false;
@@ -732,6 +725,55 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
         3 => "مفصول", 4 => "مؤرشف",
         _ => "غير معروف"
     };
+
+    // The picker uses the same canonical page reader and projection as the
+    // directory; it never mutates the parent directory filters or row source.
+    private async Task<NativeGroupRosterPage> ReadGroupRosterPageAsync(
+        NativeIdentity actor, int pageNumber, CancellationToken ct)
+    {
+        if (_reader is null || !_connected || _loading || !GroupReport.IsOpen ||
+            _boundActor != actor || _liveActor?.Invoke() != actor ||
+            !RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) ||
+            pageNumber is < 1 or > 100000)
+            throw new UnauthorizedAccessException("Group roster session is unavailable.");
+        var origin = _rows;
+        int version = _generation;
+        var filter = new NativePersonnelFilter(_site, _term, _status, pageNumber);
+        var page = await _reader.ReadPageAsync(actor, filter, ct);
+        ct.ThrowIfCancellationRequested();
+        if (version != _generation || !ReferenceEquals(origin, _rows) ||
+            !_connected || _loading || !GroupReport.IsOpen ||
+            _boundActor != actor || _liveActor?.Invoke() != actor ||
+            filter.SiteId != _site || filter.SearchTerm != _term ||
+            filter.OrganizationalStatus != _status)
+            throw new UnauthorizedAccessException("Group roster scope changed.");
+        Validate(page, filter);
+        // Reject incomplete pages or a changed total instead of silently
+        // crossing an observed membership change in the original roster.
+        long expected = Math.Clamp(page.TotalRows - (long)(pageNumber - 1) * filter.PageSize,
+            0L, filter.PageSize);
+        if (page.TotalRows != _total || page.Rows.Count != expected)
+            throw new InvalidDataException("Group roster changed during selection.");
+        return new NativeGroupRosterPage(page.Page, page.HasNext, ProjectRosterPage(page).Rows);
+    }
+
+    private static (NativePersonnelDisplayRow[] Rows, NativeDashboardColumn[] Columns)
+        ProjectRosterPage(NativePersonnelSnapshot page)
+    {
+        int rank = -1;
+        for (int i = 0; i < page.CustomColumns.Count; i++)
+            if (page.CustomColumns[i].Caption.Trim() is "الرتبة" or "رتبة")
+            {
+                rank = i; break;
+            }
+        var rows = page.Rows.Select(person => new NativePersonnelDisplayRow(
+            person.RowNumber, person.PersonId, person.ServiceNumberA,
+            rank < 0 ? "" : person.CustomCells[rank],
+            person.Name, person.SiteName, StatusName(person.OrganizationalStatus),
+            person.Active, person.Revision,
+            person.CustomCells.Where((_, index) => index != rank).ToArray())).ToArray();
+        return (rows, page.CustomColumns.Where((_, index) => index != rank).ToArray());
+    }
 
     private static void Validate(NativePersonnelSnapshot page, NativePersonnelFilter filter)
     {
