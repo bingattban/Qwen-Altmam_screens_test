@@ -60,6 +60,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
             _ => _ = ClearSiteStatusFiltersAsync(), _ => CanApplySiteStatusFilters);
     }
 
+    public NativeIndividualExcelViewModel Excel { get; } = new();
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool IsOpen => _open;
     public bool IsLoading => _busy;
@@ -210,7 +211,15 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _liveActor = liveActor ?? throw new ArgumentNullException(nameof(liveActor));
         _isCurrentRow = isCurrentRow ?? throw new ArgumentNullException(nameof(isCurrentRow));
+        if (backend is INativeIndividualExcelBackend excelBackend)
+            Excel.Attach(excelBackend, () => CanRead ? _actor : null, CurrentExcelReport);
     }
+
+    private NativePersonnelReportSnapshot? CurrentExcelReport() =>
+        CanNavigate && _report is { } report &&
+        _dateFromDraft == report.DateFrom && _dateToDraft == report.DateTo &&
+        _movementTypeDraft == report.MovementType && _siteIdDraft == report.SiteId &&
+        _statusIdDraft == report.StatusId ? report : null;
 
     public async Task OpenAsync(NativePersonnelDisplayRow? selected, CancellationToken ct = default)
     {
@@ -550,6 +559,7 @@ public sealed class NativePersonnelReportViewModel : INotifyPropertyChanged
 
     private void Changed()
     {
+        Excel.NotifySourceChanged();
         foreach (string name in new[]
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage), nameof(Report),
