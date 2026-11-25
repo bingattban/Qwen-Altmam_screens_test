@@ -159,6 +159,22 @@ public sealed class NativeHistoricalSettingsPhase10Tests
         Assert.Null(page.Historical.Evidence);
     }
 
+    [Fact]
+    public void Direct_single_day_requires_one_saved_past_date()
+    {
+        var today=DateOnly.FromDateTime(DateTime.Now);
+        var request=new NativeHistoricalPeriodRequest("P-1",Day,Day);
+        var evidence=new NativeHistoricalPeriodEvidence(request,"أحمد","123",
+            [new(Day,true,"موجود","المركز",7)]);
+        Assert.True(NativeClosedDayCorrectionReview.CanUsePeriod(evidence));
+        Assert.False(NativeClosedDayCorrectionReview.CanUsePeriod(evidence with
+            { Days=[new(Day,false,"لا يوجد سجل تحضير","",0)] }));
+        Assert.False(NativeClosedDayCorrectionReview.CanUsePeriod(evidence with
+            { Request=new("P-1",today,today), Days=[new(today,true,"موجود","المركز",7)] }));
+        Assert.False(NativeClosedDayCorrectionReview.CanUsePeriod(evidence with
+            { Request=request with { To=Day.AddDays(1) } }));
+    }
+
     private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend
     {
         public int Reads;
