@@ -2041,3 +2041,15 @@ reads add work and must be assessed on real datasets. Cross-page selection,
 custom-column parity, and clean-machine manual Windows/DPI acceptance remain
 pending. Both exact-head Windows workflows and the four package acceptance
 and independent SHA-256 audit must succeed before merge.
+
+### Compatibility correction — Release run 45627366962
+
+The r01-excel lifecycle test failed at R01WireShapeSnapshot.Verify because
+unconditional group selector fields changed the frozen legacy bridge shape.
+The original two-argument ReportAsync contract now delegates with the new
+catalog disabled; only the native WPF adapter explicitly opts in. This also
+avoids unnecessary selector queries during legacy group exports and their
+paged source reads. The integration regression checks that removing only
+the two opted-in fields yields an identical legacy JSON payload. The frozen
+wire-shape snapshots, lifecycle assertions, CI and package gates are unchanged.
+The correction requires new exact-head Core and Release results before merge.
