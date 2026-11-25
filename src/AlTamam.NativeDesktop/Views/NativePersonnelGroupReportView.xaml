@@ -72,7 +72,7 @@
                         <TextBlock Text="{Binding SelectedCountLabel}"
                                    Margin="0,5,0,5" Foreground="#0F2942"
                                    FontWeight="SemiBold"/>
-                        <TextBlock Text="تصفية الفترة (شاملة اليومين) ونوع الحركة؛ تغيير الخيارات يتطلب إعادة قراءة أصلية."
+                        <TextBlock Text="اعرض التقرير أولا لتحميل المواقع والحالات التاريخية للمجموعة. اختر المرشحات ثم اعرض التقرير مجددا. الموقع يقيّد التحضير والحركات، والحالة تقيّد التحضير فقط."
                                    TextWrapping="Wrap" Foreground="#64748B" Margin="0,6,0,3"/>
                         <WrapPanel Orientation="Horizontal" Margin="0,2,0,5">
                             <TextBlock Text="من" VerticalAlignment="Center" Margin="7,0,3,0"/>
@@ -91,6 +91,18 @@
                                       DisplayMemberPath="Title" SelectedValuePath="Value"
                                       SelectedValue="{Binding MovementTypeDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       AutomationProperties.Name="تصفية حركات التقرير الجماعي"/>
+                            <TextBlock Text="الموقع التاريخي" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <ComboBox Width="190" MinHeight="34"
+                                      ItemsSource="{Binding SiteFilterOptions}"
+                                      DisplayMemberPath="Title" SelectedValuePath="Id"
+                                      SelectedValue="{Binding SiteIdDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="مرشح الموقع التاريخي للمجموعة"/>
+                            <TextBlock Text="الحالة التاريخية" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <ComboBox Width="165" MinHeight="34"
+                                      ItemsSource="{Binding StatusFilterOptions}"
+                                      DisplayMemberPath="Title" SelectedValuePath="Id"
+                                      SelectedValue="{Binding StatusIdDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.Name="مرشح الحالة التاريخية للمجموعة"/>
                             <Button Content="عرض التقرير" Style="{StaticResource GroupAction}"
                                     Command="{Binding RunCommand}"/>
                             <Button Content="مسح المرشحات" Style="{StaticResource GroupAction}"
