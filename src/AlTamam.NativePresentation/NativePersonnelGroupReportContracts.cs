@@ -55,3 +55,7 @@ public sealed record NativePersonnelGroupReportSnapshot(
     public IReadOnlyList<NativeReportFilterOption> AvailableSites { get; init; } = [];
     public IReadOnlyList<NativeReportFilterOption> AvailableStatuses { get; init; } = [];
 }
+
+/// <summary>Verified roster page from the existing authorized directory reader.</summary>
+public sealed record NativeGroupRosterPage(int Page, bool HasNext,
+    IReadOnlyList<NativePersonnelDisplayRow> Rows);
