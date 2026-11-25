@@ -428,8 +428,31 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", package)
         self.assertIn("PASS real Windows GeneralAdmin Admin Supervisor", package)
         self.assertIn("PASS all 69 manifest routes opened", package)
-        for runtime in ("win-x86", "win-x64"):
-            self.assertIn("runtime: " + runtime, RELEASE)
+        # Read the actual mode-specific matrix inventories, not the retired
+        # static YAML runtime syntax. Full mode must still test both architectures;
+        # development must contain exactly x86 Portable, never an installer.
+        import json
+        def inventories(job_name):
+            body = RELEASE.split("  " + job_name + ":\n", 1)[1]
+            line = next(line for line in body.splitlines()
+                        if line.strip().startswith("include: ${{ fromJSON("))
+            match = re.fullmatch(r"\s*include: \$\{\{ fromJSON\(.* && '(\[.*?\])' \|\| '(\[.*?\])'\) \}\}", line)
+            self.assertIsNotNone(match, "Expected explicit full/development JSON matrices")
+            return tuple(json.loads(value) for value in match.groups())
+
+        full_arch, dev_arch = inventories("package")
+        self.assertCountEqual(full_arch, [
+            {"arch": "Windows-32bit", "runtime": "win-x86"},
+            {"arch": "Windows-64bit", "runtime": "win-x64"}
+        ])
+        self.assertEqual(dev_arch, [{"arch": "Windows-32bit", "runtime": "win-x86"}])
+        full_acceptance, dev_acceptance = inventories("package-acceptance")
+        self.assertCountEqual(full_acceptance, [
+            {"arch": arch, "mode": mode}
+            for arch in ("Windows-32bit", "Windows-64bit")
+            for mode in ("Portable", "Installer")
+        ])
+        self.assertEqual(dev_acceptance, [{"arch": "Windows-32bit", "mode": "Portable"}])
         self.assertLess(RELEASE.index("needs: [preflight, build-test, verify-full-test-shards, webview-e2e]"),
                         RELEASE.index("test-package-appdata-preservation.ps1"))
 
