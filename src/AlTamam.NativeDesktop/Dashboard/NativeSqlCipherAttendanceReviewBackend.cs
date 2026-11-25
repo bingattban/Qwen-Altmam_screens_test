@@ -167,6 +167,15 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         return new NativeAttendanceCommitReceipt(count, audit);
     }
 
+    async Task<IReadOnlyList<NativeAttendanceStatusChoice>> INativeClosedDayCorrectionBackend.ReadCorrectionChoicesAsync(
+        NativeIdentity identity, CancellationToken ct)
+    {
+        await ResolveAuthorizedAsync(identity, "PreviewClosedDayCorrection", ct);
+        var choices = await ReadChoicesAsync(identity, ct);
+        await ResolveAuthorizedAsync(identity, "PreviewClosedDayCorrection", ct);
+        return choices;
+    }
+
     async Task<NativeClosedDayCorrectionPreview> INativeClosedDayCorrectionBackend.PreviewAsync(
         NativeIdentity identity, NativeClosedDayCorrectionRequest request, CancellationToken ct)
     {

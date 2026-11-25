@@ -16,7 +16,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
-      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
+      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
@@ -2521,6 +2521,18 @@ public sealed class NativeSqlCipherDashboardReader(
     /// service. No independent historical SQL or guessed attendance, and
     /// every response is bound to the verified session, PersonId and date.
     /// </summary>
+    Task<IReadOnlyList<NativeAttendanceStatusChoice>> INativeClosedDayCorrectionBackend.ReadCorrectionChoicesAsync(
+        NativeIdentity actor, CancellationToken ct) =>
+        ((INativeClosedDayCorrectionBackend)_review).ReadCorrectionChoicesAsync(actor, ct);
+
+    Task<NativeClosedDayCorrectionPreview> INativeClosedDayCorrectionBackend.PreviewAsync(
+        NativeIdentity actor, NativeClosedDayCorrectionRequest request, CancellationToken ct) =>
+        ((INativeClosedDayCorrectionBackend)_review).PreviewAsync(actor, request, ct);
+
+    Task<NativeClosedDayCorrectionReceipt> INativeClosedDayCorrectionBackend.CommitAsync(
+        NativeIdentity actor, string token, string operationId, CancellationToken ct) =>
+        ((INativeClosedDayCorrectionBackend)_review).CommitAsync(actor, token, operationId, ct);
+
     public async Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
         NativeIdentity actor, NativeMonthlyCellRequest request,
         CancellationToken ct = default)

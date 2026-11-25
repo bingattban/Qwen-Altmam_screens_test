@@ -2192,3 +2192,23 @@ and unverified-intent safeguards, before enabling the workflow. Historical
 range and monthly lifecycle parity remain separate. Both exact-head Windows
 workflows and four-package acceptance/SHA-256 gates must pass; manual Windows
 acceptance is still pending.
+
+## Phase 10 — single closed-day correction in native monthly WPF
+
+Base: `6193e13669669ffa59818f39d5b27f651bedc9e2` (merged #63).
+
+The selected authenticated historical cell now opens the guarded single-day
+review using the original active status catalogue and correction service.
+The WPF detail view shows the reason, canonical before/after preview and
+explicit confirmation. The parent period/site/search/page and navigation
+remain frozen during review, including an uncertain commit. The same
+preview token and operation ID are retained for explicit replay; closing a
+verified receipt refreshes the current archive scope. Logout/session reset
+revokes local review state and late status results. The canonical service
+still decides whether the policy is enabled and the day is actually closed;
+visibility of the candidate button is not authorization to write.
+Two new monthly integration regressions and strengthened static preflight.
+No SQL, schema, canonical policy, legacy response or packaging changes.
+Historical range correction and monthly lifecycle parity remain pending,
+as does manual acceptance on clean Windows. Both exact-head workflows and
+all four package acceptance/SHA-256 gates must pass before merge.
