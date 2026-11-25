@@ -1964,3 +1964,21 @@ release readiness. Real Windows manual accessibility/DPI/offline
 acceptance and remaining report parity (including legacy custom columns)
 still need evidence. No production host switch or database change.
 Both exact-head Windows workflows and four-package gates remain required.
+
+## Phase 9 — individual history Excel, part 6: cancellation and late-result isolation
+
+Base: `34674b1de3fe172e11495d9f6ca1f5f3551eb216` (merged #52).
+
+Three test-first xUnit cases cover a pre-cancelled preview, a pre-cancelled
+confirmation, and a late export receipt arriving after another report has
+been opened. The view model now rejects an already cancelled preview
+without opening a panel or calling the backend; an already cancelled
+confirmation invalidates its pending approval without invoking the export
+backend and requires a fresh preview. The late-receipt case protects the
+existing generation guard and ensures a new preview is not overwritten.
+The backend remains authoritative for live authorization and cancellation
+races during publication. No database, host, workflow, or architectural
+guard changes. This is a bounded correctness slice, not completion of
+legacy custom-column parity or real Windows manual acceptance. Both exact-
+head Windows workflows and automated four-package acceptance and SHA-256
+audit must pass before merging.
