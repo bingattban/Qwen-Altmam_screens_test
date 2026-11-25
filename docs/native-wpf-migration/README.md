@@ -1920,3 +1920,18 @@ The WPF view-model and controls still need to invoke the new backend and
 cancel stale requests; no claim of UI availability or physical acceptance.
 Both exact-head Windows workflows and all four package acceptance/SHA-256
 gates remain mandatory before merge.
+
+
+### PR #51 corrective architecture follow-up
+
+Both original CI runs (45576044300 Release, 45576044256 Core) failed
+the unchanged Phase 3 reader contract on `ExecuteInWriteTransactionAsync(`
+inside NativeSqlCipherDashboardReader. The nine Release test shards and
+pre-package Windows E2E passed but packaging was correctly skipped.
+The audit transaction now belongs to PersonnelIndividualExcelExportService
+.ExportAuditedAsync; the native adapter resolves the exact live principal
+and delegates to that service. No direct audit/transaction call remains
+in the reader. No guard or workflow is weakened. Integration regressions
+cover metadata-only audit persistence and changed principal after
+publication with cleanup. New full Core and Release evidence is required
+on the corrected head; the original green shards are not sufficient.
