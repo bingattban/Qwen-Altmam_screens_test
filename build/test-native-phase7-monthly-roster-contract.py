@@ -178,6 +178,15 @@ def problems(content):
                   "Historical_period_rejects_wrong_identity_scope_partial_and_duplicate_report"):
         require("period_tests",token)
     require("range_tests","Direct_range_requires_explicit_current_period_and_freezes_read_dates")
+    for token in ("MatchesPreviewState(", "saved.HasSavedRecord!=proposed.HasExistingRecord",
+                  "saved.Revision!=proposed.PreviousRevision"):
+        require("period_evidence",token)
+    for token in ("NeedsPeriodReload=true;", "!readEvidence.MatchesPreviewState(response,Today)",
+                  "!NeedsPeriodReload", "NeedsPeriodReload=false;"):
+        require("range_vm",token)
+    require("pages","HistoricalRange.Receipt is not null || HistoricalRange.NeedsPeriodReload")
+    require("range_tests","Direct_range_rejects_changed_saved_state_or_revision")
+    require("historical_settings_tests","Settings_historical_stale_preview_requires_reread_without_commit")
     require("contracts","public bool ExplicitArchive { get; init; }")
     for token in ("NativeMonthlyCellDisplay From(", "color.Skip(1).All(Uri.IsHexDigit)",
                   "luminance > 0.179", '"internal-transfer" => "↔"',
