@@ -138,7 +138,8 @@ public sealed class PersonnelReportService
     /// PersonId even when two people have reused the same displayed الرقم (ع).
     /// The chosen date boundaries are inclusive; only committed facts are counted.
     /// </summary>
-    private async Task<BridgeResponse> GroupReportAsync(JsonObject payload,CancellationToken ct)
+    private async Task<BridgeResponse> GroupReportAsync(JsonObject payload,CancellationToken ct,
+        bool includeGroupFilterChoices)
     {
         if(payload["personIds"] is not JsonArray selected || selected.Count is <1 or >100)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
@@ -295,20 +296,12 @@ public sealed class PersonnelReportService
                 ["statusId"]=entry.Key.StatusId,
                 ["statusName"]=entry.Key.Snapshot,["count"]=entry.Value
             });
-        var filterSites=await ReadGroupChoicesAsync(connection,HistoricalSiteChoicesSql,
-            ids,placeholders,ct).ConfigureAwait(false);
-        var filterStatuses=await ReadGroupChoicesAsync(connection,HistoricalStatusChoicesSql,
-            ids,placeholders,ct).ConfigureAwait(false);
-        if(filterSites is null || filterStatuses is null)
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "تعذر تقديم جميع مرشحات المجموعة التاريخية دون اقتطاع.");
         var customColumns = await RosterCustomFieldProjection.AttachAsync(
             connection, people.Values, ct).ConfigureAwait(false);
-        return BridgeHelpers.Ok(new JsonObject
+        var result = new JsonObject
         {
             ["customColumns"]=customColumns,
             ["mode"]="group",["personCount"]=ids.Count,
-            ["filterSites"]=filterSites,["filterStatuses"]=filterStatuses,
             ["dateFrom"]=from,["dateTo"]=to,
             ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
             ["movementType"]=filters.MovementType,
@@ -319,15 +312,35 @@ public sealed class PersonnelReportService
             ["dailyStatusTotals"]=dailySummary,
             ["dailyStatusPage"]=summaryPage,
             ["dailyStatusHasNext"]=summaryHasNext
-        });
+        };
+        // Native WPF explicitly requests the new selector catalog. Existing
+        // bridge aliases and Excel callers retain their exact response and
+        // query cost; a JSON payload cannot enable this internal option.
+        if(includeGroupFilterChoices)
+        {
+            var filterSites=await ReadGroupChoicesAsync(connection,HistoricalSiteChoicesSql,
+                ids,placeholders,ct).ConfigureAwait(false);
+            var filterStatuses=await ReadGroupChoicesAsync(connection,HistoricalStatusChoicesSql,
+                ids,placeholders,ct).ConfigureAwait(false);
+            if(filterSites is null || filterStatuses is null)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "تعذر تقديم جميع مرشحات المجموعة التاريخية دون اقتطاع.");
+            result["filterSites"]=filterSites;
+            result["filterStatuses"]=filterStatuses;
+        }
+        return BridgeHelpers.Ok(result);
     }
 
-    public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
+    public Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
+        => ReportAsync(payload,ct,includeGroupFilterChoices:false);
+
+    public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct,
+        bool includeGroupFilterChoices)
     {
         // Keep the ONE canonical reporting action and screen. A group request is
         // explicit, bounded, read-only, and keyed EXCLUSIVELY by immutable PersonId.
         if(payload?.ContainsKey("personIds")==true)
-            return await GroupReportAsync(payload,ct).ConfigureAwait(false);
+            return await GroupReportAsync(payload,ct,includeGroupFilterChoices).ConfigureAwait(false);
         if(!TryReadFilters(payload,out var filters,out var invalid))
             return invalid!;
         string personId=Text(payload,"personId");
