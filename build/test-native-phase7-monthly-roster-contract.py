@@ -15,6 +15,11 @@ FILES = {
     "detail_tests": "tests/AlTamam.UnitTests/NativeMonthlyCellDetailsPhase7Tests.cs",
     "range_vm": "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
     "range_tests": "tests/AlTamam.UnitTests/NativeHistoricalRangeReviewPhase10Tests.cs",
+    "catchup_contract": "src/AlTamam.NativePresentation/NativeAdministrativeCatchUpContracts.cs",
+    "catchup_tests": "tests/AlTamam.UnitTests/NativeAdministrativeCatchUpPhase10Tests.cs",
+    "catchup_adapter": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
+    "catchup_service": "src/AlTamam.Application/Bridge/AdministrativeAttendanceCatchUpService.cs",
+    "catchup_sql_tests": "tests/AlTamam.Tests/Bridge/AdministrativeAttendanceCatchUpTests.cs",
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
@@ -122,6 +127,26 @@ def problems(content):
                   "Range_discards_late_preview_after_session_clear_and_rejects_changed_person"):
         require("range_tests",token)
     require("detail_tests","Range_review_freezes_scope_and_refreshes_only_after_verified_receipt")
+    for token in ("today.DayNumber - BusinessDate.DayNumber is >= 1 and <= 7",
+                  "PendingCount > 0 && EligibleCount >= PendingCount",
+                  "receipt.PendingBefore == PendingCount", "receipt.AppliedCount <= PendingCount",
+                  "IsHexDigest(Token) && IsHexDigest(Fingerprint)", "RequiresExplicitConfirmation"):
+        require("catchup_contract",token)
+    for token in ("PreviewAdministrativeAttendanceCatchUp", "CommitAdministrativeAttendanceCatchUp",
+                  "new AdministrativeAttendanceCatchUpService(database).PreviewAsync(",
+                  "new AdministrativeAttendanceCatchUpService(database).CommitAsync(",
+                  "preview.Matches(request, DateOnly.FromDateTime(DateTime.Now))",
+                  "approved.MatchesReceipt(receipt)", "principal.SessionRevocation",
+                  '["previewToken"] = approved.Token', '["operationId"] = operationId'):
+        require("catchup_adapter",token)
+    for token in ("AdministrativeAttendanceCatchUpRequest", "Receipt_accepts_only_canonical_date_and_count_with_no_overstatement",
+                  "Approved_token_remains_structurally_valid_for_exact_replay_after_window_closes"):
+        require("catchup_tests",token)
+    for token in ("RunForDateInTransactionAsync", "ADMIN_ATTENDANCE_CATCHUP_APPROVED",
+                  "now.Fingerprint != Read(preview, \"fingerprint\")"):
+        require("catchup_service",token)
+    for token in ("StalePreviewNeverOverwritesManualAttendance", "JsonNode.DeepEquals(receipt,retry.Data)"):
+        require("catchup_sql_tests",token)
     for token in ("OpenRangeCorrectionCommand","RangeCorrection.FromText","RangeCorrection.ToText",
                   "RangeCorrection.Preview.Days","RangeCorrection.ConfirmCommand","CloseRangeCorrectionCommand"):
         require("xaml",token)
@@ -218,6 +243,10 @@ if __name__ == "__main__":
         ("vm", "RangeCorrection.ForceClear();"),
         ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen"),
         ("range_vm", "approved.MatchesReceipt(result)"),
+        ("catchup_contract", "receipt.AppliedCount <= PendingCount"),
+        ("catchup_adapter", "approved.MatchesReceipt(receipt)"),
+        ("catchup_service", "ADMIN_ATTENDANCE_CATCHUP_APPROVED"),
+        ("catchup_sql_tests", "JsonNode.DeepEquals(receipt,retry.Data)"),
         ("range_vm", "response.Matches(request, Today)"),
         ("xaml", "RangeCorrection.ConfirmCommand"),
         ("backend", "INativeHistoricalRangeBackend.CommitRangeAsync("),
