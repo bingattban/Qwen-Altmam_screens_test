@@ -408,6 +408,76 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRevisions WHERE PersonId='TST-CLOSED-P1'"));
     }
 
+    [Theory]
+    [InlineData("RevisionNumber=RevisionNumber+1")]
+    [InlineData("StatusNameSnapshot='تغير الاسم بعد المعاينة'")]
+    public async Task HistoricalRangeCorrection_StaleLastDayRejectsEntireRangeWithoutPartialWrites(
+        string changedField)
+    {
+        var service = new ClosedDayCorrectionService(_db);
+        var payload = new JsonObject
+        {
+            ["personId"] = Person,
+            ["dateFrom"] = "2026-10-08",
+            ["dateTo"] = Day,
+            ["statusId"] = "STS-ABSENT",
+            ["reason"] = "تصحيح تاريخي معتمد بعد مراجعة السجل"
+        };
+        var preview = await service.PreviewAsync(payload, Admin, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var data = Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal(3, Assert.IsType<JsonArray>(data["days"]).Count);
+        string token = data["previewToken"]!.GetValue<string>();
+
+        // First two days have no record, while the last day is concurrently
+        // changed after preview. A failed range must never insert those days.
+        using (var connection = _db.CreateOpenConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = changedField switch
+            {
+                "RevisionNumber=RevisionNumber+1" =>
+                    "UPDATE AttendanceRecords SET RevisionNumber=RevisionNumber+1 WHERE PersonId='TST-CLOSED-P1';",
+                "StatusNameSnapshot='تغير الاسم بعد المعاينة'" =>
+                    "UPDATE AttendanceRecords SET StatusNameSnapshot='تغير الاسم بعد المعاينة' WHERE PersonId='TST-CLOSED-P1';",
+                _ => throw new ArgumentException("Unknown synthetic mutation.")
+            };
+            await command.ExecuteNonQueryAsync();
+        }
+        var request = new JsonObject
+        {
+            ["previewToken"] = token,
+            ["operationId"] = "historical-range-atomic-conflict-001"
+        };
+        var rejected = await service.CommitAsync(request, Admin, CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale, rejected.ErrorCode);
+        Assert.Equal("1", Stored("SELECT COUNT(*) FROM AttendanceRecords"));
+        Assert.Equal("0", Stored("SELECT COUNT(*) FROM AttendanceRecords WHERE StatusId='STS-ABSENT'"));
+        Assert.Equal("0", Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+        Assert.Equal("0", Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTED'"));
+        Assert.Equal("0", Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal("0", Stored("SELECT ConsumedFlag FROM PreviewTokens"));
+        Assert.Equal(OriginalTime, Stored("SELECT CommittedAtUtc FROM AttendanceRecords"));
+
+        // A new canonical preview may be confirmed as a separate intent.
+        var fresh = await service.PreviewAsync(payload, Admin, CancellationToken.None);
+        Assert.True(fresh.Success, fresh.UserMessage);
+        var freshToken = Assert.IsType<JsonObject>(fresh.Data)["previewToken"]!.GetValue<string>();
+        var accepted = await service.CommitAsync(new JsonObject
+        {
+            ["previewToken"] = freshToken,
+            ["operationId"] = "historical-range-atomic-fresh-002"
+        }, Admin, CancellationToken.None);
+        Assert.True(accepted.Success, accepted.UserMessage);
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRecords WHERE StatusId='STS-ABSENT'"));
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTED'"));
+        Assert.Equal("1", Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal(OriginalTime, Stored("SELECT CommittedAtUtc FROM AttendanceRecords WHERE AttendanceLocalDate='2026-10-10'"));
+        Assert.Equal("1", Stored("SELECT IsClosed FROM PeriodClosures WHERE PeriodKey='2026-10-10'"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
