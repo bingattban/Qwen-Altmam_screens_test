@@ -54,7 +54,7 @@ public sealed class PersonnelIndividualExcelExportService(AlTamamDbContext datab
 
     public async Task<BridgeResponse> ExportAsync(JsonObject request,
         string expectedFingerprint, Func<CancellationToken, Task> authorize,
-        CancellationToken ct)
+        CancellationToken ct, Func<JsonObject, CancellationToken, Task>? auditPublication = null)
     {
         ArgumentNullException.ThrowIfNull(authorize);
         if (expectedFingerprint is not { Length: 64 } ||
@@ -110,6 +110,10 @@ public sealed class PersonnelIndividualExcelExportService(AlTamamDbContext datab
             receipt["format"] = "xlsx";
             receipt["sheetCount"] = 9;
             receipt["fingerprint"] = fingerprint;
+            // The native adapter supplies durable audit before a success receipt.
+            // A failed audit leaves completed false, so the new file is cleaned up.
+            if (auditPublication is not null)
+                await auditPublication((JsonObject)receipt.DeepClone(), ct).ConfigureAwait(false);
             completed = true;
             return BridgeHelpers.Ok(receipt);
         }
