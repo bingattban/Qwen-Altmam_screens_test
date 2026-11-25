@@ -380,8 +380,54 @@ public sealed class ClosedDayCorrectionService
             {
                 string personId = Read(info, "personId"), statusId = Read(info, "statusId"),
                     reasonText = Read(info, "reason"), dateFrom = Read(info, "dateFrom");
-                if (info?["days"] is not JsonArray days || days.Count == 0)
+                if (info?["days"] is not JsonArray days || days.Count is < 1 or > 62)
                     return Deny(BridgeErrorCodes.ConflictStale, "بيانات المعاينة غير صالحة.");
+
+                // Validate the entire sealed range in the SAME write transaction
+                // before consuming the token or mutating even the first day.
+                // Returning an error response from the transaction delegate
+                // does not roll it back; never return a conflict after a write.
+                var verifiedDays = new List<RangeDayState>(days.Count);
+                if (!DateOnly.TryParseExact(dateFrom, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var fromDate) ||
+                    !DateOnly.TryParseExact(Read(info, "dateTo"), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var toDate) ||
+                    fromDate > toDate || toDate.DayNumber - fromDate.DayNumber >= 62 ||
+                    toDate > DateOnly.FromDateTime(_time.GetLocalNow().DateTime) ||
+                    !ValidReason(reasonText))
+                    return Deny(BridgeErrorCodes.ConflictStale, "بيانات الفترة غير صالحة.");
+                DateOnly? previousDay = null;
+                foreach (var node in days)
+                {
+                    if (node is not JsonObject dayEntry ||
+                        !DateOnly.TryParseExact(Read(dayEntry, "businessDate"), "yyyy-MM-dd",
+                            CultureInfo.InvariantCulture, DateTimeStyles.None, out var entryDate) ||
+                        entryDate < fromDate || entryDate > toDate ||
+                        (previousDay is { } prior && entryDate <= prior) ||
+                        dayEntry["previousRevision"] is not JsonValue revValue ||
+                        !revValue.TryGetValue<long>(out long expectedRev) ||
+                        expectedRev is < 0 or long.MaxValue ||
+                        dayEntry["hasExistingRecord"] is not JsonValue existingValue ||
+                        !existingValue.TryGetValue<bool>(out bool expectedExisting) ||
+                        expectedExisting != (expectedRev > 0))
+                        return Deny(BridgeErrorCodes.ConflictStale, "بيانات اليوم غير صالحة.");
+
+                    string dayIso = Read(dayEntry, "businessDate");
+                    var live = await RangeDaySnapshotAsync(c, tx, personId, dayIso, statusId, ct).ConfigureAwait(false);
+                    if (live is null || live.Revision != expectedRev ||
+                        live.HasExistingRecord != expectedExisting ||
+                        live.BeforeId != Read(dayEntry, "beforeStatusId") ||
+                        live.BeforeName != Read(dayEntry, "beforeStatusName") ||
+                        live.AssignmentId != Read(dayEntry, "assignmentId") ||
+                        live.SiteId != Read(dayEntry, "siteId") ||
+                        live.SiteName != Read(dayEntry, "siteName") ||
+                        live.AfterName != Read(dayEntry, "afterStatusName") ||
+                        live.AfterSymbol != Read(dayEntry, "afterStatusSymbol") ||
+                        live.AfterColor != Read(dayEntry, "afterStatusColor"))
+                        return Deny(BridgeErrorCodes.ConflictStale, "تغيّر السجل أو الحالة أو الموقع بعد المعاينة؛ أعد البحث والمعاينة.");
+                    verifiedDays.Add(live);
+                    previousDay = entryDate;
+                }
 
                 long? consumedRange = await BridgePreviewTokens.ConsumeAsync(_db, _time, c, tx, token,
                     RangeOperation, actor.UserId, revision, ct).ConfigureAwait(false);
@@ -393,16 +439,10 @@ public sealed class ClosedDayCorrectionService
                 long lastRevisionNumber = 1;
                 string personName = Read(info, "personName");
 
-                foreach (var node in days)
+                foreach (var live in verifiedDays)
                 {
-                    if (node is not JsonObject dayEntry)
-                        return Deny(BridgeErrorCodes.ConflictStale, "بيانات اليوم غير صالحة.");
-                    string dayIso = Read(dayEntry, "businessDate");
-                    long expectedRev = dayEntry["previousRevision"]?.GetValue<long>() ?? 0;
-                    string expectedBeforeId = Read(dayEntry, "beforeStatusId");
-                    var live = await RangeDaySnapshotAsync(c, tx, personId, dayIso, statusId, ct).ConfigureAwait(false);
-                    if (live is null || live.Revision != expectedRev || live.BeforeId != expectedBeforeId)
-                        return Deny(BridgeErrorCodes.ConflictStale, "تغيّر السجل أو الحالة بعد المعاينة؛ أعد البحث والمعاينة.");
+                    string dayIso = live.Date;
+                    long expectedRev = live.Revision;
 
                     if (live.HasExistingRecord)
                     {

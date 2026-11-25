@@ -24,6 +24,8 @@ FILES={
  "review_tests":"tests/AlTamam.UnitTests/NativeAttendanceReviewPhase4Tests.cs",
  "closed_vm":"src/AlTamam.NativePresentation/NativeClosedDayCorrectionReview.cs",
  "closed_tests":"tests/AlTamam.UnitTests/NativeClosedDayCorrectionPhase10Tests.cs",
+ "closed_service":"src/AlTamam.Application/Bridge/ClosedDayCorrectionService.cs",
+ "closed_integration":"tests/AlTamam.Tests/Bridge/ClosedDayCorrectionIntegrationTests.cs",
  "reader":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
  "register_vm":"src/AlTamam.NativePresentation/NativeAutoPreparedRegisterViewModel.cs",
  "register_xaml":"src/AlTamam.NativeDesktop/Views/NativeAutoPreparedRegisterView.xaml",
@@ -133,6 +135,25 @@ def problems(contents):
                   "Forged_preview_and_changed_context_cannot_commit",
                   "Uncertain_receipt_reuses_same_operation_and_disallows_new_preview"):
         need("closed_tests",token)
+    # A business-error response does not roll back ExecuteInWriteTransactionAsync.
+    # All range-day conflicts must be resolved before consuming the token or
+    # entering the mutation loop.
+    source = contents["closed_service"]
+    for token in ("var verifiedDays = new List<RangeDayState>(days.Count);",
+                  "verifiedDays.Add(live);", "long? consumedRange",
+                  "foreach (var live in verifiedDays)",
+                  'live.BeforeName != Read(dayEntry, "beforeStatusName")',
+                  'live.AssignmentId != Read(dayEntry, "assignmentId")',
+                  'live.AfterName != Read(dayEntry, "afterStatusName")',
+                  "var rangeResult = new JsonObject"):
+        need("closed_service", token)
+    verified = source.find("verifiedDays.Add(live);")
+    consume = source.find("long? consumedRange")
+    writes = source.find("foreach (var live in verifiedDays)")
+    end = source.find("var rangeResult = new JsonObject")
+    if not (0 <= verified < consume < writes < end) or "return Deny(" in source[writes:end]:
+        errors.append("Historical range must validate every day before any mutation; no partial conflict return.")
+    need("closed_integration", "HistoricalRangeCorrection_StaleLastDayRejectsEntireRangeWithoutPartialWrites")
     for key in ("register_vm","review_vm","closed_vm","host"):
         for forbidden in ("new AttendanceCommitService", "ExecuteInWriteTransactionAsync(",
                           "RunPendingAsync(", "new BridgePrincipal("):
@@ -152,6 +173,9 @@ if __name__=="__main__":
         ("review_backend",'revise ? "ReviseTodayAttendance" : "SubmitAttendance"'),
         ("review_vm","draft.IsInitial != _initial"),
         ("closed_vm","response.Request != request"),
+        ("closed_service","verifiedDays.Add(live);"),
+        ("closed_service","foreach (var live in verifiedDays)"),
+        ("closed_integration","HistoricalRangeCorrection_StaleLastDayRejectsEntireRangeWithoutPartialWrites"),
         ("closed_vm","result.RevisionNumber != preview.PreviousRevision + 1"),
         ("review_backend",'data.ContainsKey("days")'),
         ("review_backend","AttendanceDateRangePolicy.TryParse"),
