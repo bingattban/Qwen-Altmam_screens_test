@@ -140,6 +140,67 @@ public sealed class NativeMonthlyAttendancePhase7Tests
         Assert.NotEmpty(vm.LoadError);
     }
 
+    [Fact]
+    public async Task Explicit_current_month_archive_is_distinct_from_live_month_and_preserves_scope()
+    {
+        var reader = new Reader { Total = 150 };
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => Actor);
+        await vm.RefreshAsync();
+        Assert.False(vm.IsArchiveMode);
+        Assert.False(reader.Requests[^1].ExplicitArchive);
+        await vm.SelectSiteAsync("SITE-A");
+        await vm.SearchAsync("أحمد");
+        await vm.NextPageAsync();
+        await vm.ShowCurrentArchiveAsync();
+        Assert.True(vm.IsArchiveMode);
+        Assert.Equal(Current, vm.SelectedPeriod);
+        Assert.True(reader.Requests[^1].ExplicitArchive);
+        Assert.Equal(1, reader.Requests[^1].Page);
+        Assert.Equal("SITE-A", reader.Requests[^1].SiteId);
+        Assert.Equal("أحمد", reader.Requests[^1].SearchTerm);
+        await vm.NextPageAsync();
+        Assert.True(reader.Requests[^1].ExplicitArchive);
+        await vm.ShowLiveMonthAsync();
+        Assert.False(vm.IsArchiveMode);
+        Assert.False(reader.Requests[^1].ExplicitArchive);
+        Assert.Equal(1, reader.Requests[^1].Page);
+        await vm.SelectPeriodAsync(Previous);
+        Assert.True(vm.IsArchiveMode);
+        Assert.True(reader.Requests[^1].ExplicitArchive);
+        await vm.SelectPeriodAsync(Current);
+        Assert.True(vm.IsArchiveMode);
+        Assert.True(reader.Requests[^1].ExplicitArchive);
+        vm.Clear();
+        Assert.False(vm.IsArchiveMode);
+        Assert.Empty(vm.Rows);
+    }
+
+    [Fact]
+    public async Task Archive_mode_commands_require_live_session_and_catalogue()
+    {
+        NativeIdentity? live = null;
+        var reader = new Reader();
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => live);
+        Assert.False(vm.ShowCurrentArchiveCommand.CanExecute(null));
+        await vm.ShowCurrentArchiveAsync();
+        await vm.ShowLiveMonthAsync();
+        Assert.Empty(reader.Requests);
+        live = Actor;
+        await vm.RefreshAsync();
+        Assert.True(vm.ShowCurrentArchiveCommand.CanExecute(null));
+        await vm.ShowCurrentArchiveAsync();
+        Assert.True(vm.ShowLiveMonthCommand.CanExecute(null));
+        live = Actor with { SessionNonce = "REPLACED" };
+        int count = reader.Requests.Count;
+        Assert.False(vm.ShowLiveMonthCommand.CanExecute(null));
+        await vm.ShowLiveMonthAsync();
+        Assert.Equal(count, reader.Requests.Count);
+        Assert.Empty(vm.Rows);
+        Assert.False(vm.IsDataConnected);
+    }
+
     private sealed class Reader : INativeMonthlyAttendanceReader
     {
         public int Catalogues;
