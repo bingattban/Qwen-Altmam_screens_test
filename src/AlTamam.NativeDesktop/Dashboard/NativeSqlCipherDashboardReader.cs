@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -69,6 +69,49 @@ public sealed class NativeSqlCipherDashboardReader(
         if (!snapshot.Matches(filter))
             throw new InvalidDataException("Canonical audit rows invalid or changed during read.");
         return snapshot;
+    }
+
+    // Read the canonical immutable entry and verify that the presentation revision
+    // still matches the selected list row. Do not expose the overlay history here.
+    public async Task<NativeAuditDetail> ReadAuditDetailAsync(NativeIdentity actor,NativeAuditRow row,
+        CancellationToken ct=default)
+    {
+        if (row is null || !row.IsValid)
+            throw new InvalidDataException("Invalid audit selection.");
+        if (row.IsTombstoned && !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
+            throw new UnauthorizedAccessException("Hidden audit detail denied.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var response=await new AuditOverlayService(database).GetAuditEntryDetailsAsync(
+            new JsonObject { ["auditEventId"]=row.AuditEventId },ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"GetAuditEntryDetails");
+        int version=0;
+        bool hidden=false;
+        foreach (var node in RequiredArray(data,"overlays"))
+        {
+            var overlay=RequireObject(node);
+            if (RequiredNumber(overlay,"overlayVersion")!=++version)
+                throw new InvalidDataException("Noncontiguous canonical audit overlay history.");
+            hidden=RequiredBoolean(overlay,"isTombstoned");
+        }
+        // A formerly visible row may have been hidden since the list was read.
+        if (hidden && !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
+            throw new UnauthorizedAccessException("Hidden audit detail denied.");
+        var detail=new NativeAuditDetail(RequiredText(data,"auditEventId"),
+            RequiredText(data,"operationCode"),RequiredText(data,"operationArabicName"),
+            RequiredText(data,"actorUserId"),RequiredText(data,"actorUsername"),
+            data["actorRosterFullName"]?.GetValue<string>()??"",
+            RequiredText(data,"targetEntityType"),RequiredText(data,"targetEntityId"),
+            RequiredText(data,"targetDisplay"),RequiredText(data,"rawDescription"),
+            data["reason"]?.GetValue<string>()??"",RequiredText(data,"effectiveLocalDate"),
+            RequiredText(data,"executedAtUtc"),RequiredText(data,"correlationId"),
+            RequiredText(data,"eventHash"),RequiredText(data,"priorEventHash"),
+            data["oldValue"]?.ToJsonString(),data["newValue"]?.ToJsonString(),
+            hidden,version,RequiredBoolean(data,"chainValid"));
+        if (!detail.Matches(row,actor.Role))
+            throw new InvalidDataException("Audit detail or presentation revision changed.");
+        return detail;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
