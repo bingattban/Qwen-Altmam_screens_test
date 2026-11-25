@@ -286,8 +286,8 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
             if (version != _generation || linked.IsCancellationRequested) return;
             if (!CanRead) { Close(); return; }
             Validate(result, request);
-            var sites = (NativeReportFilterOption[])[new("", "جميع المواقع"), ..result.AvailableSites];
-            var statuses = (NativeReportFilterOption[])[new("", "جميع الحالات"), ..result.AvailableStatuses];
+            NativeReportFilterOption[] sites = [new("", "جميع المواقع"), ..result.AvailableSites];
+            NativeReportFilterOption[] statuses = [new("", "جميع الحالات"), ..result.AvailableStatuses];
             if (!_siteOptions.SequenceEqual(sites)) _siteOptions = sites;
             if (!_statusOptions.SequenceEqual(statuses)) _statusOptions = statuses;
             _report = result;
