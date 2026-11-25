@@ -38,7 +38,7 @@ public static class PersonnelGroupExcelWorkbook
             throw new InvalidDataException("Historical text exceeds safe Excel text limit.");
         return value;
     }
-    private sealed record Sheet(string Name, string[] Headings,
+    internal sealed record Sheet(string Name, string[] Headings,
         IReadOnlyList<string[]> Rows);
 
     public static void Write(Stream output, JsonObject original,
@@ -107,6 +107,15 @@ public static class PersonnelGroupExcelWorkbook
             new("حالات الأفراد", ["معرف الفرد الثابت", "الاسم الحالي",
                 "معرف الحالة", "الحالة التاريخية", "أيام التحضير"], personStatusRows)
         };
+        WriteSheets(output, sheets, "التقرير التاريخي الجماعي", descriptor);
+    }
+
+    // Shared OOXML packaging only: callers supply distinct canonical projections.
+    internal static void WriteSheets(Stream output, IReadOnlyList<Sheet> sheets,
+        string title, string descriptor)
+    {
+        SafeText(title);
+        SafeText(descriptor);
         foreach (var sheet in sheets)
         {
             if (sheet.Rows.Count > 1048573) // 3 heading/metadata rows.
@@ -138,7 +147,7 @@ public static class PersonnelGroupExcelWorkbook
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml");
             ContentType(w, "/xl/styles.xml",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml");
-            for(int i=1;i<=sheets.Length;i++)
+            for(int i=1;i<=sheets.Count;i++)
                 ContentType(w, $"/xl/worksheets/sheet{i}.xml",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
             w.WriteEndElement();
@@ -148,11 +157,11 @@ public static class PersonnelGroupExcelWorkbook
              "xl/workbook.xml")));
         Part(zip,"xl/_rels/workbook.xml.rels",w =>
         {
-            var relations = Enumerable.Range(1,sheets.Length)
+            var relations = Enumerable.Range(1,sheets.Count)
                 .Select(i => ($"rId{i}",
                     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
                     $"worksheets/sheet{i}.xml"))
-                .Append(($"rId{sheets.Length+1}",
+                .Append(($"rId{sheets.Count+1}",
                     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
                     "styles.xml")).ToArray();
             Relationships(w,relations);
@@ -163,7 +172,7 @@ public static class PersonnelGroupExcelWorkbook
             w.WriteStartElement("workbook",Ns);
             w.WriteAttributeString("xmlns","r",null,RelNs);
             w.WriteStartElement("sheets",Ns);
-            for(int i=0;i<sheets.Length;i++)
+            for(int i=0;i<sheets.Count;i++)
             {
                 w.WriteStartElement("sheet",Ns);
                 w.WriteAttributeString("name",sheets[i].Name);
@@ -176,7 +185,7 @@ public static class PersonnelGroupExcelWorkbook
                 sheets.Select(s => (s.Name,3)).ToArray());
             w.WriteEndElement();
         });
-        for(int i=0;i<sheets.Length;i++)
+        for(int i=0;i<sheets.Count;i++)
         {
             Sheet sheet=sheets[i];
             Part(zip,$"xl/worksheets/sheet{i+1}.xml",w =>
@@ -197,7 +206,7 @@ public static class PersonnelGroupExcelWorkbook
                 w.WriteEndElement();
                 ExcelReportLayout.Columns(w,sheet.Headings);
                 w.WriteStartElement("sheetData",Ns);
-                WriteRow(w,1,["التمام اليومي — التقرير التاريخي الجماعي / "+sheet.Name],3);
+                WriteRow(w,1,["التمام اليومي — "+title+" / "+sheet.Name],3);
                 WriteRow(w,2,[descriptor],3);
                 WriteRow(w,3,sheet.Headings,3);
                 for(int row=0;row<sheet.Rows.Count;row++)
