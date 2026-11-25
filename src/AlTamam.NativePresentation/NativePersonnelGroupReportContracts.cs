@@ -29,8 +29,8 @@ public sealed record NativePersonnelGroupPerson(
     IReadOnlyList<NativePersonnelReportStatusTotal> StatusTotals)
 {
     public IReadOnlyList<NativeGroupCustomField> CustomFields { get; init; } = [];
-    public string Rank => CustomFields.FirstOrDefault(field =>
-        field.Caption.Trim() is "الرتبة" or "رتبة")?.Value ?? "";
+    public string Rank => CustomFields.FirstOrDefault(customField =>
+        customField.Caption.Trim() is "الرتبة" or "رتبة")?.Value ?? "";
 }
 
 // Current visible values, never reconstructed historical values.
