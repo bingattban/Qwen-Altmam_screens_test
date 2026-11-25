@@ -103,8 +103,100 @@ public sealed class NativeDailyBulkReviewPhase6Tests
         Assert.False(vm.Review.IsOpen);
     }
 
+    [Fact]
+    public async Task Daily_review_freezes_roster_scope_until_cancelled()
+    {
+        var backend = new Reader();
+        var vm = new DailyAttendancePageViewModel();
+        vm.AttachReader(backend, () => Owner);
+        await vm.RefreshAsync();
+        var rows = vm.Rows;
+        Assert.True(vm.SetSelectedRows([rows[0]]));
+        await vm.OpenSelectedReviewAsync();
+        vm.Review.ChooseStatus("STS-ABSENT");
+        await vm.Review.PreviewAsync();
+        Assert.True(vm.Review.HasPreview);
+        Assert.False(vm.CanChangeRosterScope);
+        Assert.False(vm.RefreshCommand.CanExecute(null));
+        Assert.False(vm.SearchCommand.CanExecute(null));
+        await vm.RefreshAsync();
+        await vm.SelectSiteAsync("SITE-1");
+        await vm.SelectStatusAsync("STS-PRESENT");
+        await vm.SearchAsync("another");
+        await vm.NextPageAsync();
+        await vm.PreviousPageAsync();
+        Assert.Same(rows, vm.Rows);
+        Assert.Equal("", vm.SelectedSiteId);
+        Assert.Equal("", vm.SelectedStatusId);
+        Assert.Equal("", vm.SearchDraft);
+        Assert.Equal(1, backend.ReadCalls);
+        Assert.True(vm.Review.HasPreview);
+        Assert.Equal(0, backend.CommitCalls);
+        vm.Review.Cancel();
+        Assert.True(vm.CanChangeRosterScope);
+        await vm.SelectSiteAsync("SITE-1");
+        Assert.Equal(2, backend.ReadCalls);
+        Assert.Equal("SITE-1", vm.SelectedSiteId);
+        Assert.Equal(0, vm.SelectedCount);
+    }
+
+    [Fact]
+    public async Task Verified_commit_refreshes_once_and_clears_selection_but_keeps_receipt()
+    {
+        var backend = new Reader();
+        var vm = new DailyAttendancePageViewModel();
+        vm.AttachReader(backend, () => Owner);
+        await vm.RefreshAsync();
+        Assert.True(vm.SetSelectedRows([vm.Rows[0], vm.Rows[1]]));
+        await vm.OpenSelectedReviewAsync();
+        vm.Review.ChooseStatus("STS-ABSENT");
+        await vm.Review.PreviewAsync();
+        await vm.Review.ConfirmAsync();
+        Assert.Equal(2, backend.ReadCalls);
+        Assert.Equal(1, backend.CommitCalls);
+        Assert.Equal(0, vm.SelectedCount);
+        Assert.True(vm.Review.IsCompleted);
+        Assert.True(vm.Review.IsOpen);
+        Assert.Equal("AUDIT-BULK", vm.Review.AuditEventId);
+        Assert.False(vm.CanChangeRosterScope);
+        vm.Review.Cancel();
+        Assert.True(vm.CanChangeRosterScope);
+    }
+
+    [Fact]
+    public async Task Unverified_commit_freezes_scope_and_preserves_original_intent()
+    {
+        var backend = new Reader { FailCommit = true };
+        var vm = new DailyAttendancePageViewModel();
+        vm.AttachReader(backend, () => Owner);
+        await vm.RefreshAsync();
+        Assert.True(vm.SetSelectedRows([vm.Rows[0]]));
+        await vm.OpenSelectedReviewAsync();
+        vm.Review.ChooseStatus("STS-ABSENT");
+        await vm.Review.PreviewAsync();
+        await vm.Review.ConfirmAsync();
+        Assert.True(vm.Review.HasUnverifiedCommit);
+        Assert.False(vm.CanChangeRosterScope);
+        await vm.SearchAsync("different");
+        await vm.RefreshAsync();
+        vm.Review.Cancel();
+        Assert.True(vm.Review.HasUnverifiedCommit);
+        Assert.Equal(1, backend.ReadCalls);
+        Assert.Equal(1, backend.CommitCalls);
+        Assert.Equal(1, vm.SelectedCount);
+        backend.FailCommit = false;
+        await vm.Review.ConfirmAsync();
+        Assert.Equal(2, backend.CommitCalls);
+        Assert.Equal(2, backend.ReadCalls);
+        Assert.Equal(backend.OperationIds[0], backend.OperationIds[1]);
+        Assert.True(vm.Review.IsCompleted);
+    }
+
     private sealed class Reader : INativeDashboardReader, INativeAttendanceReviewBackend
     {
+        public int ReadCalls;
+        public bool FailCommit;
+        public List<string> OperationIds = [];
         public int ChoicesCalls;
         public int PreviewCalls;
         public int CommitCalls;
@@ -114,6 +206,7 @@ public sealed class NativeDailyBulkReviewPhase6Tests
             NativeIdentity actor, NativeDashboardFilter filter,
             CancellationToken ct = default)
         {
+            ReadCalls++;
             NativeDashboardRow[] rows = filter.SearchTerm == ""
                 ? Enumerable.Range(1, 3).Select(i =>
                     new NativeDashboardRow($"P-{i}", $"A-{i}", $"فرد {i}",
@@ -153,6 +246,8 @@ public sealed class NativeDailyBulkReviewPhase6Tests
             CancellationToken ct = default)
         {
             CommitCalls++;
+            OperationIds.Add(operationId);
+            if (FailCommit) throw new IOException("Simulated lost commit response.");
             return Task.FromResult(new NativeAttendanceCommitReceipt(
                 LastPreviewIds.Length, "AUDIT-BULK"));
         }
