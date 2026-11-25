@@ -25,7 +25,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     private CancellationTokenSource? _pending;
     private int _generation;
     private string _period = CurrentMonth(), _site = "", _searchDraft = "", _term = "";
-    private bool _loading, _connected, _hasNext, _catalogueLoaded;
+    private bool _loading, _connected, _hasNext, _catalogueLoaded, _explicitArchive;
     private string _error = "";
     private int _page = 1;
     private long _total;
@@ -48,6 +48,10 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
             _ => CanRead && CanChangeMonthlyScope && !_loading && _page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
             _ => CanRead && CanChangeMonthlyScope && !_loading && _hasNext);
+        ShowCurrentArchiveCommand = new NativeCommand(_ => _ = ShowCurrentArchiveAsync(),
+            _ => CanSwitchMonthMode && (_period != CurrentMonth() || !IsArchiveMode));
+        ShowLiveMonthCommand = new NativeCommand(_ => _ = ShowLiveMonthAsync(),
+            _ => CanSwitchMonthMode && IsArchiveMode);
         CloseCellDetailsCommand = new NativeCommand(_ => CloseCellDetails(),
             _ => IsCellDetailsOpen && CanChangeMonthlyScope);
         OpenCorrectionCommand = new NativeCommand(_ => _ = OpenCorrectionAsync(), _ => CanOpenCorrection);
@@ -137,6 +141,12 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     public NativeMonthlyExcelExportViewModel Excel { get; }
     public string RankColumnLabel => "الرتبة";
     public string SelectedPeriod => _period;
+    public bool IsArchiveMode => _explicitArchive || _period != CurrentMonth();
+    public string MonthModeLabel => IsArchiveMode ? "أرشيف الشهر — جميع الهويات التاريخية" : "التمام الجاري — القوة الحالية";
+    private bool CanSwitchMonthMode => CanRead && _catalogueLoaded && !_loading &&
+        CanChangeMonthlyScope && !Excel.IsBusy && _boundActor is not null && _liveActor?.Invoke() == _boundActor;
+    public ICommand ShowCurrentArchiveCommand { get; }
+    public ICommand ShowLiveMonthCommand { get; }
     public string SelectedSiteId => _site;
     public string SearchDraft
     {
@@ -301,6 +311,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         _boundActor = null;
         _catalogueLoaded = false;
         _period = CurrentMonth();
+        _explicitArchive = false;
         _site = "";
         _term = "";
         _searchDraft = "";
@@ -310,7 +321,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         HideRows("");
         Changed(nameof(Periods), nameof(SiteOptions),
             nameof(SelectedPeriod), nameof(SelectedSiteId),
-            nameof(SearchDraft), nameof(Page));
+            nameof(IsArchiveMode), nameof(MonthModeLabel), nameof(SearchDraft), nameof(Page));
     }
 
     private void HideRows(string message)
@@ -385,7 +396,8 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
                 _term.Length > 100 || _term.Any(char.IsControl))
                 throw new InvalidDataException("Invalid monthly archive filter.");
 
-            var filter = new NativeMonthlyFilter(_period, _site, _term, _page, 100);
+            var filter = new NativeMonthlyFilter(_period, _site, _term, _page, 100)
+                { ExplicitArchive = IsArchiveMode };
             NativeMonthlySnapshot result = await _reader.ReadMonthAsync(actor, filter, linked.Token);
             if (request != _generation || linked.IsCancellationRequested ||
                 _liveActor?.Invoke() != actor) return;
@@ -444,8 +456,33 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         }
         if (_period == period) return;
         _period = period!;
+        _explicitArchive = true;
         _page = 1;
-        Changed(nameof(SelectedPeriod), nameof(PageLabel), nameof(Page));
+        Changed(nameof(SelectedPeriod), nameof(IsArchiveMode), nameof(MonthModeLabel), nameof(PageLabel), nameof(Page));
+        await RefreshAsync(ct);
+    }
+
+    public Task ShowCurrentArchiveAsync(CancellationToken ct = default) =>
+        SwitchCurrentMonthModeAsync(true, ct);
+
+    public Task ShowLiveMonthAsync(CancellationToken ct = default) =>
+        SwitchCurrentMonthModeAsync(false, ct);
+
+    private async Task SwitchCurrentMonthModeAsync(bool archive, CancellationToken ct)
+    {
+        if (_boundActor is not null && _liveActor?.Invoke() != _boundActor)
+        {
+            Clear();
+            return;
+        }
+        if (!CanSwitchMonthMode || (_period == CurrentMonth() && _explicitArchive == archive)) return;
+        // CurrentMonth can change while the host is open. Read a fresh
+        // authoritative catalogue when the current calendar month rolled over.
+        if (!_periods.Any(p => p.Period == CurrentMonth())) _catalogueLoaded = false;
+        _period = CurrentMonth();
+        _explicitArchive = archive;
+        _page = 1;
+        Changed(nameof(SelectedPeriod), nameof(IsArchiveMode), nameof(MonthModeLabel), nameof(PageLabel), nameof(Page));
         await RefreshAsync(ct);
     }
 
@@ -531,7 +568,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
     {
         foreach (ICommand command in new[] {
             RefreshCommand, SearchCommand, ClearSearchCommand,
-            PreviousPageCommand, NextPageCommand
+            PreviousPageCommand, NextPageCommand, ShowCurrentArchiveCommand, ShowLiveMonthCommand
         })
             if (command is NativeCommand native) native.NotifyAvailabilityChanged();
         Excel.NotifyContextChanged();

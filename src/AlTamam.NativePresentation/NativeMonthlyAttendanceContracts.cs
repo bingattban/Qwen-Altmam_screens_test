@@ -19,7 +19,10 @@ public sealed record NativeMonthlyCatalogue(
     IReadOnlyList<NativeDashboardSite> Sites);
 
 public sealed record NativeMonthlyFilter(
-    string Period, string SiteId, string SearchTerm, int Page, int PageSize = 100);
+    string Period, string SiteId, string SearchTerm, int Page, int PageSize = 100)
+{
+    public bool ExplicitArchive { get; init; }
+}
 
 public sealed record NativeMonthlyCell(
     string Symbol, string Description, string? Color, string MovementNote);

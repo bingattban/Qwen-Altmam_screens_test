@@ -65,12 +65,17 @@
                         VerticalAlignment="Bottom" Command="{Binding ClearSearchCommand}"/>
                 <Button Style="{StaticResource MonthlyButton}" Content="تحديث"
                         VerticalAlignment="Bottom" Command="{Binding RefreshCommand}"/>
+                <Button Style="{StaticResource MonthlyButton}" Content="التمام الجاري"
+                        VerticalAlignment="Bottom" Command="{Binding ShowLiveMonthCommand}"/>
+                <Button Style="{StaticResource MonthlyButton}" Content="أرشيف الشهر الجاري"
+                        VerticalAlignment="Bottom" Command="{Binding ShowCurrentArchiveCommand}"/>
                 <Button Style="{StaticResource MonthlyButton}" Content="معاينة تصدير Excel"
                         VerticalAlignment="Bottom" Command="{Binding Excel.OpenPreviewCommand}"
                         AutomationProperties.Name="معاينة تصدير التمام الشهري إلى Excel قبل التأكيد"/>
             </WrapPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="4,2,4,8">
+            <TextBlock Text="{Binding MonthModeLabel}" FontWeight="SemiBold" Foreground="#0F2942"/>
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
             <TextBlock Text="{Binding LoadError}" TextWrapping="Wrap"
                        Foreground="#BE123C" FontWeight="SemiBold"
