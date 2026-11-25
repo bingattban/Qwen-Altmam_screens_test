@@ -1862,3 +1862,33 @@ local workbook publication, then expose the WPF controls and receipts.
 
 Both exact-head Windows workflows and all automated four-package gates
 remain mandatory before merge. Physical Windows acceptance is separate.
+
+
+## Phase 9 — individual history Excel, part 3: preview and safe publication
+
+Base: `e07fdf9ba811dc098f702cca76fa41828f646b68` (merged #49).
+
+The backend PersonnelIndividualExcelExportService now composes the canonical
+complete-source reader and nine-sheet workbook. Preview performs authorized
+reads and checks the configured local directory without creating a file.
+Its approval fingerprint binds the complete report and the resolved folder.
+Confirmation rereads all histories, requires the same fingerprint, checks
+the local directory policy, generates a unique filename and writes only a
+new temporary file. It rechecks the configured folder and authorization
+before the existing ReportWorkbookCommit verifies, flushes and publishes
+without overwriting. Authorization and cancellation are checked again after
+publication. Failure cleanup targets only files created by this operation;
+filesystem refusal can prevent cleanup, so it is not a guarantee of erasure.
+
+Four test-first SQLCipher integration tests exercise preview without files,
+real nine-sheet publication, identity isolation, changed filters and data,
+revocation after publication, preservation of existing exports, cancellation
+and invalid approval. No new SQL/schema, production entry point or bridge
+action. The native adapter must still supply real role/session checks and
+one-use approval, record export audit metadata, and connect WPF preview,
+confirmation and receipt. The fingerprint alone is not an authorization
+token. The service remains unexposed until those parts are implemented.
+Physical Windows acceptance remains pending; no measured speedup claimed.
+
+Both Windows workflows on the exact final PR SHA and four-package acceptance
+and SHA-256 audit must succeed before merging.
