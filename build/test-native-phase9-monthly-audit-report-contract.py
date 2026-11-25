@@ -12,6 +12,12 @@ PATHS = {
     "original": "src/AlTamam.Application/Bridge/PersonnelReportService.cs",
     "audit_contracts": "src/AlTamam.NativePresentation/NativeAuditReadContracts.cs",
     "audit_tests": "tests/AlTamam.UnitTests/NativeAuditReadPhase11Tests.cs",
+    "audit_list": "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
+    "audit_list_tests": "tests/AlTamam.UnitTests/NativeAuditListPhase11Tests.cs",
+    "audit_shell": "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+    "audit_host": "src/AlTamam.NativeDesktop/MainWindow.xaml",
+    "audit_template": "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+    "audit_nav_tests": "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
     "contracts": "src/AlTamam.NativePresentation/NativePersonnelReportContracts.cs",
     "viewmodel": "src/AlTamam.NativePresentation/NativePersonnelReportViewModel.cs",
     "adapter": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
@@ -42,6 +48,20 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
+    "audit_list": ("_pending?.Cancel()", "generation!=_generation", "AuthorizedActor!=actor",
+                   "result.Matches(filter)", "Array.AsReadOnly(result.Rows.ToArray())",
+                   "CanReviewAuditOverlayHistory(actor.Role)", "_draft=next with { Page=1 }"),
+    "audit_list_tests": ("Audit_list_reads_exact_filters_and_pages_only_on_explicit_request",
+                         "Audit_list_denies_hidden_scope_to_supervisor_and_rejects_bad_echo",
+                         "Audit_list_discards_pending_results_after_clear_or_identity_change",
+                         "Audit_list_cannot_repaint_old_results_after_filter_edit"),
+    "audit_shell": ("Audit.AttachReader(auditReader, () => _active)", "Audit.Clear();",
+                    "screen == NativeScreen.AuditLog", "screen != NativeScreen.AuditLog || Audit.CanRead"),
+    "audit_host": ("present:NativeScreen.AuditLog",),
+    "audit_template": ("vm:NativeAuditPageViewModel", "Binding IncludeTombstoned",
+                       "Binding CanIncludeTombstoned", "Binding SearchCommand",
+                       "Binding NextCommand", 'IsReadOnly="True"'),
+    "audit_nav_tests": ("Audit_navigation_requires_live_reader_and_clears_on_leave_and_logout",),
     "audit_contracts": ("INativeAuditReader", "CanReviewAuditOverlayHistory(role)",
                         "Rows.Count!=Math.Clamp", "row.Sequence!=offset+i+1",
                         "!expected.IncludeTombstoned && row.IsTombstoned", "!ids.Add(row.AuditEventId)"),
@@ -87,7 +107,7 @@ def validate(files):
                 errors.append(f"{key}: missing original report invariant: {token}")
     if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
         errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
-    for key in ("contracts", "viewmodel", "view", "audit_contracts"):
+    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
@@ -115,6 +135,11 @@ if __name__ == "__main__":
         ("original", "GROUP BY SUBSTR(AttendanceLocalDate,1,7),StatusId,StatusNameSnapshot"),
         ("original", "FROM AuditEvents"),
         ("audit_contracts", "CanReviewAuditOverlayHistory(role)"),
+        ("audit_list", "generation!=_generation"),
+        ("audit_list", "AuthorizedActor!=actor"),
+        ("audit_shell", "Audit.AttachReader(auditReader, () => _active)"),
+        ("audit_template", "vm:NativeAuditPageViewModel"),
+        ("audit_list_tests", "Audit_list_cannot_repaint_old_results_after_filter_edit"),
         ("audit_contracts", "!ids.Add(row.AuditEventId)"),
         ("audit_tests", "Hidden_audit_entries_require_administration"),
         ("adapter", "new AuditOverlayService(database).QueryAuditLogAsync"),
