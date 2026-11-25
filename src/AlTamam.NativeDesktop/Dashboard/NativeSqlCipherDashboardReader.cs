@@ -37,7 +37,8 @@ public sealed class NativeSqlCipherDashboardReader(
             principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
             !filter.IsAuthorized(principal.Role))
             throw new UnauthorizedAccessException("Audit session changed.");
-        var response=await new AuditOverlayService(database,services.Time).QueryAuditLogAsync(new JsonObject
+        // The canonical list is read-only and does not use the optional clock.
+        var response=await new AuditOverlayService(database).QueryAuditLogAsync(new JsonObject
         {
             ["term"]=filter.Term,["actor"]=filter.Actor,["target"]=filter.Target,
             ["operation"]=filter.Operation,["fromDate"]=filter.FromDate,["toDate"]=filter.ToDate,

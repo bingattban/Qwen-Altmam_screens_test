@@ -50,7 +50,7 @@ REQUIRED = {
                     "Audit_snapshot_rejects_duplicate_rows_wrong_sequence_and_hidden_leaks",
                     "Audit_snapshot_checks_actual_page_size_and_canonical_offset"),
     "adapter": ("new PersonnelReportService(database)",
-                "new AuditOverlayService(database,services.Time).QueryAuditLogAsync",
+                "new AuditOverlayService(database).QueryAuditLogAsync",
                 "filter.IsAuthorized(principal.Role)", '["includeTombstoned"]=filter.IncludeTombstoned',
                 'RequiredNumber(data,"pageSize")!=NativeAuditFilter.PageSize',
                 'RequiredNumber(data,"count")!=items.Count',
@@ -85,6 +85,8 @@ def validate(files):
         for token in tokens:
             if token not in files[key]:
                 errors.append(f"{key}: missing original report invariant: {token}")
+    if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
+        errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
     for key in ("contracts", "viewmodel", "view", "audit_contracts"):
         for token in FORBIDDEN:
             if token in files[key]:
@@ -115,7 +117,7 @@ if __name__ == "__main__":
         ("audit_contracts", "CanReviewAuditOverlayHistory(role)"),
         ("audit_contracts", "!ids.Add(row.AuditEventId)"),
         ("audit_tests", "Hidden_audit_entries_require_administration"),
-        ("adapter", "new AuditOverlayService(database,services.Time).QueryAuditLogAsync"),
+        ("adapter", "new AuditOverlayService(database).QueryAuditLogAsync"),
         ("contracts", "NativePersonnelReportAuditRecord("),
         ("viewmodel", "report.AuditPage != requested.AuditPage"),
         ("viewmodel", "report.MonthlyTotals.Sum(month => month.Count) != report.AttendanceTotal"),
