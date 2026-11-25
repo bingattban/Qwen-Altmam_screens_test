@@ -24,9 +24,9 @@ public sealed class NativeClosedDayCorrectionPhase10Tests
         Assert.Equal(0, backend.Previews);
         await vm.PreviewAsync("STS-ABSENT", "تصحيح موثق من الإدارة");
         Assert.NotNull(vm.Preview);
-        Assert.Equal(0, backend.Commits.Count);
+        Assert.Empty(backend.Commits);
         await vm.ConfirmAsync();
-        Assert.Equal(1, backend.Commits.Count);
+        Assert.Single(backend.Commits);
         Assert.Equal(8, vm.Receipt!.RevisionNumber);
         Assert.Null(vm.Preview);
     }
