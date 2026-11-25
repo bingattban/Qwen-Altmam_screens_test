@@ -6,7 +6,7 @@ using System.Windows.Input;
 namespace AlTamam.NativePresentation;
 
 /// <summary>
-/// Phase 6 first slice: native, read-only daily attendance. Reuses exactly the
+/// Native daily attendance with explicit reviewed mutations. Reuses exactly the
 /// already-authorized SQLCipher DashboardSummary / QueryDailyRoster service.
 /// Changing site/status/search/page never opens a write or changes attendance.
 /// </summary>
@@ -35,13 +35,13 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public DailyAttendancePageViewModel()
         : base(NativeScreen.DailyAttendance, "التمام اليومي")
     {
-        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanRead);
-        SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanRead);
-        ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanRead);
+        RefreshCommand = new NativeCommand(_ => _ = RefreshAsync(), _ => CanChangeRosterScope);
+        SearchCommand = new NativeCommand(_ => _ = SearchAsync(SearchDraft), _ => CanChangeRosterScope);
+        ClearSearchCommand = new NativeCommand(_ => _ = SearchAsync(""), _ => CanChangeRosterScope);
         PreviousPageCommand = new NativeCommand(_ => _ = PreviousPageAsync(),
-            _ => CanRead && !IsLoading && Page > 1);
+            _ => CanChangeRosterScope && !IsLoading && Page > 1);
         NextPageCommand = new NativeCommand(_ => _ = NextPageAsync(),
-            _ => CanRead && !IsLoading && HasNext);
+            _ => CanChangeRosterScope && !IsLoading && HasNext);
         ReviewPersonCommand = new NativeCommand(
             parameter =>
             {
@@ -51,15 +51,17 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             parameter => parameter is NativeDailyAttendanceRow row && CanReviewPerson(row));
         ReviewSelectedCommand = new NativeCommand(_ => _ = OpenSelectedReviewAsync(),
             _ => CanReviewSelected());
-        Review.Committed += receipt => { _ = RefreshAsync(); };
+        Review.Committed += _ => { _ = RefreshAfterVerifiedCommitAsync(); };
         Review.PropertyChanged += (_, _) =>
         {
-            ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
-            ((NativeCommand)ReviewSelectedCommand).NotifyAvailabilityChanged();
+            Changed(nameof(CanChangeRosterScope));
+            NotifyCommands();
         };
     }
 
     private bool CanRead => _currentPrincipal?.Invoke() is not null && _reader is not null;
+    public bool CanChangeRosterScope => CanRead && !Review.IsOpen &&
+        !Review.IsBusy && !Review.IsCommitting && !Review.HasUnverifiedCommit;
     public override bool IsDataConnected => _connected;
     public override string StatusMessage => IsLoading
         ? "جار قراءة كشف التمام اليومي من قاعدة البيانات المشفرة..."
@@ -75,7 +77,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         get => _searchDraft;
         set
         {
-            if (_searchDraft == value) return;
+            if (!CanChangeRosterScope || _searchDraft == value) return;
             _searchDraft = value ?? "";
             Changed(nameof(SearchDraft));
         }
@@ -208,7 +210,8 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         _statuses = [new("", "جميع الحالات")];
         ClearSensitive("");
         Changed(nameof(SelectedSiteId), nameof(SelectedStatusId),
-            nameof(SearchDraft), nameof(Page), nameof(SiteOptions), nameof(StatusOptions));
+            nameof(SearchDraft), nameof(Page), nameof(SiteOptions), nameof(StatusOptions),
+            nameof(CanChangeRosterScope));
     }
 
     private void ClearSensitive(string error)
@@ -229,7 +232,20 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         NotifyCommands();
     }
 
-    public async Task RefreshAsync(CancellationToken ct = default)
+    public Task RefreshAsync(CancellationToken ct = default)
+    {
+        // Logout and replacement must still clear sensitive data, even with a review open.
+        if (_currentPrincipal?.Invoke() is null ||
+            (_boundPrincipal is not null && _boundPrincipal != _currentPrincipal?.Invoke()))
+            return RefreshCoreAsync(ct);
+        return CanChangeRosterScope ? RefreshCoreAsync(ct) : Task.CompletedTask;
+    }
+
+    private Task RefreshAfterVerifiedCommitAsync() =>
+        Review.IsCompleted && !Review.HasUnverifiedCommit
+            ? RefreshCoreAsync(CancellationToken.None) : Task.CompletedTask;
+
+    private async Task RefreshCoreAsync(CancellationToken ct)
     {
         NativeIdentity? principal = _currentPrincipal?.Invoke();
         if (principal is null || _reader is null) { Clear(); return; }
@@ -314,6 +330,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     public async Task SelectSiteAsync(string siteId, CancellationToken ct = default)
     {
+        if (!CanChangeRosterScope) return;
         siteId ??= "";
         if (siteId != "" && !_sites.Any(x => x.SiteId == siteId))
         {
@@ -329,6 +346,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     public async Task SelectStatusAsync(string statusId, CancellationToken ct = default)
     {
+        if (!CanChangeRosterScope) return;
         statusId ??= "";
         if (statusId != "" && !_statuses.Any(x => x.StatusId == statusId))
         {
@@ -344,6 +362,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     public async Task SearchAsync(string search, CancellationToken ct = default)
     {
+        if (!CanChangeRosterScope) return;
         string term = (search ?? "").Trim();
         if (term.Length > 100 || term.Any(char.IsControl))
         {
@@ -359,6 +378,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     public async Task NextPageAsync(CancellationToken ct = default)
     {
+        if (!CanChangeRosterScope) return;
         if (!_hasNext || _loading) return;
         _page++;
         Changed(nameof(Page));
@@ -367,6 +387,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     public async Task PreviousPageAsync(CancellationToken ct = default)
     {
+        if (!CanChangeRosterScope) return;
         if (_page <= 1 || _loading) return;
         _page--;
         Changed(nameof(Page));
