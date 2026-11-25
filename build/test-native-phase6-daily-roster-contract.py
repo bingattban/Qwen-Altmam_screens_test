@@ -83,7 +83,15 @@ def check(content):
                   "Duplicate_forged_and_expired_group_members_fail_closed",
                   "Selection_is_frozen_during_approved_preview_and_cleared_on_session_logout"):
         needs("bulk_tests", token)
-    if content["bulk_tests"].count("[Fact]") < 6:
+    for token in ("OpenInitialPersonsAsync(", "row.IsUnprepared", "!row.IsTransferDay",
+                  "selection.Select(row => row.IsUnprepared).Distinct().Count() > 1"):
+        needs("vm", token)
+    for token in ("Unprepared_people_use_initial_preview_and_submit_only_after_confirmation",
+                  "Mixed_initial_and_revision_selection_requires_separate_operations",
+                  "Initial_preview_with_wrong_mode_or_previous_status_is_not_approved"):
+        needs("bulk_tests", token)
+    needs("reader", 'IsUnprepared = !transferDay && item["statusId"] is null')
+    if content["bulk_tests"].count("[Fact]") < 9:
         issues.append("Missing bulk-selection xUnit positive/negative coverage.")
     for token in ("DailyAttendance = new DailyAttendancePageViewModel()",
                   "DailyAttendance.AttachReader(reader, () => _active)",
@@ -149,6 +157,9 @@ if __name__ == "__main__":
         ("review_tests", "Forged_or_expired_daily_selection_cannot_open_review"),
         ("bulk_tests", "Duplicate_forged_and_expired_group_members_fail_closed"),
         ("vm", "SetSelectedRows("),
+        ("vm", "OpenInitialPersonsAsync("),
+        ("reader", 'IsUnprepared = !transferDay && item["statusId"] is null'),
+        ("bulk_tests", "Mixed_initial_and_revision_selection_requires_separate_operations"),
         ("vm", "CanChangeRosterScope => CanRead && !Review.IsOpen"),
         ("vm", "Review.IsCompleted && !Review.HasUnverifiedCommit"),
         ("xaml", 'IsEnabled="{Binding CanChangeRosterScope}"'),

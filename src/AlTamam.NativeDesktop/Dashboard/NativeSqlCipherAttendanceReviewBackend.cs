@@ -40,10 +40,20 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         return statuses;
     }
 
-    public async Task<NativeAttendanceRevisionPreview> PreviewAsync(
+    public Task<NativeAttendanceRevisionPreview> PreviewAsync(
         NativeIdentity identity, DateOnly date, string site,
         IReadOnlyList<string> personIds, string statusId, CancellationToken ct = default,
-        NativeAttendanceDateRange? range = null)
+        NativeAttendanceDateRange? range = null) =>
+        PreviewCoreAsync(identity, date, site, personIds, statusId, false, ct, range);
+
+    public Task<NativeAttendanceRevisionPreview> PreviewInitialAsync(
+        NativeIdentity identity, DateOnly date, string site, IReadOnlyList<string> personIds,
+        string statusId, CancellationToken ct = default, NativeAttendanceDateRange? range = null) =>
+        PreviewCoreAsync(identity, date, site, personIds, statusId, true, ct, range);
+
+    private async Task<NativeAttendanceRevisionPreview> PreviewCoreAsync(
+        NativeIdentity identity, DateOnly date, string site, IReadOnlyList<string> personIds,
+        string statusId, bool initial, CancellationToken ct, NativeAttendanceDateRange? range)
     {
         string today = DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) != today ||
@@ -63,7 +73,7 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             ["businessDate"] = today,
             ["siteId"] = site ?? "",
             ["statusId"] = statusId,
-            ["mode"] = "revise",
+            ["mode"] = initial ? "initial" : "revise",
             ["personIds"] = new JsonArray(personIds.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray())
         };
         if (validatedRange is not null)
@@ -85,6 +95,7 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         string? actualStart = data["rangeStartDate"]?.GetValue<string>();
         string? actualEnd = data["rangeEndDate"]?.GetValue<string>();
         if (token.Length < 32 || actual != statusId ||
+            RequiredText(data, "mode") != (initial ? "initial" : "revise") ||
             actualStart != validatedRange?.StartDate ||
             actualEnd != validatedRange?.EndDate ||
             RequiredText(data, "businessDate") != today ||
@@ -94,30 +105,47 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
         var people = selected.Select(node =>
         {
             JsonObject person = RequiredObject(node);
+            if (person["previousRevision"] is not JsonValue revisionValue ||
+                !revisionValue.TryGetValue<long>(out long revision) ||
+                (initial ? revision != 0 || !person.ContainsKey("previousStatusId") ||
+                    person["previousStatusId"] is not null
+                    : revision <= 0 || string.IsNullOrWhiteSpace(RequiredText(person, "previousStatusId"))))
+                throw new InvalidDataException("Canonical preview previous attendance does not match mode.");
             return new NativeAttendancePreviewPerson(
                 RequiredText(person, "personId"),
                 RequiredText(person, "name"),
                 RequiredText(person, "serviceNumberA"),
                 RequiredText(person, "siteName"),
                 RequiredText(person, "previousStatusName"),
-                RequiredText(person, "previousStatusId"));
+                initial ? "" : RequiredText(person, "previousStatusId"));
         }).ToArray();
         if (!people.Select(x => x.PersonId).Order(StringComparer.Ordinal)
                 .SequenceEqual(personIds.Order(StringComparer.Ordinal), StringComparer.Ordinal))
             throw new InvalidDataException("SQLCipher returned unexpected attendance person IDs.");
         return new NativeAttendanceRevisionPreview(
-            token, date, actual, display, people, actualStart, actualEnd);
+            token, date, actual, display, people, actualStart, actualEnd) { IsInitial = initial };
     }
 
-    public async Task<NativeAttendanceCommitReceipt> CommitAsync(
+    public Task<NativeAttendanceCommitReceipt> CommitAsync(
         NativeIdentity identity, string previewToken, string operationId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        CommitCoreAsync(identity, previewToken, operationId, true, ct);
+
+    public Task<NativeAttendanceCommitReceipt> CommitInitialAsync(
+        NativeIdentity identity, string previewToken, string operationId,
+        CancellationToken ct = default) =>
+        CommitCoreAsync(identity, previewToken, operationId, false, ct);
+
+    private async Task<NativeAttendanceCommitReceipt> CommitCoreAsync(
+        NativeIdentity identity, string previewToken, string operationId,
+        bool revise, CancellationToken ct)
     {
         if (previewToken.Length < 32 || operationId.Length is < 16 or > 128 ||
             operationId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
             throw new InvalidDataException("Invalid preview token or immutable operation ID.");
 
-        BridgePrincipal principal = await ResolveAuthorizedAsync(identity, "ReviseTodayAttendance", ct);
+        string action = revise ? "ReviseTodayAttendance" : "SubmitAttendance";
+        BridgePrincipal principal = await ResolveAuthorizedAsync(identity, action, ct);
         using var combined = CancellationTokenSource.CreateLinkedTokenSource(ct, principal.SessionRevocation);
         // One confirmed intent => the SAME previewToken + operationId even
         // after a lost response; do not mint another id or auto-resubmit.
@@ -126,13 +154,14 @@ internal sealed class NativeSqlCipherAttendanceReviewBackend(
             {
                 ["previewToken"] = previewToken,
                 ["operationId"] = operationId
-            }, principal, revise: true, combined.Token);
-        await ResolveAuthorizedAsync(identity, "ReviseTodayAttendance", combined.Token);
+            }, principal, revise: revise, combined.Token);
+        await ResolveAuthorizedAsync(identity, action, combined.Token);
         if (!response.Success || response.Data is not JsonObject data)
             throw new InvalidDataException(response.MessageAr);
         int count = data["count"]?.GetValue<int>() ?? 0;
         string audit = RequiredText(data, "auditEventId");
         if (count is < 1 or > 100 || !audit.StartsWith("AUD-", StringComparison.Ordinal) ||
+            data["revised"]?.GetValue<bool>() != revise ||
             data["auditEventIds"] is not JsonArray audits || audits.Count != count)
             throw new InvalidDataException("Canonical SQLCipher attendance receipt incomplete.");
         return new NativeAttendanceCommitReceipt(count, audit);

@@ -71,7 +71,12 @@ def problems(contents):
     for token in ("new AttendanceCommitService(database)",
                   ".PreviewAsync(payload, principal, combined.Token)",
                   "CommitAsync(new JsonObject", '"previewToken"','"operationId"',
-                  "revise: true", "MutationIdempotency", "ResolveSessionAsync(expected.SessionNonce",
+                  "revise: revise", 'revise ? "ReviseTodayAttendance" : "SubmitAttendance"',
+                  "CommitCoreAsync(identity, previewToken, operationId, true, ct)",
+                  "CommitCoreAsync(identity, previewToken, operationId, false, ct)",
+                  'RequiredText(data, "mode") != (initial ? "initial" : "revise")',
+                  'data["revised"]?.GetValue<bool>() != revise',
+                  "MutationIdempotency", "ResolveSessionAsync(expected.SessionNonce",
                   "ActionManifest.All.Single", "principal.SessionRevocation",
                   "AttendanceDateRangePolicy.TryParse",
                   "NativeAttendanceDateRange.TryCreate",
@@ -82,7 +87,8 @@ def problems(contents):
     for token in ("_operationId = Guid.NewGuid().ToString(\"N\")",
                   "draft.PreviewToken, _operationId", "public async Task ConfirmAsync(",
                   "if (!HasValidActor(actor))", "draft.Persons.Count != _personIds.Length",
-                  "returned.SequenceEqual(_personIds", "ForceCancel()", "IsCommitting"):
+                  "returned.SequenceEqual(_personIds", "ForceCancel()", "IsCommitting", "draft.IsInitial != _initial",
+                  "_backend.PreviewInitialAsync(", "_backend.CommitInitialAsync("):
         need("review_vm",token)
     for token in ("INativeAttendanceReviewBackend", "ReadChoicesAsync(",
                   "_review.PreviewAsync(", "_review.CommitAsync(", "SavedStatusId",
@@ -103,7 +109,7 @@ def problems(contents):
         need("review_xaml",token)
     need("review_code","Key.Escape")
     need("register_code","OnRegisterCheckboxChanged")
-    for t in ("PreviewAttendanceChange", "ReviseTodayAttendance", "GeneralAdministration",
+    for t in ("PreviewAttendanceChange", "ReviseTodayAttendance", "SubmitAttendance", "GeneralAdministration",
               "OrdinaryAdministration", "Supervisor"):
         need("manifest",t)
     if contents["gate_tests"].count("[Fact]") < 5:
@@ -127,6 +133,8 @@ if __name__=="__main__":
         ("host","_backend.StartAutomaticAttendanceScheduler();"),
         ("review_backend","principal.SessionRevocation"),
         ("review_backend",'"operationId"'),
+        ("review_backend",'revise ? "ReviseTodayAttendance" : "SubmitAttendance"'),
+        ("review_vm","draft.IsInitial != _initial"),
         ("review_backend","AttendanceDateRangePolicy.TryParse"),
         ("review_backend","NativeAttendanceDateRange.TryCreate"),
         ("review_backend","actualStart != validatedRange?.StartDate"),

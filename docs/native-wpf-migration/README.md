@@ -2148,3 +2148,22 @@ No SQL, schema, application service, host or packaging workflow changes.
 Remaining: verify native closed-day exception and initial/revision parity,
 monthly lifecycle controls, and manual Windows acceptance. Both exact-head
 Windows workflows and all four package gates are required before merge.
+
+## Phase 10 — initial versus revised daily attendance
+
+Base: `7e536647549031c275462d40a5b8435c85966766` (merged #61).
+
+The native daily roster now carries the canonical null saved status and
+transfer-day flag; initial attendance is not inferred from an Arabic label.
+Only homogeneous non-transfer selections enter the existing reviewed
+pipeline. Initial preview uses mode initial and SubmitAttendance; revisions
+retain mode revise and ReviseTodayAttendance. Preview validates the mode
+and previous revision/status; the commit response must match the operation
+mode. No automatic split, fallback from initial to revision, or new writer.
+The native dialog labels the actual operation. Three new regression cases
+and strengthened existing fatal guards protect initial submit, mixed-group
+rejection and incorrect preview mode/previous status. Existing revision
+entry points remain compatible. Both exact-head Windows workflows and four
+package acceptance/SHA-256 gates are required before merge.
+Closed-day and monthly lifecycle parity and manual native Windows acceptance
+remain pending. No database, SQL, legacy response or packaging changes.
