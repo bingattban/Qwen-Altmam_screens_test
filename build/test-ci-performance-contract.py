@@ -64,7 +64,7 @@ def validate(core: str, release: str) -> list[str]:
         package = release.split("  package:\n", 1)[1].split("  clean-windows-acceptance:\n", 1)[0]
         if "    needs: [preflight, build-test, verify-full-test-shards, webview-e2e]" not in package:
             issues.append("Release packages MUST depend on green preflight, all Release shards and independent attestation")
-        for required in ("runtime: win-x64", "runtime: win-x86",
+        for required in ("\"runtime\":\"win-x64\"", "\"runtime\":\"win-x86\"",
                          "Build Portable ZIP", "compile installer", "SHA-256 checksums",
                          "Upload standalone Portable", "Upload standalone Installer",
                          "Upload checksums and build metadata"):

@@ -1,8 +1,8 @@
 name: Windows Release Packages (Phase 15)
 
-# On EVERY PR and every push to main, test BEFORE publishing the genuine WPF executable and producing BOTH
-# artifacts for EACH architecture (Portable ZIP + Inno Setup installer), verifies runtime
-# dependencies and emits SHA-256 checksums + build metadata.
+# Every PR and main push runs the full tests, then produces a development x86 Portable ZIP.
+# Explicit full dispatch or a v* tag produces all four packages and requires all four
+# genuine acceptance jobs and independent SHA-256 evidence. Development is NOT release evidence.
 # Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
 # explicit owner approval under Phase 15.08; this workflow only uploads CI
 # artifacts for review. No code signing occurs unless the owner provisions the
@@ -12,6 +12,12 @@ name: Windows Release Packages (Phase 15)
 on:
   workflow_dispatch:
     inputs:
+      build_mode:
+        description: 'Development: Portable x86 only; full: all four packages'
+        type: choice
+        required: true
+        default: development
+        options: [development, full]
       version:
         description: 'Release version (e.g. 0.15.0)'
         required: true
@@ -20,7 +26,7 @@ on:
     branches: ['main']
     tags: ['v*']
   # No path filtering: documentation, domain, auth, workflow and test changes
-  # all require the exact same full pre-merge Release test + packaging gate.
+  # all require the exact same full pre-merge Release test gate; package mode is explicit.
   pull_request:
 
 # Only the newest revision of a branch needs a build. Avoid CI overload when
@@ -36,7 +42,8 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   CONFIGURATION: Release
-  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
+  BUILD_MODE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full') || startsWith(github.ref, 'refs/tags/v')) && 'full' || 'development' }}
+  RELEASE_VERSION: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full' && inputs.version) || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
   # PR builds test github.sha (synthetic merge ref), but record the source PR head independently.
   ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -112,6 +119,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
           python build/test-ci-exit-guards.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-build-modes.py
+          if ($LASTEXITCODE -ne 0) { throw 'Development/full release mode contract failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           python build/test-ci-fast-gates.py
@@ -467,11 +476,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: Windows-64bit
-            runtime: win-x64
-          - arch: Windows-32bit
-            runtime: win-x86
+        include: ${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full') || startsWith(github.ref, 'refs/tags/v')) && '[{"arch":"Windows-32bit","runtime":"win-x86"},{"arch":"Windows-64bit","runtime":"win-x64"}]' || '[{"arch":"Windows-32bit","runtime":"win-x86"}]') }}
     env:
       # win-x86 is the .NET runtime identifier for REAL 32-bit Windows.
       # Customer-facing package names are ONLY Windows-32bit / Windows-64bit.
@@ -487,6 +492,14 @@ jobs:
           cache-dependency-path: Directory.Packages.props
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - name: Compile x64 target without packaging (development)
+        if: env.BUILD_MODE == 'development'
+        shell: pwsh
+        run: |
+          dotnet build src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj -c Release -r win-x64 --self-contained true
+          if ($LASTEXITCODE -ne 0) { throw 'x64 host target compilation failed' }
+          dotnet build src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj -c Release -r win-x64 --self-contained true
+          if ($LASTEXITCODE -ne 0) { throw 'x64 native target compilation failed' }
       - name: Stage and verify offline Cairo and Tajawal fonts
         shell: pwsh
         run: |
@@ -545,6 +558,7 @@ jobs:
       - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
         run: python build/validate-layout.py $env:PUBLISH_DIR --portable --arch $env:RUNTIME
       - name: Optional signing (ONLY with owner-provisioned approved certificate)
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         env:
           SMTOOL_USER: ${{ secrets.SMTOOL_USER }}
@@ -607,13 +621,15 @@ jobs:
           Write-Host 'WEBVIEW-SELFCHECK PASS (real Windows WebView2 navigation)'
       - name: Build Portable ZIP (clean directory, real runnable EXE)
         run: |
-          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $output = if ($env:BUILD_MODE -eq 'development') { 'development-artifacts' } else { 'artifacts' }
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
           $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
           Compress-Archive -Path "$env:PUBLISH_DIR\*" `
-            -DestinationPath "artifacts/$portableName" -Force
+            -DestinationPath "$output/$portableName" -Force
         shell: pwsh
         env: { }
       - name: Install Inno Setup 6 (approved tool) and compile installer
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
@@ -633,19 +649,23 @@ jobs:
           $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
           Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/$setupName" -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
+        if: env.BUILD_MODE == 'full'
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
       - name: Verify bytes, checksums and exact tested commit BEFORE upload (05.12)
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           python build/verify-release-artifacts.py artifacts $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
           if ($LASTEXITCODE -ne 0) { throw "Release package provenance or SHA-256 verification failed" }
       - name: Stage byte-identical verified customer outputs in dist/portable and dist/installer
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           python build/stage-phase14-distributions.py artifacts dist $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution provenance or staging failed' }
       # One download contains ONE customer-facing version, never both.
       - name: Upload standalone Portable package for ${{ matrix.arch }}
+        if: env.BUILD_MODE == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
@@ -654,6 +674,7 @@ jobs:
           retention-days: 90
           compression-level: 0
       - name: Upload standalone Installer package for ${{ matrix.arch }}
+        if: env.BUILD_MODE == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
@@ -662,6 +683,7 @@ jobs:
           retention-days: 90
           compression-level: 0
       - name: Upload checksums and build metadata for ${{ matrix.arch }}
+        if: env.BUILD_MODE == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Checksums-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
@@ -671,12 +693,29 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Retain raw publish dir for acceptance testing
+        if: env.BUILD_MODE == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-publish-dir-${{ matrix.arch }}
           path: ${{ env.PUBLISH_DIR }}
           retention-days: 30
           compression-level: 1
+
+      - name: Generate development-only SHA-256 evidence
+        if: env.BUILD_MODE == 'development'
+        shell: pwsh
+        run: |
+          python build/development-artifact.py create development-artifacts "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Development package provenance failed' }
+      - name: Upload development Portable x86 (NOT release candidate)
+        if: env.BUILD_MODE == 'development'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Development-Portable-Windows-32bit-${{ env.RELEASE_VERSION }}
+          path: development-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
   package-acceptance:
     # Four independently verified shipped-binary tests, two per architecture.
@@ -689,23 +728,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [Windows-32bit, Windows-64bit]
-        mode: [Portable, Installer]
+        include: ${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full') || startsWith(github.ref, 'refs/tags/v')) && '[{"arch":"Windows-32bit","mode":"Portable"},{"arch":"Windows-32bit","mode":"Installer"},{"arch":"Windows-64bit","mode":"Portable"},{"arch":"Windows-64bit","mode":"Installer"}]' || '[{"arch":"Windows-32bit","mode":"Portable"}]') }}
     env:
       RUNTIME: ${{ matrix.arch == 'Windows-32bit' && 'win-x86' || 'win-x64' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - uses: actions/download-artifact@v4
+      - name: Download full Portable
+        if: env.BUILD_MODE == 'full'
+        uses: actions/download-artifact@v4
         with:
           name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
           path: artifacts
-      - uses: actions/download-artifact@v4
+      - name: Download full Installer
+        if: env.BUILD_MODE == 'full'
+        uses: actions/download-artifact@v4
         with:
           name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
           path: artifacts
+      - name: Download development Portable
+        if: env.BUILD_MODE == 'development'
+        uses: actions/download-artifact@v4
+        with:
+          name: AlTamam-Development-Portable-Windows-32bit-${{ env.RELEASE_VERSION }}
+          path: development-artifacts
+      - name: Verify development ZIP and run real portable acceptance
+        if: env.BUILD_MODE == 'development'
+        shell: pwsh
+        run: |
+          python build/development-artifact.py verify development-artifacts "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Development SHA-256 verification failed' }
+          $portableName = 'AlTamamDaily_{0}_Portable_win-x86.zip' -f $env:RELEASE_VERSION
+          & ./build/test-package-appdata-preservation.ps1 -PortableArchive "development-artifacts/$portableName" -ExpectedArch win-x86 -AcceptanceMode "Portable"
+          if ($LASTEXITCODE -ne 0) { throw 'Real development Portable acceptance failed' }
       - name: Verify real installed customer binaries and per-user AppData
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
@@ -723,7 +781,7 @@ jobs:
   handover-evidence:
     # Independent same-run x86+x64 customer-file hash verification after the
     # entire Release test and four real package acceptance jobs.
-    name: Phase 15 independent four-package customer SHA256 audit
+    name: Independent package SHA256 audit (development or full release)
     needs: [package, package-acceptance]
     runs-on: windows-latest
     steps:
@@ -732,17 +790,20 @@ jobs:
         with:
           python-version: '3.12'
       - name: Download real current-run Portable Installer and Checksums artifacts
+        if: env.BUILD_MODE == 'full'
         uses: actions/download-artifact@v4
         with:
           pattern: AlTamam-*-rc-${{ env.RELEASE_VERSION }}
           path: Phase15Downloads
           merge-multiple: false
       - name: Independently hash four actual binaries from both architecture jobs
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           python build/verify-phase15-handover.py Phase15Downloads "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA Phase15Evidence/four-package-inventory.json
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 exact-SHA four-file provenance failed' }
       - name: Upload verified candidate JSON (NOT owner acceptance)
+        if: env.BUILD_MODE == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Phase15-FourPackage-Provenance-${{ env.RELEASE_VERSION }}
@@ -750,11 +811,25 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Download development package for independent audit
+        if: env.BUILD_MODE == 'development'
+        uses: actions/download-artifact@v4
+        with:
+          name: AlTamam-Development-Portable-Windows-32bit-${{ env.RELEASE_VERSION }}
+          path: DevelopmentAudit
+      - name: Independently verify development ZIP and exact SHA
+        if: env.BUILD_MODE == 'development'
+        shell: pwsh
+        run: |
+          python build/development-artifact.py verify DevelopmentAudit "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Independent development SHA-256 audit failed' }
+          "Development x86 Portable verified. NOT full release acceptance." >> $env:GITHUB_STEP_SUMMARY
+
   clean-windows-acceptance:
     # The main branch automatically packages TESTED CANDIDATES. It is not a claim
     # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
     # NEVER mark nightly/main artifacts as final released deliverables.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_mode == 'full') || startsWith(github.ref, 'refs/tags/v')
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate
     needs: handover-evidence
     runs-on: windows-latest

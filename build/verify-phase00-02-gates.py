@@ -71,7 +71,7 @@ def collect(root: Path) -> dict:
             "needs: [preflight, build-test, verify-full-test-shards, webview-e2e]",
             "Full deterministic test suite", "Phase 15 independent four-package customer SHA256 audit")),
         "four_package_matrix": all(x in release for x in (
-            "runtime: win-x86", "runtime: win-x64",
+            "\"runtime\":\"win-x86\"", "\"runtime\":\"win-x64\"",
             "Build Portable ZIP", "compile installer")),
         "phase02_integration_on_both": phase2_test in core and phase2_test in release,
         "current_schema_pin_verified": bool(re.search(

@@ -61,7 +61,7 @@ def check(core: str, release: str) -> list[str]:
         problems.append('Strict R01 native evidence must be aggregated from all four independent R01 shards')
     if 'pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1' not in ui:
         problems.append('Independent real Windows E2E must run before packaging')
-    for term in ('runtime: win-x86', 'runtime: win-x64', 'Build Portable ZIP',
+    for term in ('\"runtime\":\"win-x86\"', '\"runtime\":\"win-x64\"', 'Build Portable ZIP',
                  'compile installer', 'SHA-256 checksums', 'verify-release-artifacts.py'):
         if term not in package:
             problems.append('required packaging gate/output missing ' + term)
