@@ -1999,3 +1999,21 @@ No backend request, authorization, publication, database, host, workflow or
 architectural guard changes. Legacy custom-column parity and manual Windows
 acceptance remain pending. Require both exact-head Windows workflows and all
 four package acceptance/SHA-256 gates before merge.
+
+## Phase 9 — group history: per-person status breakdown parity
+
+Base: `208c2b389abb63c90037983f50dedfd8b5fc6a51` (merged #54).
+
+The existing native group report now exposes the canonical per-person
+historical status totals through read-only WPF row details. Selection is
+of one displayed report row; it does not alter the selected report group
+or execute another query. Counts and saved status names remain original
+source values. The VM reconciles individual and group breakdowns for each
+exact status ID and historical label pair, rejecting duplicate pairs or
+inconsistent distributions even when the grand total agrees. Historical
+renames are not collapsed. Three test-first xUnit cases cover immutable
+person separation despite shared display numbers, forged distributions,
+and duplicate pairs. No SQL, schema, export contract, CI or host changes.
+Group historical site/status selectors, cross-page selection, custom-column
+parity and manual Windows acceptance remain pending. Both exact-head
+Windows workflows and four-package acceptance and SHA-256 gates must pass.
