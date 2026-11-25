@@ -67,7 +67,7 @@ public sealed class NativeIndividualExcelViewModel : INotifyPropertyChanged
 
     public async Task OpenPreviewAsync(CancellationToken ct = default)
     {
-        if (!CanOpen) return;
+        if (ct.IsCancellationRequested || !CanOpen) return;
         var actor = _liveActor!.Invoke();
         var report = _source!.Invoke();
         if (actor is null || report is null ||
@@ -118,6 +118,15 @@ public sealed class NativeIndividualExcelViewModel : INotifyPropertyChanged
         if (!CanConfirm)
         {
             if (_open && !SameContext) Close();
+            return;
+        }
+        if (ct.IsCancellationRequested)
+        {
+            // Never consume an approval or call the publisher for a cancelled request.
+            _preview = null;
+            _backend!.InvalidateIndividualExcelApproval();
+            _error = "أُلغي الطلب قبل بدء التصدير. افتح معاينة جديدة للمحاولة.";
+            Changed();
             return;
         }
         var actor = _actor!;
