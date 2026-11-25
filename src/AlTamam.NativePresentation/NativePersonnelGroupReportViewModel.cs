@@ -65,6 +65,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
     public bool IsOpen => _open;
     public bool IsLoading => _busy || _pagingBusy;
     public bool IsPagedPicker => _pageReader is not null;
+    public bool CanSelectRosterRows => CanRead && !_pagingBusy;
     public int RosterPage => _rosterPage;
     public string RosterPageLabel => $"صفحة كشف الاختيار: {_rosterPage}";
     public IReadOnlyList<NativePersonnelDisplayRow> SelectedPeople => _selectedRows;
@@ -622,7 +623,7 @@ public sealed class NativePersonnelGroupReportViewModel : INotifyPropertyChanged
         {
             nameof(IsOpen), nameof(IsLoading), nameof(ErrorMessage),
             nameof(Report), nameof(CandidateRows), nameof(SelectedCount),
-            nameof(SelectedCountLabel), nameof(IsPagedPicker), nameof(RosterPage),
+            nameof(SelectedCountLabel), nameof(IsPagedPicker), nameof(CanSelectRosterRows), nameof(RosterPage),
             nameof(RosterPageLabel), nameof(SelectedPeople), nameof(DateFromDraft), nameof(DateToDraft),
             nameof(MovementTypeDraft), nameof(MovementTypeOptions),
             nameof(SiteFilterOptions), nameof(StatusFilterOptions), nameof(SiteIdDraft), nameof(StatusIdDraft),

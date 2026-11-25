@@ -515,6 +515,32 @@ public sealed class NativePersonnelGroupReportPhase9Tests
         Assert.Equal(0, reader.Reads);
     }
 
+    [Fact]
+    public async Task Paged_picker_total_limit_rejects_addition_without_truncation()
+    {
+        var origin = Enumerable.Range(1, 100)
+            .Select(i => Row("BOUND-" + i.ToString("D3"), i)).ToArray();
+        var reader = new FakeReader();
+        var vm = VM(reader, () => Manager, () => origin);
+        vm.AttachRosterPaging(() => 1, () => true,
+            (_, page, _) => Task.FromResult(new NativeGroupRosterPage(page, false, [Two])));
+        vm.Open(origin);
+        vm.SelectRows(origin);
+        vm.AddPageSelectionCommand.Execute(null);
+        Assert.Equal(100, vm.SelectedCount);
+        await vm.NextRosterPageAsync();
+        vm.SelectRows([Two]);
+        vm.AddPageSelectionCommand.Execute(null);
+        Assert.Equal(100, vm.SelectedCount);
+        Assert.NotEmpty(vm.ErrorMessage);
+        Assert.Null(vm.Report);
+        Assert.DoesNotContain(vm.SelectedPeople, row => row.PersonId == Two.PersonId);
+        vm.RemoveSelectedPersonCommand.Execute(origin[0]);
+        vm.AddPageSelectionCommand.Execute(null);
+        Assert.Equal(100, vm.SelectedCount);
+        Assert.Contains(vm.SelectedPeople, row => row.PersonId == Two.PersonId);
+    }
+
     private sealed class FakeReader : INativePersonnelGroupReportReader
     {
         public NativePersonnelGroupReportRequest? Last;

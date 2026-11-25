@@ -40,7 +40,7 @@
                                VerticalAlignment="Center" TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="اختر الأفراد صراحة من كشف الإدارة الحالي (حتى 100 في الصفحة). يحتفظ التقرير بالمعرف الداخلي لكل فرد ولا يعتمد على الاسم أو الرقم (ع) كمعرف."
+                    <TextBlock Text="اختر الأفراد من الكشف المعتمد ثم أضفهم إلى المجموعة (حتى 100 إجمالا). يحتفظ التقرير بالمعرف الداخلي لكل فرد ولا يعتمد على الاسم أو الرقم (ع) كمعرف."
                                TextWrapping="Wrap" Foreground="#475569"/>
                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
                                TextWrapping="Wrap" FontWeight="SemiBold"
@@ -55,6 +55,7 @@
                         <ListBox x:Name="GroupPeopleSelector"
                                  ItemsSource="{Binding CandidateRows}"
                                  SelectionMode="Multiple" Height="150"
+                                 IsEnabled="{Binding CanSelectRosterRows}"
                                  SelectionChanged="OnGroupSelectionChanged"
                                  AutomationProperties.Name="حدد فردا أو أكثر من كشف الأفراد الحالي للتقرير الجماعي">
                             <ListBox.ItemTemplate>
@@ -69,6 +70,26 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                        <StackPanel Visibility="{Binding IsPagedPicker, Converter={StaticResource GroupVisible}}">
+                            <WrapPanel>
+                                <Button Content="الصفحة السابقة" Command="{Binding PreviousRosterPageCommand}" Style="{StaticResource GroupAction}"/>
+                                <TextBlock Text="{Binding RosterPageLabel}" Margin="8" VerticalAlignment="Center"/>
+                                <Button Content="الصفحة التالية" Command="{Binding NextRosterPageCommand}" Style="{StaticResource GroupAction}"/>
+                                <Button Content="إضافة المحددين" Command="{Binding AddPageSelectionCommand}" Style="{StaticResource GroupAction}"/>
+                            </WrapPanel>
+                            <TextBlock Text="المجموعة المعتمدة — لا يكفي تظليل الصف لإضافته." TextWrapping="Wrap" Foreground="#475569"/>
+                            <ListBox ItemsSource="{Binding SelectedPeople}" MaxHeight="130" AutomationProperties.Name="الأفراد المعتمدون في مجموعة التقرير">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" Margin="5"/>
+                                            <TextBlock Text="{Binding ServiceNumberA}" Margin="5"/>
+                                            <Button Content="إزالة" Command="{Binding DataContext.RemoveSelectedPersonCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
                         <TextBlock Text="{Binding SelectedCountLabel}"
                                    Margin="0,5,0,5" Foreground="#0F2942"
                                    FontWeight="SemiBold"/>
