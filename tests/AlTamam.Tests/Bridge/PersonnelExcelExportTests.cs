@@ -364,6 +364,101 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         Assert.Empty(Directory.GetFiles(_folder,"*.xlsx"));
     }
 
+    private static JsonObject NativeIndividualRequest() => new()
+    {
+        ["personId"]="TST-XLSX-OLD",["dateFrom"]="2026-09-01",
+        ["dateTo"]="2026-10-31",["siteId"]="",["statusId"]="",["movementType"]=0
+    };
+
+    [Fact]
+    public async Task NativeIndividualPreviewIsReadOnly_ConfirmPublishesNineSheets()
+    {
+        var svc=new PersonnelIndividualExcelExportService(_db);
+        var request=NativeIndividualRequest();
+        var preview=await svc.PreviewAsync(request,_=>Task.CompletedTask,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var approved=Assert.IsType<JsonObject>(preview.Data);
+        Assert.Empty(Directory.GetFiles(_folder));
+        Assert.Equal("TST-XLSX-OLD",approved["personId"]!.GetValue<string>());
+        Assert.Equal(1L,approved["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(3L,approved["movementTotal"]!.GetValue<long>());
+        var result=await svc.ExportAsync(request,approved["fingerprint"]!.GetValue<string>(),
+            _=>Task.CompletedTask,CancellationToken.None);
+        Assert.True(result.Success,result.UserMessage);
+        var receipt=Assert.IsType<JsonObject>(result.Data);
+        var file=File(receipt);
+        Assert.Equal(_folder,Path.GetDirectoryName(file));
+        Assert.Equal(9,receipt["sheetCount"]!.GetValue<int>());
+        using(var zip=ZipFile.OpenRead(file))
+        {
+            Assert.Equal(9,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")
+                && e.FullName.EndsWith(".xml")));
+            Assert.Contains("TST-XLSX-OLD",Rows(zip,1).SelectMany(Text));
+            Assert.DoesNotContain("TST-XLSX-NEW",Rows(zip,1).SelectMany(Text));
+        }
+        Assert.Empty(Directory.GetFiles(_folder,"*.part"));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task NativeIndividualRejectsChangedEvidenceAndChangedFilters()
+    {
+        var svc=new PersonnelIndividualExcelExportService(_db);
+        var request=NativeIndividualRequest();
+        var preview=await svc.PreviewAsync(request,_=>Task.CompletedTask,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var fingerprint=Assert.IsType<JsonObject>(preview.Data)["fingerprint"]!.GetValue<string>();
+        var changed=(JsonObject)request.DeepClone();
+        changed["dateFrom"]="2026-10-01";
+        Assert.False((await svc.ExportAsync(changed,fingerprint,_=>Task.CompletedTask,
+            CancellationToken.None)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="UPDATE Persons SET CurrentVisibleName='اسم مصحح' WHERE PersonId='TST-XLSX-OLD';";
+            await cmd.ExecuteNonQueryAsync();
+        }
+        Assert.False((await svc.ExportAsync(request,fingerprint,_=>Task.CompletedTask,
+            CancellationToken.None)).Success);
+        Assert.Empty(Directory.GetFiles(_folder));
+    }
+
+    [Fact]
+    public async Task NativeIndividualRevocationAfterPublicationRemovesOnlyNewWorkbook()
+    {
+        var svc=new PersonnelIndividualExcelExportService(_db);
+        var request=NativeIndividualRequest();
+        string existing=Path.Combine(_folder,"existing.xlsx");
+        await System.IO.File.WriteAllTextAsync(existing,"previous export");
+        var preview=await svc.PreviewAsync(request,_=>Task.CompletedTask,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var fingerprint=Assert.IsType<JsonObject>(preview.Data)["fingerprint"]!.GetValue<string>();
+        Task Authorize(CancellationToken ct)
+        {
+            if(Directory.GetFiles(_folder,"*.xlsx").Length>1)
+                throw new UnauthorizedAccessException();
+            return Task.CompletedTask;
+        }
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(()=>
+            svc.ExportAsync(request,fingerprint,Authorize,CancellationToken.None));
+        Assert.Equal(new[]{existing},Directory.GetFiles(_folder));
+        Assert.Equal("previous export",await System.IO.File.ReadAllTextAsync(existing));
+    }
+
+    [Fact]
+    public async Task NativeIndividualDenialAndCancellationDoNotPublish()
+    {
+        var svc=new PersonnelIndividualExcelExportService(_db);
+        var request=NativeIndividualRequest();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(()=>svc.PreviewAsync(request,
+            _=>Task.FromException(new UnauthorizedAccessException()),CancellationToken.None));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>svc.PreviewAsync(request,
+            _=>Task.CompletedTask,new CancellationToken(true)));
+        Assert.False((await svc.ExportAsync(request,"not-approved",_=>Task.CompletedTask,
+            CancellationToken.None)).Success);
+        Assert.Empty(Directory.GetFiles(_folder));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
