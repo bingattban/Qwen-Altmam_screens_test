@@ -39,4 +39,10 @@ public sealed record NativePersonnelGroupReportSnapshot(
     int MovementType, int DailyStatusPage, bool DailyStatusHasNext,
     IReadOnlyList<NativePersonnelGroupPerson> Persons,
     IReadOnlyList<NativePersonnelReportStatusTotal> StatusTotals,
-    IReadOnlyList<NativePersonnelGroupDailyStatus> DailyStatuses);
+    IReadOnlyList<NativePersonnelGroupDailyStatus> DailyStatuses)
+{
+    // Full historical choices for the selected immutable group, not the
+    // current attendance page or the active filtered result.
+    public IReadOnlyList<NativeReportFilterOption> AvailableSites { get; init; } = [];
+    public IReadOnlyList<NativeReportFilterOption> AvailableStatuses { get; init; } = [];
+}
