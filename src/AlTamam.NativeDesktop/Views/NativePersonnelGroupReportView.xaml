@@ -140,6 +140,17 @@
                             <DataGrid.RowDetailsTemplate>
                                 <DataTemplate>
                                     <StackPanel Background="#F1F5F9" Margin="4">
+                                        <TextBlock Text="الحقول المخصصة الحالية (وليست قيما تاريخية)" FontWeight="SemiBold"
+                                                   Foreground="#0F2942" Margin="8,6"/>
+                                        <DataGrid ItemsSource="{Binding CustomFields}" AutoGenerateColumns="False"
+                                                  IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                                  MaxHeight="125" Margin="8,0,8,8"
+                                                  AutomationProperties.Name="الحقول المخصصة الحالية للفرد المحدد">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="الحقل" Binding="{Binding Caption}" Width="*"/>
+                                                <DataGridTextColumn Header="القيمة الحالية" Binding="{Binding Value}" Width="2*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
                                         <TextBlock Text="تفاصيل حالات الفرد المحدد" FontWeight="SemiBold"
                                                    Foreground="#0F2942" Margin="8,6"/>
                                         <DataGrid ItemsSource="{Binding StatusTotals}" AutoGenerateColumns="False"
@@ -155,8 +166,9 @@
                                 </DataTemplate>
                             </DataGrid.RowDetailsTemplate>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="الاسم الحالي" Binding="{Binding Name}" Width="2*"/>
                                 <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="*"/>
+                                <DataGridTextColumn Header="الرتبة" Binding="{Binding Rank}" Width="*"/>
+                                <DataGridTextColumn Header="الاسم الحالي" Binding="{Binding Name}" Width="2*"/>
                                 <DataGridTextColumn Header="أول تسجيل" Binding="{Binding FirstRecordedDate}" Width="*"/>
                                 <DataGridTextColumn Header="أيام التحضير" Binding="{Binding AttendanceTotal}" Width="*"/>
                                 <DataGridTextColumn Header="الحركات" Binding="{Binding MovementTotal}" Width="*"/>
