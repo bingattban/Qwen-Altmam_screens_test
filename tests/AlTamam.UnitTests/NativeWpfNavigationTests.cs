@@ -9,11 +9,11 @@ public sealed class NativeWpfNavigationTests
     [Fact]
     public void Main_navigation_includes_all_requested_native_sections()
     {
-        Assert.Equal(6, NativeSections.All.Count);
+        Assert.Equal(7, NativeSections.All.Count);
         Assert.Equal(
-            new[] { "الرئيسية", "التمام اليومي", "التمام الشهري", "الإدارة", "التقارير", "الإعدادات" },
+            new[] { "الرئيسية", "التمام اليومي", "التمام الشهري", "الإدارة", "التقارير", "سجل العمليات", "الإعدادات" },
             NativeSections.All.Select(section => section.Title).ToArray());
-        Assert.Equal(6, NativeSections.All.Select(section => section.Screen).Distinct().Count());
+        Assert.Equal(7, NativeSections.All.Select(section => section.Screen).Distinct().Count());
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class NativeWpfNavigationTests
     public void Unauthenticated_pages_never_claim_access_to_protected_personnel_data()
     {
         var vm = new NativeShellViewModel();
-        // All six native sections, including the newly connected personnel
+        // All seven native sections, including the newly connected personnel
         // manager, must fail closed before an authenticated SQLCipher session.
         Assert.All(vm.Pages, page => Assert.False(page.IsDataConnected));
         Assert.Empty(vm.Administration.Rows);
@@ -64,11 +64,46 @@ public sealed class NativeWpfNavigationTests
         Assert.Contains("لم تتصل", vm.Administration.StatusMessage);
     }
 
-    private sealed class FixedNativeBackend : INativeAuthenticationBackend
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task Audit_navigation_requires_live_reader_and_clears_on_leave_and_logout(UserRole role)
+    {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.AuditLog));
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend(role));
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        Assert.True(vm.NavigateCommand.CanExecute(NativeScreen.AuditLog));
+        vm.NavigateCommand.Execute(NativeScreen.AuditLog);
+        Assert.Same(vm.Audit,vm.CurrentPage);
+        Assert.Single(vm.Audit.Rows);
+        Assert.Equal(role==UserRole.GeneralAdministration,vm.Audit.CanIncludeTombstoned);
+        vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+        Assert.Empty(vm.Audit.Rows);
+        vm.NavigateCommand.Execute(NativeScreen.AuditLog);
+        Assert.Single(vm.Audit.Rows);
+        await vm.LogoutAsync();
+        Assert.Empty(vm.Audit.Rows);
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.AuditLog));
+    }
+
+    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader
+    {
+        public Task<NativeDashboardSnapshot> ReadAsync(NativeIdentity principal,NativeDashboardFilter filter,CancellationToken ct=default)
+            => Task.FromResult(new NativeDashboardSnapshot(filter.BusinessDate,filter.SiteId,0,0,0,[],[],[],[],0,filter.Page,false));
+        public Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,CancellationToken ct=default)
+            => Task.FromResult(new NativeAuditSnapshot(filter,1,false,
+                [new("AUD-1",1,"SITE_CREATE","إضافة موقع","admin","المركز","الوصف","الأصل","","2026-01-01",
+                    "2026-01-01T10:00:00Z","تم الاعتماد",new string('a',64),false,0)]));
+    }
+
+    private sealed class FixedNativeBackend(UserRole role=UserRole.GeneralAdministration) : INativeAuthenticationBackend
     {
         private bool _loggedOut;
         private readonly NativeIdentity _identity = new("USR-1", "owner",
-            UserRole.GeneralAdministration, "REAL_SESSION_TOKEN");
+            role, "REAL_SESSION_TOKEN");
 
         public Task<bool> IsProvisionedAsync(CancellationToken ct = default) =>
             Task.FromResult(true);

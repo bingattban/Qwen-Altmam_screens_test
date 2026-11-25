@@ -29,6 +29,68 @@
     <DataTemplate DataType="{x:Type vm:AdministrationPageViewModel}">
         <views:NativePersonnelDirectoryView />
     </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:NativeAuditPageViewModel}">
+        <Grid FlowDirection="RightToLeft">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}"/>
+                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+            </StackPanel>
+            <WrapPanel Grid.Row="1" Margin="0,8">
+                <StackPanel Margin="4"><TextBlock Text="بحث عام"/>
+                    <TextBox Width="145" MaxLength="200" Text="{Binding Term, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="بحث عام في سجل العمليات"/></StackPanel>
+                <StackPanel Margin="4"><TextBlock Text="منفذ العملية"/>
+                    <TextBox Width="125" MaxLength="200" Text="{Binding Actor, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="منفذ العملية"/></StackPanel>
+                <StackPanel Margin="4"><TextBlock Text="المستهدف"/>
+                    <TextBox Width="125" MaxLength="200" Text="{Binding Target, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="المستهدف"/></StackPanel>
+                <StackPanel Margin="4"><TextBlock Text="رمز العملية"/>
+                    <TextBox Width="125" MaxLength="200" Text="{Binding Operation, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="رمز العملية"/></StackPanel>
+                <StackPanel Margin="4"><TextBlock Text="من تاريخ (UTC)"/>
+                    <TextBox Width="125" MaxLength="10" FlowDirection="LeftToRight" Text="{Binding FromDate, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="من تاريخ YYYY-MM-DD"/></StackPanel>
+                <StackPanel Margin="4"><TextBlock Text="إلى تاريخ (UTC)"/>
+                    <TextBox Width="125" MaxLength="10" FlowDirection="LeftToRight" Text="{Binding ToDate, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="إلى تاريخ YYYY-MM-DD"/></StackPanel>
+                <CheckBox Content="إظهار القيود المخفية" Margin="6" VerticalAlignment="Center"
+                          Visibility="{Binding CanIncludeTombstoned, Converter={StaticResource VisibilityIfTrue}}"
+                          IsChecked="{Binding IncludeTombstoned, Mode=TwoWay}"/>
+                <Button Content="بحث" Command="{Binding SearchCommand}" Padding="12,5" Margin="4"/>
+                <Button Content="تحديث" Command="{Binding RefreshCommand}" Padding="12,5" Margin="4"/>
+                <Button Content="مسح الفلاتر" Command="{Binding ClearFiltersCommand}" Padding="12,5" Margin="4"/>
+            </WrapPanel>
+            <StackPanel Grid.Row="2">
+                <TextBlock Text="التواريخ بصيغة YYYY-MM-DD؛ نطاق البحث حسب توقيت UTC للخدمة الأصلية." Foreground="#475569" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+            </StackPanel>
+            <DataGrid Grid.Row="3" Margin="0,8" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                      CanUserSortColumns="False" EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                      SelectionMode="Single" HeadersVisibility="Column" AutomationProperties.Name="كشف سجل العمليات للقراءة فقط">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="الرقم" Binding="{Binding Sequence}" Width="55"/>
+                    <DataGridTextColumn Header="العملية" Binding="{Binding OperationName}" Width="135"/>
+                    <DataGridTextColumn Header="المنفذ" Binding="{Binding ActorDisplay}" Width="130"/>
+                    <DataGridTextColumn Header="المستهدف" Binding="{Binding TargetDisplay}" Width="130"/>
+                    <DataGridTextColumn Header="الوصف" Binding="{Binding Description}" Width="*"/>
+                    <DataGridTextColumn Header="تاريخ التنفيذ UTC" Binding="{Binding ExecutedAtUtc}" Width="155"/>
+                    <DataGridTextColumn Header="النتيجة" Binding="{Binding Outcome}" Width="90"/>
+                    <DataGridCheckBoxColumn Header="مخفي" Binding="{Binding IsTombstoned, Mode=OneWay}" Width="60"/>
+                </DataGrid.Columns>
+            </DataGrid>
+            <DockPanel Grid.Row="4">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Content="السابق" Command="{Binding PreviousCommand}" Margin="4" Padding="12,5"/>
+                    <Button Content="التالي" Command="{Binding NextCommand}" Margin="4" Padding="12,5"/>
+                </StackPanel>
+                <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            </DockPanel>
+        </Grid>
+    </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
         <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
