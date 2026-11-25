@@ -51,7 +51,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             parameter => parameter is NativeDailyAttendanceRow row && CanReviewPerson(row));
         ReviewSelectedCommand = new NativeCommand(_ => _ = OpenSelectedReviewAsync(),
             _ => CanReviewSelected());
-        Review.Committed += _ => { _ = RefreshAfterVerifiedCommitAsync(); };
+        Review.Committed += receipt => { _ = RefreshAfterVerifiedCommitAsync(); };
         Review.PropertyChanged += (_, _) =>
         {
             Changed(nameof(CanChangeRosterScope));
