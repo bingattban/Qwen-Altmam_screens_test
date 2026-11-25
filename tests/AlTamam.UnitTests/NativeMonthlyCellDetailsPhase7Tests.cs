@@ -112,21 +112,93 @@ public sealed class NativeMonthlyCellDetailsPhase7Tests
         Assert.False(vm.IsCellDetailsLoading);
     }
 
-    private sealed class Reader : INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader
+    [Fact]
+    public async Task Correction_uses_selected_historical_cell_and_refreshes_only_after_verified_receipt()
     {
-        public int DetailReads;
+        var reader = new Reader();
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => Actor);
+        await vm.RefreshAsync();
+        await vm.SelectPeriodAsync(Previous);
+        await vm.OpenCellDetailsAsync(Assert.Single(vm.Rows), 1);
+        Assert.True(vm.CanOpenCorrection);
+        await vm.OpenCorrectionAsync();
+        Assert.True(vm.Correction.IsOpen);
+        Assert.Single(vm.Correction.StatusChoices);
+        var original = vm.Rows;
+        await vm.SearchAsync("another");
+        await vm.RefreshAsync();
+        vm.CloseCellDetails();
+        Assert.Same(original, vm.Rows);
+        Assert.True(vm.IsCellDetailsOpen);
+        vm.Correction.SelectedStatusId = "STS-ABSENT";
+        vm.Correction.Reason = "تصحيح موثق من الإدارة";
+        await vm.Correction.PreviewSelectedAsync();
+        Assert.NotNull(vm.Correction.Preview);
+        Assert.Equal(0, reader.CorrectionCommits);
+        await vm.Correction.ConfirmAsync();
+        Assert.NotNull(vm.Correction.Receipt);
+        Assert.Equal(1, reader.CorrectionCommits);
+        await vm.CloseCorrectionAsync();
+        Assert.False(vm.Correction.IsOpen);
+        Assert.False(vm.IsCellDetailsOpen);
+        Assert.NotSame(original, vm.Rows);
+        Assert.Equal(Previous, vm.SelectedPeriod);
+    }
+
+    [Fact]
+    public async Task Correction_rejects_supervisor_and_discards_late_statuses_on_logout()
+    {
+        var reader = new Reader();
+        NativeIdentity? live = Actor with { Role = UserRole.Supervisor };
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => live);
+        await vm.RefreshAsync();
+        await vm.SelectPeriodAsync(Previous);
+        await vm.OpenCellDetailsAsync(Assert.Single(vm.Rows), 1);
+        Assert.False(vm.CanOpenCorrection);
+        await vm.OpenCorrectionAsync();
+        Assert.Equal(0, reader.ChoiceReads);
+        vm.Clear();
+        live = Actor;
+        await vm.RefreshAsync();
+        await vm.SelectPeriodAsync(Previous);
+        await vm.OpenCellDetailsAsync(Assert.Single(vm.Rows), 1);
+        var pending = new TaskCompletionSource<IReadOnlyList<NativeAttendanceStatusChoice>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.PendingChoices = pending.Task;
+        var opening = vm.OpenCorrectionAsync();
+        Assert.True(vm.Correction.IsOpen);
+        live = null;
+        vm.Clear();
+        pending.SetResult([new("STS-ABSENT", "غائب")]);
+        await opening;
+        Assert.False(vm.Correction.IsOpen);
+        Assert.Empty(vm.Correction.StatusChoices);
+        Assert.Null(vm.SelectedCellDetails);
+    }
+
+    private static string Previous => DateOnly.FromDateTime(DateTime.Now).AddMonths(-1).ToString("yyyy-MM");
+
+    private sealed class Reader : INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
+        INativeClosedDayCorrectionBackend
+    {
+        public int DetailReads, ChoiceReads, CorrectionCommits;
+        public Task<IReadOnlyList<NativeAttendanceStatusChoice>>? PendingChoices;
+        private NativeClosedDayCorrectionRequest? _request;
         public bool ForgeEcho;
         public Task<NativeMonthlyCellDetails>? Pending;
 
         public Task<NativeMonthlyCatalogue> ReadCatalogueAsync(
             NativeIdentity actor, CancellationToken ct = default) =>
             Task.FromResult(new NativeMonthlyCatalogue(
-                [Current], [new NativeDashboardSite("SITE-A", "المركز")]));
+                [Current, Previous], [new NativeDashboardSite("SITE-A", "المركز")]));
 
         public Task<NativeMonthlySnapshot> ReadMonthAsync(
             NativeIdentity actor, NativeMonthlyFilter filter, CancellationToken ct = default)
         {
-            int days = DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month);
+            var period = DateOnly.ParseExact(filter.Period + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            int days = DateTime.DaysInMonth(period.Year, period.Month);
             NativeMonthlyRow[] rows = filter.SearchTerm.Length == 0
                 ? [new("P-1", "123", "أحمد من الكشف", "المركز",
                     ["رقيب"], new NativeMonthlyCell?[days])
@@ -143,6 +215,31 @@ public sealed class NativeMonthlyCellDetailsPhase7Tests
         {
             DetailReads++;
             return Pending ?? Task.FromResult(ValidDetail(request.BusinessDate));
+        }
+
+        public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadCorrectionChoicesAsync(
+            NativeIdentity actor, CancellationToken ct = default)
+        {
+            ChoiceReads++;
+            return PendingChoices ?? Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>(
+                [new("STS-ABSENT", "غائب")]);
+        }
+
+        public Task<NativeClosedDayCorrectionPreview> PreviewAsync(NativeIdentity actor,
+            NativeClosedDayCorrectionRequest request, CancellationToken ct = default)
+        {
+            _request = request;
+            return Task.FromResult(new NativeClosedDayCorrectionPreview(request,
+                new string('a', 64), 2, "أحمد في التاريخ", "987", "الموقع القديم",
+                "STS-PRESENT", "حاضر", "غائب", true));
+        }
+
+        public Task<NativeClosedDayCorrectionReceipt> CommitAsync(NativeIdentity actor,
+            string token, string operationId, CancellationToken ct = default)
+        {
+            CorrectionCommits++;
+            return Task.FromResult(new NativeClosedDayCorrectionReceipt(
+                _request!.PersonId, _request.BusinessDate, 3));
         }
 
         public NativeMonthlyCellDetails ValidDetail(DateOnly date) =>
