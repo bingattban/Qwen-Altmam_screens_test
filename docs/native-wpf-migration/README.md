@@ -2073,3 +2073,23 @@ changes. Custom-field workbook parity and cross-page group selection
 remain pending, as does manual clean-machine Windows acceptance.
 Require both exact-head Windows workflows, four package acceptances and
 independent SHA-256 audit before merge.
+
+## Phase 9 — group XLSX current custom columns
+
+Base: `ee48d405ac988ab3826dc5ac461dc710440ec55f` (merged #57).
+
+The existing four-sheet native group workbook appends the canonical visible
+current custom fields to its persons sheet in metadata order. Captions
+explicitly identify current values; absent values remain blank. Immutable
+field IDs map cells, and duplicate metadata, unknown IDs, malformed values,
+and unsafe XML text fail closed before ZIP creation. The group export
+fingerprint now includes custom column metadata as well as the existing
+per-person values; changes during approval or paging abort export. The
+preview verifies the projection before approval and explains current values.
+Five new test-first scenarios cover actual OOXML, safe literal formula-like
+text, malformed projections and metadata/value fingerprint changes.
+No canonical SQL, legacy response shape, workbook sheet count, database
+schema, host or CI changes. Existing fixed columns retain their order.
+Individual workbook custom-column parity, cross-page group selection and
+manual Windows acceptance remain pending. Both exact-head workflows and
+all four package acceptance and independent SHA-256 gates must pass.
