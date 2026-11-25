@@ -85,6 +85,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         _logoutCommand = new NativeCommand(
             _ => _ = LogoutAsync(),
             _ => IsAuthenticated && !IsBusy);
@@ -139,7 +140,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
            // Never hide a live or ambiguous audited commit by leaving its page.
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
-           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen);
+           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen);
 
     public async Task InitializeAuthenticationAsync(
         INativeAuthenticationBackend backend, CancellationToken ct = default)

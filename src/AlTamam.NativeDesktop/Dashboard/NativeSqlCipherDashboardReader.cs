@@ -16,7 +16,7 @@ namespace AlTamam.NativeDesktop.Dashboard;
 public sealed class NativeSqlCipherDashboardReader(
     BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
-      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend,
+      INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
@@ -2532,6 +2532,14 @@ public sealed class NativeSqlCipherDashboardReader(
     Task<NativeClosedDayCorrectionReceipt> INativeClosedDayCorrectionBackend.CommitAsync(
         NativeIdentity actor, string token, string operationId, CancellationToken ct) =>
         ((INativeClosedDayCorrectionBackend)_review).CommitAsync(actor, token, operationId, ct);
+
+    Task<NativeHistoricalRangePreview> INativeHistoricalRangeBackend.PreviewRangeAsync(
+        NativeIdentity actor, NativeHistoricalRangeRequest request, CancellationToken ct) =>
+        _review.PreviewRangeAsync(actor, request, ct);
+
+    Task<NativeHistoricalRangeReceipt> INativeHistoricalRangeBackend.CommitRangeAsync(
+        NativeIdentity actor, NativeHistoricalRangePreview approved, string operationId, CancellationToken ct) =>
+        _review.CommitRangeAsync(actor, approved, operationId, ct);
 
     public async Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
         NativeIdentity actor, NativeMonthlyCellRequest request,

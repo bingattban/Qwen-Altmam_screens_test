@@ -132,7 +132,7 @@ public sealed class NativeHistoricalRangeReviewPhase10Tests
             LastPreview=new(Forge?request with { PersonId="OTHER" }:request,new string('a',64),"أحمد","123",
                 [new(request.From,false,0,"A-1","SITE-1","المركز","__UNPREPARED__","غير محضر","غياب","غ","#FF0000"),
                  new(request.To,true,7,"A-2","SITE-2","الموقع الثاني","STS-PRESENT","موجود","غياب","غ","#FF0000")],true);
-            return Pending?.Task ?? Task.FromResult(LastPreview);
+            return Pending?.Task ?? Task.FromResult(LastPreview!);
         }
         public Task<NativeHistoricalRangeReceipt> CommitRangeAsync(NativeIdentity actor,NativeHistoricalRangePreview approved,string operationId,CancellationToken ct=default)
         {

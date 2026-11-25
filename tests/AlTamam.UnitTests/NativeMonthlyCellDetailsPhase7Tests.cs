@@ -178,12 +178,46 @@ public sealed class NativeMonthlyCellDetailsPhase7Tests
         Assert.Null(vm.SelectedCellDetails);
     }
 
+    [Fact]
+    public async Task Range_review_freezes_scope_and_refreshes_only_after_verified_receipt()
+    {
+        var reader = new Reader();
+        var vm = new MonthlyAttendancePageViewModel();
+        vm.AttachReader(reader, () => Actor);
+        await vm.RefreshAsync();
+        await vm.SelectPeriodAsync(Previous);
+        await vm.OpenCellDetailsAsync(Assert.Single(vm.Rows), 1);
+        Assert.True(vm.CanOpenRangeCorrection);
+        await vm.OpenRangeCorrectionAsync();
+        Assert.True(vm.RangeCorrection.IsOpen);
+        Assert.False(vm.CanOpenCorrection);
+        var original = vm.Rows;
+        await vm.SearchAsync("another");
+        await vm.RefreshAsync();
+        vm.CloseCellDetails();
+        Assert.Same(original, vm.Rows);
+        Assert.True(vm.IsCellDetailsOpen);
+        vm.RangeCorrection.SelectedStatusId = "STS-ABSENT";
+        vm.RangeCorrection.Reason = "تصحيح موثق من الإدارة";
+        await vm.RangeCorrection.PreviewAsync();
+        Assert.NotNull(vm.RangeCorrection.Preview);
+        Assert.Equal(0, reader.RangeCommits);
+        await vm.RangeCorrection.ConfirmAsync();
+        Assert.NotNull(vm.RangeCorrection.Receipt);
+        Assert.Equal(1, reader.RangeCommits);
+        await vm.CloseRangeCorrectionAsync();
+        Assert.False(vm.RangeCorrection.IsOpen);
+        Assert.False(vm.IsCellDetailsOpen);
+        Assert.NotSame(original, vm.Rows);
+        Assert.Equal(Previous, vm.SelectedPeriod);
+    }
+
     private static string Previous => DateOnly.FromDateTime(DateTime.Now).AddMonths(-1).ToString("yyyy-MM");
 
     private sealed class Reader : INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader,
-        INativeClosedDayCorrectionBackend
+        INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend
     {
-        public int DetailReads, ChoiceReads, CorrectionCommits;
+        public int DetailReads, ChoiceReads, CorrectionCommits, RangeCommits;
         public Task<IReadOnlyList<NativeAttendanceStatusChoice>>? PendingChoices;
         private NativeClosedDayCorrectionRequest? _request;
         public bool ForgeEcho;
@@ -240,6 +274,19 @@ public sealed class NativeMonthlyCellDetailsPhase7Tests
             CorrectionCommits++;
             return Task.FromResult(new NativeClosedDayCorrectionReceipt(
                 _request!.PersonId, _request.BusinessDate, 3));
+        }
+
+        public Task<NativeHistoricalRangePreview> PreviewRangeAsync(NativeIdentity actor,
+            NativeHistoricalRangeRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new NativeHistoricalRangePreview(request, new string('b',64),
+                "أحمد في التاريخ", "987",
+                [new(request.From,true,2,"A-1","SITE-A","الموقع القديم","STS-PRESENT","حاضر","غائب","غ","#FF0000")],true));
+
+        public Task<NativeHistoricalRangeReceipt> CommitRangeAsync(NativeIdentity actor,
+            NativeHistoricalRangePreview approved, string operationId, CancellationToken ct = default)
+        {
+            RangeCommits++;
+            return Task.FromResult(new NativeHistoricalRangeReceipt(approved.Request.PersonId,approved.Request.From,3));
         }
 
         public NativeMonthlyCellDetails ValidDetail(DateOnly date) =>

@@ -222,6 +222,55 @@
                                     <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseCorrectionCommand}" Style="{StaticResource MonthlyButton}"/>
                                 </StackPanel>
                             </Border>
+                            <Button Content="تعديل تمام سابق لفترة محددة" Style="{StaticResource MonthlyButton}"
+                                    Command="{Binding OpenRangeCorrectionCommand}"
+                                    Visibility="{Binding CanOpenRangeCorrection, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                                    Visibility="{Binding RangeCorrection.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                                <StackPanel>
+                                    <TextBlock Text="تعديل تمام سابق — فترة محددة" FontWeight="Bold" Foreground="#0F2942"/>
+                                    <TextBlock Text="حدد من يوم إلى 62 يوما للفرد المحدد. تشمل المعاينة الأيام المؤهلة في جميع مواقعه التاريخية؛ لا تحفظ الأيام غير المدرجة." TextWrapping="Wrap"/>
+                                    <TextBlock Text="من تاريخ (yyyy-MM-dd)" Margin="0,8,0,2"/>
+                                    <TextBox Text="{Binding RangeCorrection.FromText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             MaxLength="10" FlowDirection="LeftToRight" IsEnabled="{Binding RangeCorrection.CanEdit}"
+                                             AutomationProperties.Name="بداية فترة تعديل التمام"/>
+                                    <TextBlock Text="إلى تاريخ (yyyy-MM-dd)" Margin="0,8,0,2"/>
+                                    <TextBox Text="{Binding RangeCorrection.ToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             MaxLength="10" FlowDirection="LeftToRight" IsEnabled="{Binding RangeCorrection.CanEdit}"
+                                             AutomationProperties.Name="نهاية فترة تعديل التمام"/>
+                                    <ComboBox ItemsSource="{Binding RangeCorrection.StatusChoices}" DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="StatusId" SelectedValue="{Binding RangeCorrection.SelectedStatusId, Mode=TwoWay}"
+                                              IsEnabled="{Binding RangeCorrection.CanEdit}" Margin="0,6" AutomationProperties.Name="حالة الفترة الجديدة"/>
+                                    <TextBox Text="{Binding RangeCorrection.Reason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             MaxLength="400" TextWrapping="Wrap" MinHeight="40"
+                                             IsEnabled="{Binding RangeCorrection.CanEdit}" AutomationProperties.Name="سبب تعديل الفترة"/>
+                                    <Button Content="معاينة الأيام قبل التعديل" Command="{Binding RangeCorrection.PreviewCommand}" Style="{StaticResource MonthlyButton}"/>
+                                    <TextBlock Text="{Binding RangeCorrection.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                                    <ProgressBar Height="4" IsIndeterminate="True"
+                                                 Visibility="{Binding RangeCorrection.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                                    <TextBlock Text="{Binding RangeCorrection.Preview.PersonName}" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding RangeCorrection.Preview.ServiceNumberA}"/>
+                                    <TextBlock Text="{Binding RangeCorrection.PreviewSummary}" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding RangeCorrection.Preview.Days}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="5" Margin="0,2" Padding="6">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding BusinessDate, StringFormat=yyyy-MM-dd}" FlowDirection="LeftToRight" HorizontalAlignment="Right" FontWeight="Bold"/>
+                                                        <TextBlock Text="{Binding SiteName}" Foreground="#475569"/>
+                                                        <TextBlock Text="{Binding BeforeStatusName}" TextWrapping="Wrap"/>
+                                                        <TextBlock Text="{Binding AfterStatusName}" Foreground="#0D9488" FontWeight="Bold" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding RangeCorrection.Preview.Request.Reason}" TextWrapping="Wrap"/>
+                                    <Button Content="{Binding RangeCorrection.ConfirmLabel}" Command="{Binding RangeCorrection.ConfirmCommand}" Style="{StaticResource MonthlyButton}"/>
+                                    <TextBlock Text="{Binding RangeCorrection.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                                    <Button Content="إغلاق مراجعة الفترة" Command="{Binding CloseRangeCorrectionCommand}" Style="{StaticResource MonthlyButton}"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

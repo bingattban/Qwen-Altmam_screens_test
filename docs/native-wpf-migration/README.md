@@ -2258,3 +2258,8 @@ This slice does not expose the range operation to the WPF page yet: the
 next slice wires reviewed period selection, per-day preview, same-intent
 retry, session revocation and refresh. Manual Windows acceptance remains
 pending; both exact-head workflows and all four package gates are required.
+
+## Phase 10 — native historical range review UI
+
+Base `e4498fb7fcae7c77be7137595e3b159e4b4ffce3` (merged #68).
+Connect the existing range contract and canonical adapter to the monthly cell details panel. The distinct period review supports 1–62 days up to today, including unprepared days when the canonical service permits them. Immutable PersonId and live authenticated identity anchor the operation; historical name/number changes across dates are allowed and canonical preview identity is displayed. Preview lists only eligible changed days with dates, historical sites, before/after status and omitted-day count. Explicit confirmation, same-operation retry on uncertain outcome, cancellation/late-response isolation, mutual exclusion with single-day correction, frozen scope/navigation and one refresh after verified receipt. No separate database writer, policy/schema change, legacy UI change or package workflow change. Four lifecycle tests plus one monthly integration test and strengthened fatal static checks. Default development build must pass both workflows, real x86 Portable acceptance and independent SHA; full four-package acceptance and physical Windows UAT remain required for final release.
