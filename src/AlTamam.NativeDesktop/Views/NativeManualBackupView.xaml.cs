@@ -28,6 +28,13 @@ public partial class NativeManualBackupView : UserControl
             settings.OpenInspection(picker.FileName);
     }
 
+    private async void OnRestoreClick(object sender,RoutedEventArgs e)
+    {
+        if(DataContext is SettingsPageViewModel settings && settings.Inspection.CanRequestRestore &&
+            Window.GetWindow(this) is MainWindow host)
+            await host.RequestRestoreAsync(settings);
+    }
+
     private void OnChooseFolder(object sender,RoutedEventArgs e)
     {
         if(DataContext is not SettingsPageViewModel settings || !settings.CanOpenBackup) return;
