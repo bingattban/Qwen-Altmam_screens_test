@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -173,6 +173,59 @@ public sealed class NativeSqlCipherDashboardReader(
             !receipt.Matches(request))
             throw new InvalidDataException("Canonical audit edit receipt mismatch.");
         return receipt;
+    }
+
+    // Canonical read-only presentation history, including all versions.
+    public async Task<NativeAuditHistoryPage> ReadAuditHistoryAsync(NativeIdentity actor,
+        NativeAuditHistoryRequest request,CancellationToken ct=default)
+    {
+        if(!RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
+            throw new UnauthorizedAccessException("Audit history denied.");
+        if(request is null || !request.IsValid)
+            throw new InvalidDataException("Invalid audit history request.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !request.IsAuthorized(principal.Role))
+            throw new UnauthorizedAccessException("Audit history session changed.");
+        var response=await new AuditOverlayService(database).QueryAuditPresentationChangesAsync(new JsonObject
+        {
+            ["auditEventId"]=request.AuditEventId,
+            ["page"]=request.Page,
+            ["pageSize"]=NativeAuditHistoryRequest.PageSize
+        },ct,principal).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"QueryAuditPresentationChanges");
+        var items=RequiredArray(data,"items");
+        if(RequiredNumber(data,"page")!=request.Page || RequiredNumber(data,"count")!=items.Count ||
+            items.Count>NativeAuditHistoryRequest.PageSize)
+            throw new InvalidDataException("Canonical audit history page mismatch.");
+        var rows=items.Select(node=>
+        {
+            var item=RequireObject(node);
+            NativeAuditEditState ReadState(string key)
+            {
+                var state=RequireObject(item[key]);
+                return new(RequiredNumber(state,"overlayVersion"),RequiredBoolean(state,"isTombstoned"),
+                    RequiredText(state,"displayDescription"));
+            }
+            var after=ReadState("afterState");
+            if(RequiredNumber(item,"overlayVersion")!=after.Version ||
+                RequiredBoolean(item,"isTombstoned")!=after.IsTombstoned ||
+                !item.ContainsKey("correctedDescription"))
+                throw new InvalidDataException("Canonical audit history state mismatch.");
+            return new NativeAuditHistoryRow(RequiredText(item,"auditEventId"),
+                RequiredText(item,"operationCode"),RequiredText(item,"rawDescription"),
+                RequiredText(item,"reason"),RequiredText(item,"editedByUserId"),
+                RequiredText(item,"editedByDisplay"),RequiredText(item,"editedAtUtc"),
+                item["correctedDescription"]?.GetValue<string>(),ReadState("beforeState"),after);
+        }).ToArray();
+        var page=new NativeAuditHistoryPage(request,Array.AsReadOnly(rows));
+        if(!page.Matches(request))
+            throw new InvalidDataException("Invalid canonical audit history rows.");
+        return page;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
