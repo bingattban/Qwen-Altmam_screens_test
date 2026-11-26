@@ -16,7 +16,7 @@ public partial class NativeManualBackupView : UserControl
         var picker=new OpenFileDialog
         {
             Title="اختيار نسخة احتياطية مشفرة للفحص",
-            Filter="نسخ التمام المشفرة (*.dbbackup)|*.dbbackup",
+            Filter="نسخ التمام المشفرة (*.dbbackup;*.db)|*.dbbackup;*.db",
             CheckFileExists=true, CheckPathExists=true, Multiselect=false
         };
         var current=settings.Overview.Snapshot?.BackupDirectory;
