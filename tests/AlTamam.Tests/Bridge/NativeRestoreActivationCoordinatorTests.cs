@@ -217,6 +217,44 @@ public sealed class NativeRestoreActivationCoordinatorTests : IDisposable
             ".altamam-restore-activation.pending.json")));
     }
 
+    [Fact]
+    public async Task NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions()
+    {
+        await InitializeAsync();
+        var gate=new AlTamam.NativePresentation.NativeOperationDrainGate();
+        using var active=gate.Enter();
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator=new NativeRestoreActivationCoordinator(_db,_sessions);
+        var activation=coordinator.TryActivateAsync(_founder,Password,_candidate,_sha,Key,
+            (_,_)=>Task.FromResult(true),async ct=>
+            {
+                Task drain=gate.StopAndDrainAsync();
+                entered.SetResult();
+                await drain;
+                await _sessions.RevokeSessionAsync(_founder.SessionNonce,ct);
+            });
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(45));
+            Assert.False(activation.IsCompleted);
+            Assert.Throws<ObjectDisposedException>(()=>gate.Enter());
+            Assert.Equal("changed-after-backup",ReadMarker(_live));
+        }
+        finally { active.Dispose(); }
+        var outcome=await activation;
+        Assert.NotNull(outcome);
+        Assert.Null(ReadMarker(_live));
+        Assert.Equal("changed-after-backup",ReadMarker(outcome!.RollbackPath));
+        Assert.True(File.Exists(outcome.PreparationRescuePath));
+
+        using var reopened=new AlTamamDbContext(_live,Key,useConnectionPooling:false);
+        await reopened.InitializeAsync();
+        var sessions=new BridgeSharedServices(reopened);
+        await sessions.RevokeOrphanedSessionsOnStartupAsync(CancellationToken.None);
+        Assert.Null(await sessions.ResolveSessionAsync(_founder.SessionNonce,CancellationToken.None));
+        Assert.True(reopened.HasValidIntegrity());
+    }
+
     public void Dispose()
     {
         _db?.Dispose();
