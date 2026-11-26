@@ -42,7 +42,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
         CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
         Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
-        Overview.PropertyChanged+=(_,_)=>{ NotifyBackupCommands(); Diagnostics.Notify(); };
+        Overview.PropertyChanged+=(_,_)=>NotifyBackupCommands();
         Diagnostics.PropertyChanged+=(_,_)=>NotifySessionChanged();
         CatchUp = new NativeAdministrativeCatchUpReview();
         Policy = new NativeClosedDayPolicyReview();
@@ -137,6 +137,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     private void NotifyBackupCommands()
     {
+        Diagnostics.NotifyAvailability();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenBackup)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
         OpenManualBackupCommand.NotifyAvailabilityChanged();
