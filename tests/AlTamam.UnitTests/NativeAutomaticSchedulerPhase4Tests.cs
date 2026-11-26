@@ -65,6 +65,37 @@ public sealed class NativeAutomaticSchedulerPhase4Tests
         Assert.False(gate.IsStarted);
     }
 
+    [Fact]
+    public async Task Concurrent_shutdown_callers_share_the_same_drain()
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scheduler = new Probe { OnStop = () => new ValueTask(pending.Task) };
+        var gate = new NativeAutomaticSchedulerGate(scheduler);
+        gate.StartOnce();
+        Task first = gate.DisposeAsync().AsTask();
+        Task second = gate.DisposeAsync().AsTask();
+        Assert.Same(first, second);
+        Assert.False(second.IsCompleted);
+        Assert.Throws<ObjectDisposedException>(() => gate.StartOnce());
+        Assert.Equal(1, scheduler.Stopped);
+        pending.SetResult();
+        await Task.WhenAll(first, second);
+    }
+
+    [Fact]
+    public async Task Failed_drain_never_reports_success_to_a_later_disposal()
+    {
+        var scheduler = new Probe
+        {
+            OnStop = () => new ValueTask(Task.FromException(new InvalidOperationException("Drain failed.")))
+        };
+        var gate = new NativeAutomaticSchedulerGate(scheduler);
+        gate.StartOnce();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => gate.DisposeAsync().AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => gate.DisposeAsync().AsTask());
+        Assert.Equal(1, scheduler.Stopped);
+    }
+
     private sealed class Probe : INativeAutomaticScheduler
     {
         public int Started;
