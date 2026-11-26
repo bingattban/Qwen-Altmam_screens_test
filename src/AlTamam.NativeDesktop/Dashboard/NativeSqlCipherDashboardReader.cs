@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -498,6 +498,37 @@ public sealed class NativeSqlCipherDashboardReader(
             !NativeManualBackupReceipt.SameDirectory(persisted,saved))
             throw new InvalidDataException("Unverified output directory.");
         return saved;
+    }
+
+    public async Task<NativeBackupScheduleReceipt> SaveBackupScheduleAsync(NativeIdentity actor,
+        NativeBackupScheduleIntent intent,CancellationToken ct=default)
+    {
+        if(intent is null || !intent.IsValid(actor))
+            throw new UnauthorizedAccessException("Invalid backup schedule intent.");
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Backup schedule administration required.");
+        var directory=await new OutputDirectorySettings(database).GetAsync(ct).ConfigureAwait(false);
+        if(!NativeManualBackupReceipt.SameDirectory(directory,intent.Before.BackupDirectory))
+            throw new NativeBackupScheduleRejectedException();
+        var payload=new JsonObject
+        {
+            ["enabled"]=intent.Enabled,["backupTime"]=intent.Time,
+            ["retentionCount"]=intent.RetentionCount,["operationId"]=intent.OperationId
+        };
+        var response=await new SettingsReadBackupService(database)
+            .ConfigureBackupScheduleAsync(payload,principal,ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if(!response.Success && response.Code is BridgeErrorCodes.ScheduleUnavailable or
+            BridgeErrorCodes.ValidationError or BridgeErrorCodes.Unauthorized)
+            throw new NativeBackupScheduleRejectedException();
+        var data=RequiredObject(response,"UpdateBackupSchedule");
+        var receipt=new NativeBackupScheduleReceipt(RequiredBoolean(data,"enabled"),
+            RequiredText(data,"backupTime"),checked((int)RequiredNumber(data,"retentionCount")));
+        if(!receipt.Matches(intent))
+            throw new InvalidDataException("Canonical backup schedule receipt mismatch.");
+        return receipt;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
