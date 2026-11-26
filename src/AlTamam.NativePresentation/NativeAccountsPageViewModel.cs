@@ -17,19 +17,38 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
 
     public NativeAccountsPageViewModel():base(NativeScreen.Accounts,"حسابات المستخدمين")
     {
-        SearchCommand=new NativeCommand(_=>_ = SearchAsync(),_=>CanRead);
-        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead);
+        SearchCommand=new NativeCommand(_=>_ = SearchAsync(),_=>CanQuery);
+        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanQuery);
         NextCommand=new NativeCommand(_=>_ = NextAsync(),_=>CanPage && _page!.HasNext && Page<100000);
         PreviousCommand=new NativeCommand(_=>_ = PreviousAsync(),_=>CanPage && Page>1);
+        OpenCreateCommand=new NativeCommand(_=>OpenCreate(),_=>CanOpenCreate);
+        CloseCreateCommand=new NativeCommand(_=>_ = CloseCreateAsync(),_=>Create.CanClose);
+        Create.PropertyChanged+=(_,_)=>Notify();
     }
 
     private NativeIdentity? AuthorizedActor=>_liveActor?.Invoke() is { } actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)?actor:null;
     public bool CanRead=>_reader is not null && AuthorizedActor is not null;
+    public bool CanQuery=>CanRead && !Create.IsOpen;
+    public NativeAccountCreateReview Create { get; }=new();
+    public NativeCommand OpenCreateCommand { get; }
+    public NativeCommand CloseCreateCommand { get; }
+    public bool CanOpenCreate=>CanQuery && !_loading && _reader is INativeAccountCreateBackend;
+    public void OpenCreate()
+    {
+        if(CanOpenCreate && _reader is INativeAccountCreateBackend backend && AuthorizedActor is { } actor)
+            Create.Open(backend,actor,()=>AuthorizedActor);
+    }
+    public async Task CloseCreateAsync(CancellationToken ct=default)
+    {
+        bool refresh=Create.Receipt is not null;
+        if(!Create.Close()) return;
+        if(refresh) await SearchAsync(ct);
+    }
     public override bool IsDataConnected=>_page is not null && _boundActor is not null && _boundActor==AuthorizedActor;
-    public override string StatusMessage=>"قائمة الحسابات والصلاحيات — القراءة فقط في هذه المرحلة.";
+    public override string StatusMessage=>"قائمة الحسابات والصلاحيات — إنشاء حساب مرتبط بفرد نشط وفق الصلاحيات المعتمدة.";
     public bool IsLoading=>_loading;
-    private bool CanPage=>!IsLoading && IsDataConnected;
+    private bool CanPage=>!IsLoading && IsDataConnected && !Create.IsOpen;
     public IReadOnlyList<NativeAccountRow> Rows=>IsDataConnected?_page!.Rows:[];
     public long Total=>IsDataConnected?_page!.Total:0;
     public int Page=>IsDataConnected?_page!.Request.Page:1;
@@ -43,7 +62,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
         get=>_term;
         set
         {
-            if(_term==value) return;
+            if(Create.IsOpen || _term==value) return;
             _term=value??"";
             Invalidate();
             Notify();
@@ -69,6 +88,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
 
     private async Task ReadAsync(NativeAccountRequest request,CancellationToken ct)
     {
+        if(Create.IsOpen) return;
         Invalidate();
         if(_reader is null || AuthorizedActor is not { } actor || !request.IsValid)
         {
@@ -107,12 +127,13 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
     }
     public void Clear()
     {
-        Invalidate(); _term=""; Notify();
+        Create.ForceClear(); Invalidate(); _term=""; Notify();
     }
     private void Notify()
     {
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(string.Empty));
         SearchCommand.NotifyAvailabilityChanged(); RefreshCommand.NotifyAvailabilityChanged();
         NextCommand.NotifyAvailabilityChanged(); PreviousCommand.NotifyAvailabilityChanged();
+        OpenCreateCommand.NotifyAvailabilityChanged(); CloseCreateCommand.NotifyAvailabilityChanged();
     }
 }
