@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -225,6 +225,52 @@ public sealed class NativeSqlCipherDashboardReader(
         var page=new NativeAuditHistoryPage(request,Array.AsReadOnly(rows));
         if(!page.Matches(request))
             throw new InvalidDataException("Invalid canonical audit history rows.");
+        return page;
+    }
+
+    // Native accounts are a read-only projection of the canonical management service.
+    public async Task<NativeAccountPage> ReadAccountsAsync(NativeIdentity actor,
+        NativeAccountRequest request,CancellationToken ct=default)
+    {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            throw new UnauthorizedAccessException("Account management denied.");
+        if(request is null || !request.IsValid)
+            throw new InvalidDataException("Invalid account list request.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !request.IsAuthorized(principal.Role))
+            throw new UnauthorizedAccessException("Account list session changed.");
+        var response=await new UserAccountManagementService(database).ListAsync(new JsonObject
+        {
+            ["term"]=request.Term,["page"]=request.Page,["pageSize"]=NativeAccountRequest.PageSize
+        },principal,ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"ListUserAccounts");
+        var items=RequiredArray(data,"items");
+        if(RequiredNumber(data,"page")!=request.Page ||
+            RequiredNumber(data,"pageSize")!=NativeAccountRequest.PageSize ||
+            items.Count>NativeAccountRequest.PageSize)
+            throw new InvalidDataException("Canonical account list page mismatch.");
+        var rows=items.Select(node=>
+        {
+            var item=RequireObject(node);
+            string roleText=RequiredText(item,"role");
+            if(!Enum.TryParse<AlTamam.Domain.Enums.UserRole>(roleText,false,out var role) ||
+                role.ToString()!=roleText || !item.ContainsKey("personId"))
+                throw new InvalidDataException("Invalid canonical account role or identity.");
+            return new NativeAccountRow(RequiredNumber(item,"index"),RequiredText(item,"userId"),
+                RequiredText(item,"username"),role,RequiredBoolean(item,"active"),RequiredNumber(item,"rowVersion"),
+                RequiredText(item,"fullName"),RequiredText(item,"serviceNumberA"),
+                item["personId"]?.GetValue<string>(),RequiredText(item,"createdBy"),
+                RequiredText(item,"createdAtUtc"),RequiredBoolean(item,"canModify"));
+        }).ToArray();
+        var page=new NativeAccountPage(request,RequiredNumber(data,"total"),RequiredBoolean(data,"hasNext"),
+            Array.AsReadOnly(rows));
+        if(!page.Matches(request,actor))
+            throw new InvalidDataException("Canonical account list scope or permission mismatch.");
         return page;
     }
 
