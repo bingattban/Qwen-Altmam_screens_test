@@ -1,0 +1,62 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeAccountCreateView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" Unloaded="OnUnloaded">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ShowIfTrue"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="8">
+            <TextBlock Text="إنشاء حساب جديد" FontSize="19" FontWeight="Bold" Foreground="#123752"/>
+            <TextBlock Text="اختر فردا نشطا من كشف القوة. لا يمكن إنشاء حساب الإدارة العامة من هنا."
+                       TextWrapping="Wrap" Foreground="#475569" Margin="0,5,0,10"/>
+            <StackPanel IsEnabled="{Binding CanEdit}">
+                <TextBlock Text="البحث عن فرد بالاسم أو الرقم (ع)" FontWeight="SemiBold"/>
+                <DockPanel Margin="0,4,0,8">
+                    <Button DockPanel.Dock="Left" Content="بحث" Command="{Binding SearchCommand}" Margin="5,0" Padding="12,5"/>
+                    <TextBox Text="{Binding Term, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
+                             AutomationProperties.Name="بحث فرد نشط لإنشاء الحساب"/>
+                </DockPanel>
+                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsSearching, Converter={StaticResource ShowIfTrue}}"/>
+                <TextBlock Text="الفرد المرتبط بالحساب" FontWeight="SemiBold"/>
+                <ComboBox ItemsSource="{Binding People}" SelectedItem="{Binding SelectedPerson, Mode=TwoWay}"
+                          DisplayMemberPath="Label" MaxDropDownHeight="250" Margin="0,4,0,8"
+                          AutomationProperties.Name="اختر فردا نشطا"/>
+                <TextBlock Text="اسم المستخدم (3 إلى 64 حرفا بلا مسافات)" FontWeight="SemiBold"/>
+                <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" MaxLength="64"
+                         FlowDirection="LeftToRight" Margin="0,4,0,8"/>
+                <TextBlock Text="الصلاحية" FontWeight="SemiBold"/>
+                <ComboBox ItemsSource="{Binding RoleChoices}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                          SelectedValue="{Binding Role, Mode=TwoWay}" Margin="0,4,0,8"/>
+                <Button Content="معاينة بيانات الحساب" Command="{Binding PreviewCommand}" Padding="12,6"
+                        HorizontalAlignment="Right" Margin="0,4,0,8"/>
+            </StackPanel>
+            <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6"
+                    Padding="10" Visibility="{Binding HasPreview, Converter={StaticResource ShowIfTrue}}"
+                    IsVisibleChanged="OnPreviewVisibilityChanged">
+                <StackPanel>
+                    <TextBlock Text="مراجعة البيانات قبل التأكيد" FontWeight="Bold"/>
+                    <TextBlock Text="الفرد والرقم والموقع" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding Prepared.Person.Label}" TextWrapping="Wrap"/>
+                    <TextBlock Text="اسم المستخدم" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding Prepared.Username}" TextWrapping="Wrap"/>
+                    <TextBlock Text="الصلاحية" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding Prepared.RoleLabel}"/>
+                    <StackPanel IsEnabled="{Binding CanConfirm}">
+                        <TextBlock Text="كلمة المرور (ثلاثة أحرف إنجليزية وثلاثة أرقام على الأقل)" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <PasswordBox x:Name="PasswordInput" FlowDirection="LeftToRight" Margin="0,4,0,8"
+                                     AutomationProperties.Name="كلمة مرور الحساب الجديد"/>
+                        <TextBlock Text="تأكيد كلمة المرور" FontWeight="SemiBold"/>
+                        <PasswordBox x:Name="ConfirmationInput" FlowDirection="LeftToRight" Margin="0,4,0,8"
+                                     AutomationProperties.Name="تأكيد كلمة مرور الحساب الجديد"/>
+                        <Button Content="{Binding ConfirmLabel}" Click="OnConfirmClick" Padding="12,6" HorizontalAlignment="Right"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource ShowIfTrue}}" Margin="0,5"/>
+            <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap" Margin="0,5"/>
+            <TextBlock Text="{Binding CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

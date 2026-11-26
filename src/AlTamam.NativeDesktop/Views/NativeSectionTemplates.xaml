@@ -262,13 +262,15 @@
                     <TextBlock Text="الأدوار المتاحة للإنشاء حسب صلاحيتك:" FontWeight="SemiBold" Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding CreationRoleLabel}" Foreground="#166534" TextWrapping="Wrap"/>
                 </WrapPanel>
-                <WrapPanel Margin="0,4">
+                <WrapPanel Margin="0,4" IsEnabled="{Binding CanQuery}">
                     <TextBlock Text="بحث بالاسم أو اسم المستخدم أو الرقم (ع)" VerticalAlignment="Center" Margin="4"/>
                     <TextBox Text="{Binding Term, UpdateSourceTrigger=PropertyChanged}" MaxLength="200"
                              Width="180" Margin="4" AutomationProperties.Name="بحث حسابات المستخدمين"/>
                     <Button Content="بحث" Command="{Binding SearchCommand}" Padding="10,5" Margin="4"/>
                     <Button Content="تحديث" Command="{Binding RefreshCommand}" Padding="10,5" Margin="4"/>
                 </WrapPanel>
+                <Button Content="إنشاء حساب جديد" Command="{Binding OpenCreateCommand}" Margin="0,4" Padding="12,6"
+                        HorizontalAlignment="Right" Visibility="{Binding CanOpenCreate, Converter={StaticResource VisibilityIfTrue}}"/>
                 <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
                 <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
             </StackPanel>
@@ -296,6 +298,15 @@
                 </StackPanel>
                 <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"/>
             </DockPanel>
+            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="10" Background="#FFFFFF"
+                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="10"
+                    Visibility="{Binding Create.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Top" Content="إغلاق مراجعة الإنشاء" Command="{Binding CloseCreateCommand}"
+                            HorizontalAlignment="Left" Padding="12,5" Margin="0,0,0,6"/>
+                    <views:NativeAccountCreateView DataContext="{Binding Create}"/>
+                </DockPanel>
+            </Border>
         </Grid>
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
