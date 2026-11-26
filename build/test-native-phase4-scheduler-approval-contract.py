@@ -27,6 +27,9 @@ FILES={
  "operation_tests":"tests/AlTamam.UnitTests/NativeOperationDrainPhase12Tests.cs",
  "restore_review":"src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs",
  "restore_view":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml",
+ "recovery_intent":"src/AlTamam.NativePresentation/NativeRecoveryExportIntent.cs",
+ "recovery_tests":"tests/AlTamam.UnitTests/NativeRecoveryExportPhase12Tests.cs",
+ "settings_vm":"src/AlTamam.NativePresentation/NativePageViewModels.cs",
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
  "restore_integration":"tests/AlTamam.Tests/Bridge/NativeRestoreActivationCoordinatorTests.cs",
@@ -102,7 +105,7 @@ def problems(contents):
                   "_operations.RunAsync(() => _services.RefreshSessionIdleDeadlineAsync(nonce, ct))",
                   "_operations.RunAsync(() => _services.RevokeSessionAsync(nonce, ct))"):
         need("backend", token)
-    if contents["backend"].count("using var nativeOperation = _operations.Enter();") != 2:
+    if contents["backend"].count("using var nativeOperation = _operations.Enter();") != 3:
         errors.append("Authentication and session resolution must be admitted")
     if len(shutdown) == 2:
         stop = shutdown[1]
@@ -128,6 +131,39 @@ def problems(contents):
     need("restore_view",'Click="OnRestoreClick"')
     need("restore_view","Binding Inspection.CanRequestRestore")
     need("restore_code","await host.RequestRestoreAsync(settings)")
+    need("project",'Compile Include="../AlTamam.DesktopHost/Bridge/NativeRecoveryKeyExportDialog.cs"')
+    need("restore_view",'Click="OnRecoveryExportClick"')
+    need("restore_view","Binding CanExportRecovery")
+    need("restore_code","await host.RequestRecoveryExportAsync(settings)")
+    for token in ("Role:UserRole.GeneralAdministration","Actor==liveActor","Path.IsPathFullyQualified(path)",
+                  'Path.GetExtension(path),".altrecovery"',"Path.GetFullPath(path)==path"):
+        need("recovery_intent",token)
+    for token in ("!IsReviewOpen && !Overview.IsLoading","GetRecoveryExportIntent(string destination)",
+                  "intent.Matches(RecoveryExportActor)"):
+        need("settings_vm",token)
+    for token in ("NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination)",
+                  "intent.Matches(settings.RecoveryExportActor)", "OverwritePrompt=false",
+                  "System.IO.File.Exists(intent.Destination)", "if (_recoveryExportInProgress)",
+                  "credentials=null;"):
+        need("host",token)
+    recovery=contents["backend"].split("internal async Task<bool> ExportRecoveryKeyAsync(",1)
+    if len(recovery)!=2:
+        errors.append("Missing recovery export backend")
+    else:
+        export=recovery[1].split("public ValueTask DisposeAsync()",1)[0]
+        for token in ("using var nativeOperation = _operations.Enter();",
+                      "_services.ResolveSessionAsync(actor.SessionNonce,ct)",
+                      "principal.SessionNonce!=actor.SessionNonce",
+                      "new NativePortableRecoveryExportService(_database,_services,keyStore)",
+                      ".TryExportAsync(principal,currentAdminPassword,recoveryPassphrase,intent.Destination,ct)"):
+            if token not in export:
+                errors.append("Recovery export invariant missing: "+token)
+    for token in ("Intent_requires_founder_and_live_same_nonce",
+                  "Rejects_nonlocal_or_relative_destinations",
+                  "Rejects_wrong_extension_and_noncanonical_path",
+                  "Settings_require_founder_and_no_other_review"):
+        need("recovery_tests",token)
+
     for token in ("NativeRestoreConfirmationDialog.RequestFreshPassword(", "NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)",
                   "settings.Inspection.MatchesRestoreIntent(intent)", "private volatile bool _restoreQuiescing;",
                   "_restoreQuiescing=true;", "DataContext=null;", "_restoreDrainCompleted=true;",
@@ -144,7 +180,7 @@ def problems(contents):
     if len(restore)!=2:
         errors.append("Missing physical restore adapter")
     else:
-        adapter=restore[1].split("public ValueTask DisposeAsync()",1)[0]
+        adapter=restore[1].split("internal async Task<bool> ExportRecoveryKeyAsync(",1)[0]
         tokens=("await enteringShutdown()", "await _operations.StopAndDrainAsync()", "await _services.RevokeSessionAsync(actor.SessionNonce,ct)", "await DisposeAsync()", "await drainCompleted()")
         indices=[adapter.find(token) for token in tokens]
         if min(indices)<0 or indices!=sorted(indices) or "using var nativeOperation" in adapter:
@@ -297,6 +333,10 @@ if __name__=="__main__":
         ("host","NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)"),
         ("backend","await _services.RevokeSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);"),
         ("restore_view",'Click="OnRestoreClick"'),
+        ("restore_view",'Click="OnRecoveryExportClick"'),
+        ("recovery_intent","Actor==liveActor"),
+        ("backend","new NativePortableRecoveryExportService(_database,_services,keyStore)"),
+        ("host","NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination)"),
         ("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions"),
         ("host","_backend.StartAutomaticBackupScheduler();"),
         ("gate","_stopTask ??= StopCoreAsync()"),
