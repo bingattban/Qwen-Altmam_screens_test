@@ -209,17 +209,22 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
             ["reason"]="اختبار اتساق الحالة السابقة",["operationId"]="PHASE11-PARITY-EDIT-002"
         },Admin,default);
         Assert.True(editAgain.Success,editAgain.UserMessage);
-        Assert.Equal(corrected,editAgain.Data!["beforeState"]!["displayDescription"]!.GetValue<string>());
-        Assert.True(editAgain.Data!["beforeState"]!["isTombstoned"]!.GetValue<bool>());
+        var editData=Assert.IsType<JsonObject>(editAgain.Data);
+        var beforeState=Assert.IsType<JsonObject>(editData["beforeState"]);
+        Assert.Equal(corrected,beforeState["displayDescription"]!.GetValue<string>());
+        Assert.True(beforeState["isTombstoned"]!.GetValue<bool>());
         var detail=await audit.GetAuditEntryDetailsAsync(new JsonObject{["auditEventId"]=id},default);
         Assert.True(detail.Success,detail.UserMessage);
-        Assert.True(detail.Data!["chainValid"]!.GetValue<bool>());
-        var versions=Assert.IsType<JsonArray>(detail.Data!["overlays"]);
+        var detailData=Assert.IsType<JsonObject>(detail.Data);
+        Assert.True(detailData["chainValid"]!.GetValue<bool>());
+        var versions=Assert.IsType<JsonArray>(detailData["overlays"]);
+        Assert.Equal(3,versions.Count);
         Assert.Equal(corrected,versions[2]!["beforeState"]!["displayDescription"]!.GetValue<string>());
         var history=await audit.QueryAuditPresentationChangesAsync(new JsonObject{["auditEventId"]=id},default,Admin);
         Assert.True(history.Success,history.UserMessage);
-        var archived=Assert.IsType<JsonArray>(history.Data!["items"]);
-        var third=Assert.Single(archived.Where(x=>x!["overlayVersion"]!.GetValue<int>()==3));
+        var historyData=Assert.IsType<JsonObject>(history.Data);
+        var archived=Assert.IsType<JsonArray>(historyData["items"]);
+        var third=Assert.Single(archived,x=>x!["overlayVersion"]!.GetValue<int>()==3);
         Assert.Equal(corrected,third!["beforeState"]!["displayDescription"]!.GetValue<string>());
     }
 
