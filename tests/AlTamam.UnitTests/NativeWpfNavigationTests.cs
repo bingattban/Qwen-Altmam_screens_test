@@ -9,11 +9,11 @@ public sealed class NativeWpfNavigationTests
     [Fact]
     public void Main_navigation_includes_all_requested_native_sections()
     {
-        Assert.Equal(7, NativeSections.All.Count);
+        Assert.Equal(8, NativeSections.All.Count);
         Assert.Equal(
-            new[] { "الرئيسية", "التمام اليومي", "التمام الشهري", "الإدارة", "التقارير", "سجل العمليات", "الإعدادات" },
+            new[] { "الرئيسية", "التمام اليومي", "التمام الشهري", "الإدارة", "التقارير", "سجل العمليات", "حسابات المستخدمين", "الإعدادات" },
             NativeSections.All.Select(section => section.Title).ToArray());
-        Assert.Equal(7, NativeSections.All.Select(section => section.Screen).Distinct().Count());
+        Assert.Equal(8, NativeSections.All.Select(section => section.Screen).Distinct().Count());
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class NativeWpfNavigationTests
     public void Unauthenticated_pages_never_claim_access_to_protected_personnel_data()
     {
         var vm = new NativeShellViewModel();
-        // All seven native sections, including the newly connected personnel
+        // All eight native sections, including the newly connected personnel
         // manager, must fail closed before an authenticated SQLCipher session.
         Assert.All(vm.Pages, page => Assert.False(page.IsDataConnected));
         Assert.Empty(vm.Administration.Rows);
@@ -89,10 +89,46 @@ public sealed class NativeWpfNavigationTests
         Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.AuditLog));
     }
 
-    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration,true)]
+    [InlineData(UserRole.OrdinaryAdministration,true)]
+    [InlineData(UserRole.Supervisor,false)]
+    public async Task Accounts_navigation_respects_roles_and_scrubs_on_leave_and_logout(UserRole role,bool allowed)
+    {
+        var vm=new NativeShellViewModel();
+        vm.AttachDashboardReader(new AuditReader());
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.Accounts));
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend(role));
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        Assert.Equal(allowed,vm.NavigateCommand.CanExecute(NativeScreen.Accounts));
+        vm.NavigateCommand.Execute(NativeScreen.Accounts);
+        if(allowed)
+        {
+            Assert.Same(vm.Accounts,vm.CurrentPage);
+            Assert.Single(vm.Accounts.Rows);
+            vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+            Assert.Empty(vm.Accounts.Rows);
+            vm.NavigateCommand.Execute(NativeScreen.Accounts);
+            Assert.Single(vm.Accounts.Rows);
+        }
+        else
+        {
+            Assert.Equal(NativeScreen.Dashboard,vm.CurrentPage.Screen);
+            Assert.Empty(vm.Accounts.Rows);
+        }
+        await vm.LogoutAsync();
+        Assert.Empty(vm.Accounts.Rows);
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.Accounts));
+    }
+
+    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader
     {
         public Task<NativeDashboardSnapshot> ReadAsync(NativeIdentity principal,NativeDashboardFilter filter,CancellationToken ct=default)
             => Task.FromResult(new NativeDashboardSnapshot(filter.BusinessDate,filter.SiteId,0,0,0,[],[],[],[],0,filter.Page,false));
+        public Task<NativeAccountPage> ReadAccountsAsync(NativeIdentity actor,NativeAccountRequest request,CancellationToken ct=default)
+            => Task.FromResult(new NativeAccountPage(request,1,false,
+                [new(1,"USR-2","supervisor",UserRole.Supervisor,true,1,"اسم المشرف","123","PER-2","owner",
+                     "2026-01-01T10:00:00Z",true)]));
         public Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,CancellationToken ct=default)
             => Task.FromResult(new NativeAuditSnapshot(filter,1,false,
                 [new("AUD-1",1,"SITE_CREATE","إضافة موقع","admin","المركز","الوصف","الأصل","","2026-01-01",
