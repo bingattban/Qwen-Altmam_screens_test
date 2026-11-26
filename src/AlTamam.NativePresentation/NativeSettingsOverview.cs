@@ -34,6 +34,7 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
 {
     private INativeSettingsOverviewReader? _reader;
     private Func<NativeIdentity?>? _actor;
+    private Func<bool>? _canRefresh;
     private NativeIdentity? _bound;
     private NativeSettingsOverview? _snapshot;
     private CancellationTokenSource? _pending;
@@ -42,7 +43,7 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     private string _error="";
     public NativeSettingsOverviewViewModel()
     {
-        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !IsLoading);
+        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !IsLoading && (_canRefresh?.Invoke()??true));
     }
     private NativeIdentity? Authorized=>_actor?.Invoke() is { } actor &&
         RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role)?actor:null;
@@ -53,13 +54,14 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     public string Error=>CanRead?_error:"";
     public NativeCommand RefreshCommand { get; }
     public event PropertyChangedEventHandler? PropertyChanged;
-    public void Attach(INativeSettingsOverviewReader reader,Func<NativeIdentity?> actor)
+    public void Attach(INativeSettingsOverviewReader reader,Func<NativeIdentity?> actor,Func<bool>? canRefresh=null)
     {
         if(_reader is not null) throw new InvalidOperationException("Settings reader already attached.");
-        _reader=reader; _actor=actor; Notify();
+        _reader=reader; _actor=actor; _canRefresh=canRefresh; Notify();
     }
     public async Task RefreshAsync(CancellationToken ct=default)
     {
+        if(_canRefresh?.Invoke()==false) return;
         Clear();
         if(_reader is null || Authorized is not { } actor) return;
         long generation=_generation;
