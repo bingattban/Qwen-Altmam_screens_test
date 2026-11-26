@@ -88,13 +88,32 @@ public sealed class NativeSqlCipherDashboardReader(
         var data=RequiredObject(response,"GetAuditEntryDetails");
         int version=0;
         bool hidden=false;
+        var state=new NativeAuditEditState(0,false,RequiredText(data,"rawDescription"));
         foreach (var node in RequiredArray(data,"overlays"))
         {
             var overlay=RequireObject(node);
             if (RequiredNumber(overlay,"overlayVersion")!=++version)
                 throw new InvalidDataException("Noncontiguous canonical audit overlay history.");
             hidden=RequiredBoolean(overlay,"isTombstoned");
+            NativeAuditEditState ReadState(string key)
+            {
+                var item=RequireObject(overlay[key]);
+                return new(RequiredNumber(item,"overlayVersion"),RequiredBoolean(item,"isTombstoned"),
+                    RequiredText(item,"displayDescription"));
+            }
+            var before=ReadState("beforeState");
+            var after=ReadState("afterState");
+            if(before!=state || after.Version!=version || after.IsTombstoned!=hidden ||
+                !overlay.ContainsKey("correctedDescription"))
+                throw new InvalidDataException("Discontinuous audit presentation state.");
+            var corrected=overlay["correctedDescription"]?.GetValue<string>();
+            if(hidden ? corrected is not null || after.Description!=before.Description
+                : string.IsNullOrWhiteSpace(corrected) || after.Description!=corrected)
+                throw new InvalidDataException("Invalid audit presentation transition.");
+            state=after;
         }
+        if(!NativeAuditDetail.MatchesPresentation(row,state))
+            throw new InvalidDataException("Audit presentation changed since list read.");
         // A formerly visible row may have been hidden since the list was read.
         if (hidden && !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
             throw new UnauthorizedAccessException("Hidden audit detail denied.");
