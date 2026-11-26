@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.IO;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
@@ -22,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -425,6 +427,45 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!receipt.Matches(intent))
             throw new InvalidDataException("Canonical account lifecycle receipt mismatch.");
         return receipt;
+    }
+
+    public async Task<NativeProgramInformation> ReadProgramInformationAsync(NativeIdentity actor,
+        CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        var info=new NativeProgramInformation(
+            typeof(NativeSqlCipherDashboardReader).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion.Split('+')[0]??"unknown",
+            RuntimeInformation.ProcessArchitecture.ToString(),
+            Environment.Version.ToString(),true,
+            AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if(!info.IsValid) throw new InvalidDataException("Invalid program metadata.");
+        return info;
+    }
+
+    public async Task<NativeIntegrityStatus> CheckDatabaseIntegrityAsync(NativeIdentity actor,
+        CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        // The synchronous canonical SQLCipher check is kept off the STA.
+        var response=await Task.Run(()=>new SettingsReadBackupService(database).Integrity(),ct)
+            .ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if(!response.Success)
+        {
+            if(response.Code==BridgeErrorCodes.BackupIntegrityFailed) return NativeIntegrityStatus.Failed;
+            throw new InvalidDataException("Integrity result unavailable.");
+        }
+        var data=RequiredObject(response,"RunDatabaseIntegrityCheck");
+        if(RequiredText(data,"integrity")!="ok" || !RequiredBoolean(data,"encrypted"))
+            throw new InvalidDataException("Invalid canonical integrity receipt.");
+        return NativeIntegrityStatus.Passed;
     }
 
     public async Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,
