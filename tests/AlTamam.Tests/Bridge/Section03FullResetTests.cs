@@ -214,13 +214,42 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
         await Task.Delay(TimeSpan.FromMilliseconds(5150));
         Assert.False((await svc.CommitAsync(CommitArgs(preview),live,default)).Success);
-        await _auth.RevokeSessionAsync(live.SessionNonce);
-        var (other,otherError)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
-        Assert.Null(otherError);
-        var next=Assert.IsType<BridgePrincipal>(other);
+        // Synthetic second durable session for the SAME founder, without
+        // changing any revision-covered table (ordinary login writes audit).
+        string secondNonce=Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        using(var connection=_db.CreateOpenConnection())
+        using(var insert=connection.CreateCommand())
+        {
+            insert.CommandText="""
+                INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+                SELECT $second,UserId,Role,IssuedAtUtc,ExpiresAtUtc,0
+                FROM UserSessions WHERE SessionNonce=$original;
+                """;
+            insert.Parameters.AddWithValue("$second",secondNonce);
+            insert.Parameters.AddWithValue("$original",live.SessionNonce);
+            Assert.Equal(1,await insert.ExecuteNonQueryAsync());
+        }
+        var next=Assert.IsType<BridgePrincipal>(await _auth.ResolveSessionAsync(secondNonce));
         Assert.NotEqual(live.SessionNonce,next.SessionNonce);
         Assert.False((await svc.CommitNativeAsync(CommitArgs(preview),next,_auth,default)).Success);
         Assert.Equal(1,Count("Users"));
+    }
+
+    [Fact]
+    public async Task NativeResetWrongPassword_UsesExistingLockoutGateBeforeRescue()
+    {
+        var svc=new FullDataResetService(_db);
+        var (actor,error)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(error);
+        var live=Assert.IsType<BridgePrincipal>(actor);
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
+        for(int i=0;i<5;i++)
+            Assert.False((await svc.CommitNativeAsync(CommitArgs(preview,"incorrect-password"),live,_auth,default)).Success);
+        Assert.Equal(5,Count("FailedLoginEvents"));
+        Assert.False((await svc.CommitNativeAsync(CommitArgs(preview),live,_auth,default)).Success);
+        Assert.Equal(1,Count("Users"));
+        string folder=Path.Combine(Path.GetDirectoryName(_file)!,"backups");
+        Assert.Empty(Directory.Exists(folder)?Directory.GetFiles(folder,"rescue-before-reset-*.dbbackup"):Array.Empty<string>());
     }
 
     [Fact]
