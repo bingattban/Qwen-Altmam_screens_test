@@ -80,8 +80,78 @@
                     <DataGridTextColumn Header="تاريخ التنفيذ UTC" Binding="{Binding ExecutedAtUtc}" Width="155"/>
                     <DataGridTextColumn Header="النتيجة" Binding="{Binding Outcome}" Width="90"/>
                     <DataGridCheckBoxColumn Header="مخفي" Binding="{Binding IsTombstoned, Mode=OneWay}" Width="60"/>
+                    <DataGridTemplateColumn Header="التفاصيل" Width="80">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="عرض" Padding="5,2"
+                                        Command="{Binding DataContext.OpenDetailCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="عرض تفاصيل العملية"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
+            <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="8" Padding="12" Margin="0,8"
+                    Visibility="{Binding IsDetailOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" Content="إغلاق التفاصيل" Padding="10,5"
+                                    Command="{Binding CloseDetailCommand}"/>
+                            <TextBlock Text="تفاصيل العملية — الدليل الأصلي" FontWeight="Bold" FontSize="17"
+                                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+                        </DockPanel>
+                        <ProgressBar Height="4" IsIndeterminate="True"
+                                     Visibility="{Binding IsDetailLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+                        <TextBlock Text="{Binding DetailError}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Detail.ChainStatus}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,8">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#BE123C"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Detail.ChainValid}" Value="True">
+                                                <Setter Property="Foreground" Value="#166534"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="معرف القيد" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.AuditEventId, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Margin="0,2,0,7"/>
+                            <TextBlock Text="العملية والمنفذ وقت التنفيذ" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Detail.OperationName}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding DetailRow.ActorDisplay}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Detail.ActorUserId}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                            <TextBlock Text="المستهدف ومعرفه" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Detail.TargetDisplay}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Detail.TargetEntityId}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                            <TextBlock Text="تاريخ السريان وتاريخ التنفيذ UTC" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Detail.EffectiveLocalDate}"/>
+                            <TextBlock Text="{Binding Detail.ExecutedAtUtc}" Margin="0,0,0,7"/>
+                            <TextBlock Text="الوصف الظاهر في الكشف" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding DetailRow.Description}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                            <TextBlock Text="الوصف الأصلي وسبب العملية" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.RawDescription, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding Detail.Reason, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Margin="0,2,0,7"/>
+                            <TextBlock Text="القيمة السابقة" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.OldValueDisplay, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="150" VerticalScrollBarVisibility="Auto" Margin="0,2,0,7"/>
+                            <TextBlock Text="القيمة اللاحقة" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.NewValueDisplay, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="150" VerticalScrollBarVisibility="Auto" Margin="0,2,0,7"/>
+                            <TextBlock Text="بصمة القيد SHA-256" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.EventHash, Mode=OneWay}" IsReadOnly="True" FlowDirection="LeftToRight" TextWrapping="Wrap" Margin="0,2,0,7"/>
+                            <TextBlock Text="بصمة القيد السابق" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.PriorEventHash, Mode=OneWay}" IsReadOnly="True" FlowDirection="LeftToRight" TextWrapping="Wrap" Margin="0,2,0,7"/>
+                            <TextBlock Text="معرف الارتباط وإصدار العرض" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Detail.CorrelationId, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Detail.OverlayVersion}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
             <DockPanel Grid.Row="4">
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                     <Button Content="السابق" Command="{Binding PreviousCommand}" Margin="4" Padding="12,5"/>

@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PATHS = {
     "original": "src/AlTamam.Application/Bridge/PersonnelReportService.cs",
     "audit_contracts": "src/AlTamam.NativePresentation/NativeAuditReadContracts.cs",
+    "audit_detail": "src/AlTamam.NativePresentation/NativeAuditDetailContracts.cs",
+    "audit_detail_tests": "tests/AlTamam.UnitTests/NativeAuditDetailsPhase11Tests.cs",
     "audit_tests": "tests/AlTamam.UnitTests/NativeAuditReadPhase11Tests.cs",
     "audit_list": "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
     "audit_list_tests": "tests/AlTamam.UnitTests/NativeAuditListPhase11Tests.cs",
@@ -48,7 +50,16 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
-    "audit_list": ("_pending?.Cancel()", "generation!=_generation", "AuthorizedActor!=actor",
+    "audit_detail": ("INativeAuditDetailReader", "EventHash==row.EventHash",
+                     "OverlayVersion==row.OverlayVersion", "IsTombstoned==row.IsTombstoned",
+                     "CanReviewAuditOverlayHistory(role)", 'PriorEventHash=="GENESIS"', "ChainValid"),
+    "audit_detail_tests": ("Detail_matches_only_exact_immutable_evidence_and_overlay_revision",
+                           "Detail_requires_reference_bound_row_and_preserves_list",
+                           "Detail_discards_late_response_on_filter_edit_or_session_change",
+                           "Detail_clear_during_read_scrubs_all_evidence"),
+    "audit_list": ("ReferenceEquals(current,row)", "generation!=_detailGeneration",
+                   "result.Matches(row,actor.Role)", "_detailPending?.Cancel()", "ResetDetail();",
+                   "_pending?.Cancel()", "generation!=_generation", "AuthorizedActor!=actor",
                    "result.Matches(filter)", "Array.AsReadOnly(result.Rows.ToArray())",
                    "CanReviewAuditOverlayHistory(actor.Role)", "_draft=next with { Page=1 }"),
     "audit_list_tests": ("Audit_list_reads_exact_filters_and_pages_only_on_explicit_request",
@@ -58,7 +69,10 @@ REQUIRED = {
     "audit_shell": ("Audit.AttachReader(auditReader, () => _active)", "Audit.Clear();",
                     "screen == NativeScreen.AuditLog", "screen != NativeScreen.AuditLog || Audit.CanRead"),
     "audit_host": ("present:NativeScreen.AuditLog",),
-    "audit_template": ("vm:NativeAuditPageViewModel", "Binding IncludeTombstoned",
+    "audit_template": ("Binding DataContext.OpenDetailCommand", "Binding Detail.ChainStatus",
+                       "Binding Detail.RawDescription", "Binding Detail.EventHash",
+                       "Binding Detail.OldValueDisplay", "Binding Detail.NewValueDisplay",
+                       "Binding CloseDetailCommand", "vm:NativeAuditPageViewModel", "Binding IncludeTombstoned",
                        "Binding CanIncludeTombstoned", "Binding SearchCommand",
                        "Binding NextCommand", 'IsReadOnly="True"'),
     "audit_nav_tests": ("Audit_navigation_requires_live_reader_and_clears_on_leave_and_logout",),
@@ -71,6 +85,10 @@ REQUIRED = {
                     "Audit_snapshot_checks_actual_page_size_and_canonical_offset"),
     "adapter": ("new PersonnelReportService(database)",
                 "new AuditOverlayService(database).QueryAuditLogAsync",
+                "new AuditOverlayService(database).GetAuditEntryDetailsAsync",
+                'RequiredNumber(overlay,"overlayVersion")!=++version',
+                "hidden && !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role)",
+                'RequiredBoolean(data,"chainValid")', "!detail.Matches(row,actor.Role)",
                 "filter.IsAuthorized(principal.Role)", '["includeTombstoned"]=filter.IncludeTombstoned',
                 'RequiredNumber(data,"pageSize")!=NativeAuditFilter.PageSize',
                 'RequiredNumber(data,"count")!=items.Count',
@@ -107,7 +125,7 @@ def validate(files):
                 errors.append(f"{key}: missing original report invariant: {token}")
     if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
         errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
-    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template"):
+    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
@@ -136,6 +154,11 @@ if __name__ == "__main__":
         ("original", "FROM AuditEvents"),
         ("audit_contracts", "CanReviewAuditOverlayHistory(role)"),
         ("audit_list", "generation!=_generation"),
+        ("audit_list", "generation!=_detailGeneration"),
+        ("audit_detail", "OverlayVersion==row.OverlayVersion"),
+        ("adapter", 'RequiredBoolean(data,"chainValid")'),
+        ("audit_template", "Binding Detail.ChainStatus"),
+        ("audit_detail_tests", "Detail_clear_during_read_scrubs_all_evidence"),
         ("audit_list", "AuthorizedActor!=actor"),
         ("audit_shell", "Audit.AttachReader(auditReader, () => _active)"),
         ("audit_template", "vm:NativeAuditPageViewModel"),
