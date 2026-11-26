@@ -19,7 +19,7 @@ public sealed record NativeBackupInspection(string Path,string Sha256,long FileS
         {
             return !path.StartsWith(@"\\",StringComparison.Ordinal) &&
                 !path.StartsWith("//",StringComparison.Ordinal) &&
-                string.Equals(System.IO.Path.GetExtension(path),".dbbackup",StringComparison.OrdinalIgnoreCase) &&
+                (System.IO.Path.GetExtension(path) is ".dbbackup" or ".db") &&
                 System.IO.Path.GetFullPath(path)==path;
         }
         catch(ArgumentException) { return false; }
