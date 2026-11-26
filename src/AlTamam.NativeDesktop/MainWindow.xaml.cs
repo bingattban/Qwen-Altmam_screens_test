@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using AlTamam.NativeDesktop.Auth;
+using AlTamam.NativeDesktop.Views;
+using System.Text.Json.Nodes;
 using AlTamam.DesktopHost.Bridge;
 using AlTamam.NativePresentation;
 
@@ -24,6 +26,8 @@ public partial class MainWindow : Window
     private bool _mayClose;
     private bool _restoreInProgress;
     private bool _recoveryExportInProgress;
+    private bool _resetInProgress;
+    private bool _resetQuiescing;
     private volatile bool _restoreQuiescing;
     private bool _restoreDrainCompleted;
 
@@ -66,7 +70,7 @@ public partial class MainWindow : Window
 
     private async void OnSessionTimerTick(object? sender, EventArgs e)
     {
-        if (_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
+        if (_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
         _sessionCheckRunning = true;
         try { await _viewModel.VerifyCurrentSessionAsync(); }
         finally { _sessionCheckRunning = false; }
@@ -74,19 +78,19 @@ public partial class MainWindow : Window
 
     private void OnNativePointerInput(object sender, MouseButtonEventArgs e)
     {
-        if (!_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated)
+        if (!_resetInProgress && !_resetQuiescing && !_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private void OnNativeKeyboardInput(object sender, KeyEventArgs e)
     {
-        if (!_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
+        if (!_resetInProgress && !_resetQuiescing && !_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private async void OnLogoutClick(object sender, RoutedEventArgs e)
     {
-        if (_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
+        if (_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
         await _viewModel.LogoutAsync();
         if (_viewModel.IsAuthenticated)
             MessageBox.Show("لم يكتمل إلغاء جلسة المستخدم. حاول تسجيل الخروج مجددا.",
@@ -97,7 +101,7 @@ public partial class MainWindow : Window
     // selected file and completed comparison. No XAML password binding.
     internal async Task RequestRestoreAsync(SettingsPageViewModel settings)
     {
-        if(_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _mayClose ||
+        if(_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _mayClose ||
             _viewModel.IsBusy || _backend is not { } backend ||
             !ReferenceEquals(settings,_viewModel.Settings) ||
             !ReferenceEquals(_viewModel.CurrentPage,settings) ||
@@ -178,7 +182,7 @@ public partial class MainWindow : Window
 
     internal async Task RequestRecoveryExportAsync(SettingsPageViewModel settings)
     {
-        if(_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress ||
+        if(_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress ||
             _mayClose || _viewModel.IsBusy || _backend is not { } backend ||
             !ReferenceEquals(settings,_viewModel.Settings) ||
             !ReferenceEquals(_viewModel.CurrentPage,settings) ||
@@ -233,9 +237,96 @@ public partial class MainWindow : Window
         }
     }
 
+    internal async Task RequestFullResetAsync(SettingsPageViewModel settings)
+    {
+        if(_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress ||
+            _restoreQuiescing || _closeInProgress || _mayClose || _viewModel.IsBusy ||
+            _backend is not { } backend || !ReferenceEquals(settings,_viewModel.Settings) ||
+            !ReferenceEquals(_viewModel.CurrentPage,settings) ||
+            settings.RecoveryExportActor is not { } actor) return;
+
+        _resetInProgress=true;
+        IsEnabled=false;
+        try
+        {
+            var review=await Task.Run(()=>backend.PreviewFullResetAsync(actor));
+            if(review is null || !review.Matches(settings.RecoveryExportActor))
+            {
+                MessageBox.Show(this,"تعذر إنشاء معاينة تصفير صالحة للجلسة الحالية.",
+                    "التصفير الآمن",MessageBoxButton.OK,MessageBoxImage.Warning);
+                return;
+            }
+            var approval=NativeFullResetDialog.Confirm(this,review);
+            if(approval is null || !review.CanCommit(settings.RecoveryExportActor,approval.Consent,approval.Elapsed))
+                return;
+
+            // The accepted destructive operation owns the process until a
+            // verified drain/disposal finishes. No old session may resume.
+            _resetQuiescing=true;
+            _sessionTimer.Stop();
+            DataContext=null;
+            var accepted=approval;
+            approval=null;
+            var result=await Task.Run(()=>backend.CommitFullResetAsync(review,accepted.Consent,
+                accepted.Password,accepted.Elapsed));
+            if(result?.Success==true && result.Data is JsonObject data &&
+                data["reset"]?.GetValue<bool>()==true && data["requiresFirstSetup"]?.GetValue<bool>()==true &&
+                data["rescuePath"]?.GetValue<string>() is { Length:>0 } rescue)
+            {
+                string retained=data["backupFilesNotDeleted"]?.ToString()??"غير معروف";
+                MessageBox.Show(this,"اكتمل التصفير. نسخة الإنقاذ المشفرة: "+rescue+
+                    "\nعدد النسخ التي تعذر حذفها: "+retained+"\nافتح البرنامج مجددا للتهيئة الأولى.",
+                    "اكتمل التصفير",MessageBoxButton.OK,MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show(this,result?.Success==false?result.UserMessage:
+                    "تعذر تأكيد نتيجة التصفير. تحقق من نسخة الإنقاذ وحالة البيانات عند التشغيل التالي.",
+                    "التصفير الآمن",MessageBoxButton.OK,MessageBoxImage.Warning);
+            }
+        }
+        catch
+        {
+            MessageBox.Show(this,_resetQuiescing
+                ? "تعذر تأكيد نتيجة التصفير؛ لن تستأنف الجلسة القديمة. تحقق من البيانات ونسخة الإنقاذ عند التشغيل التالي."
+                : "تعذر تجهيز معاينة التصفير.",
+                "تعذر التصفير",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+        finally
+        {
+            if(_resetQuiescing)
+            {
+                try
+                {
+                    await backend.DisposeAsync();
+                    _backend=null;
+                    _mayClose=true;
+                    Close();
+                }
+                catch
+                {
+                    // Failed drain: keep the process mutex and old UI disabled.
+                    MessageBox.Show(this,"تعذر تأكيد إيقاف خدمات البرنامج بأمان. لا تستأنف الجلسة القديمة.",
+                        "تعذر الإغلاق",MessageBoxButton.OK,MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                IsEnabled=true;
+                await _viewModel.VerifyCurrentSessionAsync();
+            }
+            _resetInProgress=false;
+        }
+    }
+
     private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_mayClose) return;
+        if (_resetInProgress || _resetQuiescing)
+        {
+            e.Cancel=true;
+            return;
+        }
         if (_recoveryExportInProgress)
         {
             e.Cancel=true;

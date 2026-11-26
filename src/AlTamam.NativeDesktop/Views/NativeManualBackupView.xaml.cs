@@ -42,6 +42,13 @@ public partial class NativeManualBackupView : UserControl
             await host.RequestRecoveryExportAsync(settings);
     }
 
+    private async void OnFullResetClick(object sender,RoutedEventArgs e)
+    {
+        if(DataContext is SettingsPageViewModel settings && settings.CanExportRecovery &&
+            Window.GetWindow(this) is MainWindow host)
+            await host.RequestFullResetAsync(settings);
+    }
+
     private void OnChooseFolder(object sender,RoutedEventArgs e)
     {
         if(DataContext is not SettingsPageViewModel settings || !settings.CanOpenBackup) return;

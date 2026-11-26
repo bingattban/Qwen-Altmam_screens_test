@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text.Json.Nodes;
+using AlTamam.Contracts.Bridge;
 using AlTamam.Application.Bridge;
 using AlTamam.NativeDesktop.Dashboard;
 using AlTamam.NativeDesktop.Scheduling;
@@ -192,6 +194,44 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             .ConfigureAwait(false);
     }
 
+    internal Task<NativeFullResetPreview?> PreviewFullResetAsync(NativeIdentity actor,CancellationToken ct=default)
+        =>_operations.RunAsync(async ()=>
+        {
+            var principal=await _services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+            if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+                principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return null;
+            var response=await new FullDataResetService(_database).PreviewNativeAsync(principal,ct).ConfigureAwait(false);
+            return response.Success?NativeFullResetPreview.Read(actor,response.Data as JsonObject):null;
+        });
+
+    // Only the physical host enters this permanent reset boundary. Keep the
+    // database open for the canonical reset transaction, but stop all other
+    // work. Never hold a foreground lease while awaiting the drain.
+    internal async Task<BridgeResponse?> CommitFullResetAsync(NativeFullResetPreview review,
+        NativeFullResetConsent consent,string password,TimeSpan elapsed)
+    {
+        if(_disposed || !review.CanCommit(review.Actor,consent,elapsed) ||
+            string.IsNullOrWhiteSpace(password) || password.Length>1024) return null;
+        await DrainNativeWorkAsync().ConfigureAwait(false);
+        var actor=review.Actor;
+        var principal=await _services.ResolveSessionAsync(actor.SessionNonce,CancellationToken.None).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return null;
+        var payload=new JsonObject
+        {
+            ["previewToken"]=review.Token,["expectedRevision"]=review.Revision,
+            ["confirmation"]=consent.Phrase,["password"]=password,
+            ["confirmDeleteLiveData"]=consent.DeleteLiveData,
+            ["confirmDeleteOwnedBackups"]=consent.DeleteOwnedBackups
+        };
+        try
+        {
+            return await new FullDataResetService(_database)
+                .CommitNativeAsync(payload,principal,_services,CancellationToken.None).ConfigureAwait(false);
+        }
+        finally { payload.Remove("password"); }
+    }
+
     public ValueTask DisposeAsync()
     {
         lock (_lifecycleSync)
@@ -202,6 +242,12 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     }
 
     private async Task ShutdownCoreAsync()
+    {
+        await DrainNativeWorkAsync().ConfigureAwait(false);
+        _database.Dispose();
+    }
+
+    private async Task DrainNativeWorkAsync()
     {
         // Request both stops even if one later fails. Only release SQLCipher
         // after both canonical schedulers have drained successfully.
@@ -216,7 +262,6 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             try { await backupDrain.ConfigureAwait(false); }
             finally { await nativeDrain.ConfigureAwait(false); }
         }
-        _database.Dispose();
     }
 
     // Safety fallback for exceptional UI teardown: preserve stop-before-DB order.

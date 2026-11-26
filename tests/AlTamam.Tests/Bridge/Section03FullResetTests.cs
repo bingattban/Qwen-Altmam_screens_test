@@ -273,4 +273,35 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         Assert.False(await _auth.IsProvisionedAsync());
     }
 
+    [Fact]
+    public async Task NativeReset_ChangedDataFromAdmittedWorkDuringDrainRejectsPreviewWithoutRescue()
+    {
+        var svc=new FullDataResetService(_db);
+        var (actor,error)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(error);
+        var live=Assert.IsType<BridgePrincipal>(actor);
+        var gate=new AlTamam.NativePresentation.NativeOperationDrainGate();
+        using var pending=gate.Enter();
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
+        await Task.Delay(TimeSpan.FromMilliseconds(5150));
+        var drain=gate.StopAndDrainAsync();
+        Assert.False(drain.IsCompleted);
+        Assert.Throws<ObjectDisposedException>(()=>gate.Enter());
+        await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
+        {
+            using var cmd=c.CreateCommand();cmd.Transaction=t;
+            cmd.CommandText="INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc) VALUES('NativeResetDrainMarker','changed','2026-11-26T00:00:00Z');";
+            await cmd.ExecuteNonQueryAsync();return 0;
+        });
+        pending.Dispose();
+        await drain;
+        var result=await svc.CommitNativeAsync(CommitArgs(preview),live,_auth,default);
+        Assert.False(result.Success);
+        Assert.Equal(1,Count("Users"));
+        Assert.NotNull(await _auth.ResolveSessionAsync(live.SessionNonce));
+        string folder=Path.Combine(Path.GetDirectoryName(_file)!,"backups");
+        Assert.Empty(Directory.Exists(folder)?Directory.GetFiles(folder,"rescue-before-reset-*.dbbackup"):Array.Empty<string>());
+        Assert.True(_db.HasValidIntegrity());
+    }
+
 }

@@ -34,6 +34,9 @@ FILES={
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
  "restore_integration":"tests/AlTamam.Tests/Bridge/NativeRestoreActivationCoordinatorTests.cs",
  "reset_service":"src/AlTamam.Application/Bridge/FullDataResetService.cs",
+ "reset_preview":"src/AlTamam.NativePresentation/NativeFullResetPreview.cs",
+ "reset_dialog":"src/AlTamam.NativeDesktop/Views/NativeFullResetDialog.cs",
+ "reset_ui_tests":"tests/AlTamam.UnitTests/NativeFullResetPhase12Tests.cs",
  "reset_tests":"tests/AlTamam.Tests/Bridge/Section03FullResetTests.cs",
  "contracts":"src/AlTamam.NativePresentation/NativeAttendanceRevisionContracts.cs",
  "review_vm":"src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
@@ -80,17 +83,18 @@ def problems(contents):
                   "Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
                   "await backupDrain.ConfigureAwait(false);"):
         need("backend", token)
-    shutdown = contents["backend"].split("private async Task ShutdownCoreAsync()", 1)
+    shutdown = contents["backend"].split("private async Task DrainNativeWorkAsync()", 1)
     if len(shutdown) != 2:
-        errors.append("Missing native shutdown core")
+        errors.append("Missing shared native drain")
     else:
         stop = shutdown[1]
         tokens = ("Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
                   "await _autoAttendance.DisposeAsync()", "await backupDrain.ConfigureAwait(false);",
-                  "_database.Dispose();")
+                  "await nativeDrain.ConfigureAwait(false);")
         indices = [stop.find(token) for token in tokens]
         if min(indices) < 0 or indices != sorted(indices):
-            errors.append("Both scheduler drains must complete before SQLCipher disposal")
+            errors.append("Both scheduler drains must complete before shared drain returns")
+    need("backend","private async Task ShutdownCoreAsync()\n    {\n        await DrainNativeWorkAsync().ConfigureAwait(false);\n        _database.Dispose();")
     need("host", "_backend.StartAutomaticBackupScheduler();")
     for token in ("ObjectDisposedException.ThrowIf(_stopping,this)", "_stopping=true",
                   "if(_stopping && _active==0) _drained.TrySetResult()", "Interlocked.Exchange(ref _gate,null)"):
@@ -113,7 +117,7 @@ def problems(contents):
         stop = shutdown[1]
         tokens = ("Task nativeDrain = _operations.StopAndDrainAsync();",
                   "Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
-                  "await nativeDrain.ConfigureAwait(false);", "_database.Dispose();")
+                  "await nativeDrain.ConfigureAwait(false);")
         indices = [stop.find(token) for token in tokens]
         if min(indices) < 0 or indices != sorted(indices):
             errors.append("All admitted native requests must drain before DB disposal")
@@ -192,6 +196,59 @@ def problems(contents):
                   "Reinspection_invalidates_previous_restore_intent"):
         need("restore_tests",token)
     need("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions")
+    need("reset_tests","NativeReset_ChangedDataFromAdmittedWorkDuringDrainRejectsPreviewWithoutRescue")
+    need("restore_view",'Click="OnFullResetClick"')
+    need("restore_code","await host.RequestFullResetAsync(settings)")
+    for token in ("Actor==liveActor","Actor.Role==UserRole.GeneralAdministration",
+                  "DeleteLiveData:true,DeleteOwnedBackups:true","consent.Phrase==RequiredPhrase",
+                  "elapsed>=TimeSpan.FromSeconds(CountdownSeconds)","revision>9007199254740991L",
+                  "counts.Any(n=>n<0)"):
+        need("reset_preview",token)
+    for token in ("IsChecked=false","IsCancel=true,IsDefault=true","new PasswordBox",
+                  "new Stopwatch()","review.CanCommit(review.Actor,Consent(),elapsed.Elapsed)",
+                  "timer.Stop(); elapsed.Stop(); password.Clear();"):
+        need("reset_dialog",token)
+    for token in ("Review_requires_founder_and_complete_canonical_evidence",
+                  "Missing_required_evidence_is_denied",
+                  "Rejects_forged_revision_countdown_counts_and_path",
+                  "Confirmation_requires_exact_phrase_both_consents_five_seconds_and_same_session"):
+        need("reset_ui_tests",token)
+    for token in ("_operations.RunAsync(async ()=>","PreviewNativeAsync(principal,ct)",
+                  "NativeFullResetPreview.Read(actor,response.Data as JsonObject)",
+                  "review.CanCommit(review.Actor,consent,elapsed)",
+                  '["confirmDeleteLiveData"]=consent.DeleteLiveData',
+                  '["confirmDeleteOwnedBackups"]=consent.DeleteOwnedBackups',
+                  'payload.Remove("password")'):
+        need("backend",token)
+    reset_adapter=contents["backend"].split("internal async Task<BridgeResponse?> CommitFullResetAsync(",1)
+    if len(reset_adapter)!=2:
+        errors.append("Missing native reset commit")
+    else:
+        adapter=reset_adapter[1].split("public ValueTask DisposeAsync()",1)[0]
+        order=[adapter.find(t) for t in ("await DrainNativeWorkAsync().ConfigureAwait(false);",
+                 "_services.ResolveSessionAsync(actor.SessionNonce,CancellationToken.None)",
+                 ".CommitNativeAsync(payload,principal,_services,CancellationToken.None)")]
+        if min(order)<0 or order!=sorted(order) or "_operations.Enter()" in adapter or "_operations.RunAsync(" in adapter:
+            errors.append("Native reset must drain outside a lease before live authorization and commit")
+    for token in ("NativeFullResetDialog.Confirm(this,review)",
+                  "review.CanCommit(settings.RecoveryExportActor,approval.Consent,approval.Elapsed)",
+                  "_resetQuiescing=true;", "_resetInProgress || _resetQuiescing",
+                  "backend.CommitFullResetAsync(review,accepted.Consent",
+                  'data["requiresFirstSetup"]?.GetValue<bool>()==true',
+                  'data["rescuePath"]?.GetValue<string>()',
+                  "if(_resetQuiescing)"):
+        need("host",token)
+    reset_host=contents["host"].split("internal async Task RequestFullResetAsync(",1)
+    if len(reset_host)!=2:
+        errors.append("Missing physical reset host")
+    else:
+        reset_flow=reset_host[1].split("private async void OnWindowClosing",1)[0]
+        order=[reset_flow.find(t) for t in ("_resetQuiescing=true;", "_sessionTimer.Stop();",
+                "DataContext=null;", "backend.CommitFullResetAsync(", "await backend.DisposeAsync();",
+                "_mayClose=true;", "Close();")]
+        if min(order)<0 or order!=sorted(order):
+            errors.append("Native reset must close admission and detach UI before commit; disposal before process close")
+
     for token in ('Operation+":native:"+',
                   "SHA256.HashData(Encoding.UTF8.GetBytes(actor.SessionNonce))",
                   "actor.SessionRevocation.IsCancellationRequested",
@@ -372,6 +429,11 @@ if __name__=="__main__":
         ("host","NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination)"),
         ("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions"),
         ("reset_service","IsNativeSessionLiveAsync(c,t,actor,ct)"),
+        ("reset_preview","consent.Phrase==RequiredPhrase"),
+        ("reset_dialog","password.Clear();"),
+        ("restore_view",'Click="OnFullResetClick"'),
+        ("backend","await DrainNativeWorkAsync().ConfigureAwait(false);"),
+        ("host","_resetQuiescing=true;"),
         ("reset_service","CommitCoreAsync(payload,actor,NativeOperation(actor),true,ct)"),
         ("reset_service","VerifyCurrentGeneralAdministratorPasswordAsync(actor,password,ct)"),
         ("reset_tests","NativeResetPreview_CannotBeConsumedByAnotherSessionOrLegacyEntry"),
