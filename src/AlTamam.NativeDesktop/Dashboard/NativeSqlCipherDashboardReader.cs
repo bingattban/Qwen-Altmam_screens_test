@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -529,6 +529,54 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!receipt.Matches(intent))
             throw new InvalidDataException("Canonical backup schedule receipt mismatch.");
         return receipt;
+    }
+
+    private static NativeBackupCounts ReadBackupCounts(JsonObject data)=>new(
+        RequiredNumber(data,"people"),RequiredNumber(data,"attendance"),
+        RequiredNumber(data,"auditEvents"),RequiredNumber(data,"users"));
+
+    public async Task<NativeBackupInspection> InspectBackupAsync(NativeIdentity actor,string path,
+        CancellationToken ct=default)
+    {
+        if(!NativeBackupInspection.ValidPath(path))
+            throw new InvalidDataException("Invalid backup path.");
+        await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        var data=RequiredObject(await new BackupInspectionService(database)
+            .VerifyAsync(path,ct).ConfigureAwait(false),"VerifyBackup");
+        var result=new NativeBackupInspection(RequiredText(data,"path"),RequiredText(data,"sha256"),
+            RequiredNumber(data,"fileSizeBytes"),checked((int)RequiredNumber(data,"schemaVersion")),
+            RequiredBoolean(data,"schemaCompatible"),RequiredBoolean(data,"registeredInCurrentCatalog"),
+            ReadBackupCounts(data));
+        if(!RequiredBoolean(data,"verified") || RequiredBoolean(data,"restoreEnabled") ||
+            !result.Matches(path) || RequiredText(data,"fileName")!=Path.GetFileName(result.Path) ||
+            result.Compatible!=(result.SchemaVersion==AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion))
+            throw new InvalidDataException("Invalid backup inspection evidence.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    public async Task<NativeRestoreComparison> PreviewBackupRestoreAsync(NativeIdentity actor,
+        NativeBackupInspection evidence,CancellationToken ct=default)
+    {
+        if(evidence is null || !evidence.Matches(evidence.Path) || !evidence.Compatible ||
+            !RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            throw new UnauthorizedAccessException("Backup restore preview denied.");
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Backup restore preview denied.");
+        var data=RequiredObject(await new BackupInspectionService(database)
+            .PreviewRestoreAsync(evidence.Path,evidence.Sha256,ct).ConfigureAwait(false),"PreviewRestore");
+        var result=new NativeRestoreComparison(RequiredText(data,"path"),RequiredText(data,"sha256"),
+            checked((int)RequiredNumber(data,"schemaVersion")),ReadBackupCounts(RequireObject(data["incoming"])),
+            ReadBackupCounts(RequireObject(data["current"])));
+        if(!RequiredBoolean(data,"verified") || !RequiredBoolean(data,"previewOnly") ||
+            RequiredBoolean(data,"restoreEnabled") || !result.Matches(evidence) ||
+            RequiredText(data,"fileName")!=Path.GetFileName(result.Path))
+            throw new InvalidDataException("Invalid read-only restore comparison.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return result;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
