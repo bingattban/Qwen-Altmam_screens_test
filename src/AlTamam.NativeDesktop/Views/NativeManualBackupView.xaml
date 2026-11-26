@@ -37,6 +37,57 @@
                     <Button Content="إغلاق المراجعة" Command="{Binding CloseBackupCommand}" Padding="12,6" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
+            <Button Content="اختيار نسخة مشفرة للفحص" Click="OnChooseBackup"
+                    IsEnabled="{Binding CanOpenInspection}" Padding="12,6" Margin="4,12,4,4" HorizontalAlignment="Right"/>
+            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F1F5F9" Padding="12"
+                    Visibility="{Binding Inspection.IsOpen, Converter={StaticResource ShowIfTrue}}">
+                <StackPanel>
+                    <TextBlock Text="فحص النسخة ومعاينة الاستعادة (قراءة فقط)" FontWeight="Bold" FontSize="16" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Inspection.SelectedPath}" FlowDirection="LeftToRight" TextWrapping="Wrap" Margin="0,6"/>
+                    <Button Content="فحص الملف" Command="{Binding Inspection.InspectCommand}" Padding="12,6" HorizontalAlignment="Right"/>
+                    <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Inspection.IsBusy, Converter={StaticResource ShowIfTrue}}"/>
+                    <TextBlock Text="{Binding Inspection.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <StackPanel Visibility="{Binding Inspection.HasEvidence, Converter={StaticResource ShowIfTrue}}">
+                        <TextBlock Text="{Binding Inspection.Evidence.CompatibilityLabel}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Inspection.Evidence.CatalogLabel}" TextWrapping="Wrap"/>
+                        <TextBlock Text="إصدار قاعدة البيانات / حجم الملف بالبايت" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding Inspection.Evidence.SchemaVersion}"/>
+                        <TextBlock Text="{Binding Inspection.Evidence.FileSize}"/>
+                        <TextBlock Text="بصمة SHA-256" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding Inspection.Evidence.Sha256, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="الأفراد / سجلات الحضور / العمليات / الحسابات في النسخة" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                        <UniformGrid Columns="4" Margin="0,4">
+                            <TextBlock Text="{Binding Inspection.Evidence.Counts.People}"/>
+                            <TextBlock Text="{Binding Inspection.Evidence.Counts.Attendance}"/>
+                            <TextBlock Text="{Binding Inspection.Evidence.Counts.AuditEvents}"/>
+                            <TextBlock Text="{Binding Inspection.Evidence.Counts.Users}"/>
+                        </UniformGrid>
+                        <Button Content="معاينة الاستعادة (للإدارة)" Command="{Binding Inspection.PreviewCommand}" Padding="12,6" Margin="0,8"/>
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding Inspection.HasComparison, Converter={StaticResource ShowIfTrue}}">
+                        <TextBlock Text="مقارنة النسخة مع قاعدة البيانات الحالية" FontWeight="Bold" Margin="0,6"/>
+                        <UniformGrid Columns="3">
+                            <TextBlock Text="السجل" FontWeight="Bold"/>
+                            <TextBlock Text="الحالي" FontWeight="Bold"/>
+                            <TextBlock Text="النسخة" FontWeight="Bold"/>
+                            <TextBlock Text="الأفراد"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Current.People}"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Incoming.People}"/>
+                            <TextBlock Text="الحضور"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Current.Attendance}"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Incoming.Attendance}"/>
+                            <TextBlock Text="العمليات"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Current.AuditEvents}"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Incoming.AuditEvents}"/>
+                            <TextBlock Text="الحسابات"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Current.Users}"/>
+                            <TextBlock Text="{Binding Inspection.Comparison.Incoming.Users}"/>
+                        </UniformGrid>
+                    </StackPanel>
+                    <TextBlock Text="هذه معاينة فقط؛ لا يتم استبدال قاعدة البيانات أو حذف السجلات. القيم تعكس وقت الفحص." TextWrapping="Wrap" Foreground="#92400E" Margin="0,8"/>
+                    <Button Content="إغلاق الفحص" Command="{Binding CloseInspectionCommand}" Padding="12,6" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </Border>
 </UserControl>
