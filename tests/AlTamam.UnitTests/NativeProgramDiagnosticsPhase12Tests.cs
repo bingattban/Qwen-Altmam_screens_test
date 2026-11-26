@@ -76,6 +76,28 @@ public sealed class NativeProgramDiagnosticsPhase12Tests
         Assert.Equal(0,backend.Checks);
         Assert.Null(vm.Integrity);
     }
+    [Fact]
+    public async Task Diagnostics_busy_blocks_settings_reviews_and_clear_releases_guard()
+    {
+        var settings=new SettingsPageViewModel();
+        var backend=new Probe();
+        settings.Diagnostics.Attach(backend,()=>Actor,()=>!settings.IsReviewOpen);
+        await settings.Diagnostics.RefreshAsync();
+        var pending=new TaskCompletionSource<NativeIntegrityStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        backend.Pending=pending.Task;
+        var check=settings.Diagnostics.CheckAsync();
+        Assert.True(settings.IsReviewOpen);
+        Assert.False(settings.Diagnostics.CanRun);
+        await settings.Diagnostics.CheckAsync();
+        Assert.Equal(1,backend.Checks);
+        settings.Clear();
+        pending.SetResult(NativeIntegrityStatus.Passed);
+        await check;
+        Assert.False(settings.IsReviewOpen);
+        Assert.Null(settings.Diagnostics.Information);
+        Assert.Null(settings.Diagnostics.Integrity);
+    }
+
     private sealed class Probe:INativeProgramDiagnosticsBackend
     {
         public NativeProgramInformation Information=Info();
