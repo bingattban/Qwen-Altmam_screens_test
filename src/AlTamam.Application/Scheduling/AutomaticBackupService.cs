@@ -95,18 +95,22 @@ public sealed class AutomaticBackupService
            !BackupRetentionService.IsValidCount(requestedRetention.Value))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "عدد النسخ الآلية المحتفظ بها يجب أن يكون صفراً للاحتفاظ بالجميع، أو من 2 إلى 365.");
+        // A disk availability failure must block new enable requests, not
+        // mask an already committed receipt (or operation ID conflict).
+        bool directoryAvailable=true;
         if(enabled)
         {
             string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
-            if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
-                return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
-                    "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. لا يمكن تفعيل النسخ قبل اختيار مجلد محلي قابل للكتابة.");
+            directoryAvailable=OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath);
         }
         return await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
+            if(!directoryAvailable)
+                return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
+                    "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. لا يمكن تفعيل النسخ قبل اختيار مجلد محلي قابل للكتابة.");
             string previousEnabled="false",previousTime="16:00";
             int previousRetention=0;
             using(var prior=c.CreateCommand())
