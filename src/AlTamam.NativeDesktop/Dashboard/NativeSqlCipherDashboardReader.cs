@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -112,6 +112,56 @@ public sealed class NativeSqlCipherDashboardReader(
         if (!detail.Matches(row,actor.Role))
             throw new InvalidDataException("Audit detail or presentation revision changed.");
         return detail;
+    }
+
+    // Canonical append-only overlay mutation; no independent SQL or audit writer.
+    public async Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,
+        NativeAuditEditRequest request,CancellationToken ct=default)
+    {
+        if (!RoleAuthorizationPolicy.CanEditOrDeleteVisibleAuditLog(actor.Role))
+            throw new UnauthorizedAccessException("Audit edit denied.");
+        if (request is null || !request.IsValid(actor.Role))
+            throw new InvalidDataException("Invalid native audit edit intent.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if (principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !RoleAuthorizationPolicy.CanEditOrDeleteVisibleAuditLog(principal.Role))
+            throw new UnauthorizedAccessException("Audit edit session changed.");
+        // Do not reread the old revision before a retry: canonical idempotency
+        // must first resolve the same operation even if the first response was lost.
+        var response=await new AuditOverlayService(database).UpdateAuditPresentationAsync(new JsonObject
+        {
+            ["auditEventId"]=request.Row.AuditEventId,
+            ["expectedOverlayVersion"]=request.Row.OverlayVersion,
+            ["correctedDescription"]=request.Description,
+            ["reason"]=request.Reason,["operationId"]=request.OperationId
+        },principal,ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if (!response.Success && response.Code==BridgeErrorCodes.ConflictStale &&
+            response.ExpectedVersion==request.Row.OverlayVersion &&
+            response.ActualVersion is { } actual && actual!=request.Row.OverlayVersion &&
+            response.ConflictInfo is JsonObject conflict &&
+            conflict["reason"]?.GetValue<string>()=="OverlayVersionStale" &&
+            conflict["auditEventId"]?.GetValue<string>()==request.Row.AuditEventId)
+            throw new NativeAuditEditStaleException();
+        var data=RequiredObject(response,"UpdateAuditPresentation");
+        NativeAuditEditState ReadState(string key)
+        {
+            var state=RequireObject(data[key]);
+            return new(RequiredNumber(state,"overlayVersion"),RequiredBoolean(state,"isTombstoned"),
+                RequiredText(state,"displayDescription"));
+        }
+        var receipt=new NativeAuditEditReceipt(RequiredText(data,"auditEventId"),
+            RequiredText(data,"operationAuditEventId"),ReadState("beforeState"),ReadState("afterState"),
+            RequiredBoolean(data,"rawEvidenceUntouched"));
+        if (response.AuditEventId!=receipt.OperationAuditEventId ||
+            RequiredNumber(data,"overlayVersion")!=receipt.After.Version ||
+            RequiredBoolean(data,"isTombstoned")!=receipt.After.IsTombstoned ||
+            !receipt.Matches(request))
+            throw new InvalidDataException("Canonical audit edit receipt mismatch.");
+        return receipt;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =

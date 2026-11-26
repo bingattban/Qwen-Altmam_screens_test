@@ -26,14 +26,17 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
 
     public NativeAuditPageViewModel() : base(NativeScreen.AuditLog,"سجل العمليات")
     {
-        SearchCommand=new NativeCommand(_=>_ = SearchAsync(),_=>CanRead);
-        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead);
+        SearchCommand=new NativeCommand(_=>_ = SearchAsync(),_=>CanQuery);
+        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanQuery);
         NextCommand=new NativeCommand(_=>_ = NextAsync(),_=>CanPage && _snapshot!.HasNext && _snapshot.Filter.Page<100000);
         PreviousCommand=new NativeCommand(_=>_ = PreviousAsync(),_=>CanPage && _snapshot!.Filter.Page>1);
-        ClearFiltersCommand=new NativeCommand(_=>_ = ClearFiltersAsync(),_=>CanRead);
+        ClearFiltersCommand=new NativeCommand(_=>_ = ClearFiltersAsync(),_=>CanQuery);
         OpenDetailCommand=new NativeCommand(row=>{if(row is NativeAuditRow item) _=OpenDetailAsync(item);},
             row=>row is NativeAuditRow item && CanOpenDetail(item));
-        CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen);
+        CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen && !Edit.IsOpen);
+        OpenEditCommand=new NativeCommand(_=>OpenEdit(),_=>CanOpenEdit);
+        CloseEditCommand=new NativeCommand(_=>_ = CloseEditAsync(),_=>Edit.CanClose);
+        Edit.PropertyChanged+=(_,_)=>Notify();
     }
 
     private NativeIdentity? AuthorizedActor => _liveActor?.Invoke() is { } actor &&
@@ -41,10 +44,11 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public bool CanRead => _reader is not null && AuthorizedActor is not null;
     public bool CanIncludeTombstoned => AuthorizedActor is { } actor &&
         RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role);
-    private bool CanPage => !_loading && IsDataConnected;
+    public bool CanQuery => CanRead && !Edit.IsOpen;
+    private bool CanPage => !_loading && IsDataConnected && !Edit.IsOpen;
     public override bool IsDataConnected => _snapshot is not null && _boundActor is not null &&
         _boundActor==AuthorizedActor && _snapshot.Filter.IsAuthorized(_boundActor.Role);
-    public override string StatusMessage => "سجل العمليات للقراءة فقط — لا يمكن تعديل أو حذف الدليل الأصلي.";
+    public override string StatusMessage => "سجل العمليات — تعديل الوصف الظاهر بصلاحية الإدارة فقط، والدليل الأصلي محفوظ.";
     public IReadOnlyList<NativeAuditRow> Rows => IsDataConnected ? _snapshot!.Rows : [];
     public long Total => IsDataConnected ? _snapshot!.Total : 0;
     public int Page => IsDataConnected ? _snapshot!.Filter.Page : 1;
@@ -61,7 +65,25 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public NativeCommand OpenDetailCommand { get; }
     public NativeCommand CloseDetailCommand { get; }
     private bool CanOpenDetail(NativeAuditRow row)=>_reader is INativeAuditDetailReader &&
-        !_loading && IsCurrentRow(row) && !IsDetailLoading;
+        !_loading && IsCurrentRow(row) && !IsDetailLoading && !Edit.IsOpen;
+    public NativeAuditEditReview Edit { get; }=new();
+    public NativeCommand OpenEditCommand { get; }
+    public NativeCommand CloseEditCommand { get; }
+    public bool CanOpenEdit=>!Edit.IsOpen && _reader is INativeAuditEditBackend &&
+        AuthorizedActor is { } actor && DetailRow is { } row && Detail is { } detail &&
+        NativeAuditEditRequest.CanUse(row,detail,actor.Role);
+    public void OpenEdit()
+    {
+        if(!CanOpenEdit || _reader is not INativeAuditEditBackend backend ||
+            AuthorizedActor is not { } actor || DetailRow is not { } row || Detail is not { } detail) return;
+        Edit.Open(backend,actor,row,detail,()=>AuthorizedActor,()=>DetailRow,()=>Detail);
+    }
+    public async Task CloseEditAsync(CancellationToken ct=default)
+    {
+        bool refresh=Edit.Receipt is not null || Edit.NeedsReload;
+        if(!Edit.Close()) return;
+        if(refresh) await RefreshAsync(ct);
+    }
     public string Term { get=>_draft.Term; set=>SetDraft(_draft with { Term=value??"" }); }
     public string Actor { get=>_draft.Actor; set=>SetDraft(_draft with { Actor=value??"" }); }
     public string Target { get=>_draft.Target; set=>SetDraft(_draft with { Target=value??"" }); }
@@ -90,7 +112,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
 
     private void SetDraft(NativeAuditFilter next,[CallerMemberName] string? property=null)
     {
-        if (_draft==next) return;
+        if (Edit.IsOpen || _draft==next) return;
         _draft=next with { Page=1 };
         Invalidate();
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(property));
@@ -108,12 +130,14 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         ? ReadAsync(Requested(Page-1),ct):Task.CompletedTask;
     public Task ClearFiltersAsync(CancellationToken ct=default)
     {
+        if(!CanQuery) return Task.CompletedTask;
         Clear();
         return SearchAsync(ct);
     }
 
     private async Task ReadAsync(NativeAuditFilter filter,CancellationToken ct)
     {
+        if(Edit.IsOpen) return;
         Invalidate();
         if (_reader is null || AuthorizedActor is not { } actor ||
             !filter.IsAuthorized(actor.Role) || !filter.IsValid)
@@ -205,6 +229,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     }
     public void CloseDetail()
     {
+        if(Edit.IsOpen) return;
         ResetDetail();
         Notify();
     }
@@ -222,6 +247,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     }
     public void Clear()
     {
+        Edit.ForceClear();
         Invalidate();
         _draft=new();
         Notify();
@@ -236,5 +262,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         ClearFiltersCommand.NotifyAvailabilityChanged();
         OpenDetailCommand.NotifyAvailabilityChanged();
         CloseDetailCommand.NotifyAvailabilityChanged();
+        OpenEditCommand.NotifyAvailabilityChanged();
+        CloseEditCommand.NotifyAvailabilityChanged();
     }
 }
