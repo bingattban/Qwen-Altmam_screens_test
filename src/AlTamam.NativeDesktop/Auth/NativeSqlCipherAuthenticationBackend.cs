@@ -21,6 +21,7 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     private readonly AlTamamDbContext _database;
     private readonly BridgeSharedServices _services;
     private bool _disposed;
+    private readonly NativeOperationDrainGate _operations = new();
     private readonly NativeAutomaticSchedulerGate _autoAttendance;
     private readonly NativeAutomaticSchedulerGate _autoBackup;
     private readonly object _lifecycleSync = new();
@@ -95,16 +96,17 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     public INativeDashboardReader CreateDashboardReader()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
-        return new NativeSqlCipherDashboardReader(_services, _database);
+        return new NativeSqlCipherDashboardReader(_services, _database, _operations);
     }
 
     public Task<bool> IsProvisionedAsync(CancellationToken ct = default) =>
-        _services.IsProvisionedAsync(ct);
+        _operations.RunAsync(() => _services.IsProvisionedAsync(ct));
 
     public async Task<NativeLoginResult> SignInAsync(string username, string password,
         bool firstRun, string confirmation, string fullName, CancellationToken ct = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+        using var nativeOperation = _operations.Enter();
         bool provisioned = await _services.IsProvisionedAsync(ct).ConfigureAwait(false);
         if (!provisioned)
         {
@@ -133,16 +135,17 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     public async Task<NativeIdentity?> ResolveSessionAsync(string nonce,
         CancellationToken ct = default)
     {
+        using var nativeOperation = _operations.Enter();
         var found = await _services.ResolveSessionAsync(nonce, ct).ConfigureAwait(false);
         return found is null ? null : new NativeIdentity(
             found.UserId, found.Username, found.Role, found.SessionNonce);
     }
 
     public Task RefreshIdleDeadlineAsync(string nonce, CancellationToken ct = default)
-        => _services.RefreshSessionIdleDeadlineAsync(nonce, ct);
+        => _operations.RunAsync(() => _services.RefreshSessionIdleDeadlineAsync(nonce, ct));
 
     public Task RevokeSessionAsync(string nonce, CancellationToken ct = default)
-        => _services.RevokeSessionAsync(nonce, ct);
+        => _operations.RunAsync(() => _services.RevokeSessionAsync(nonce, ct));
 
     public ValueTask DisposeAsync()
     {
@@ -157,6 +160,7 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     {
         // Request both stops even if one later fails. Only release SQLCipher
         // after both canonical schedulers have drained successfully.
+        Task nativeDrain = _operations.StopAndDrainAsync();
         Task backupDrain = _autoBackup.DisposeAsync().AsTask();
         try
         {
@@ -164,7 +168,8 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
         }
         finally
         {
-            await backupDrain.ConfigureAwait(false);
+            try { await backupDrain.ConfigureAwait(false); }
+            finally { await nativeDrain.ConfigureAwait(false); }
         }
         _database.Dispose();
     }
