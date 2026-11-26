@@ -120,10 +120,47 @@ public sealed class NativeAccountLifecyclePhase11Tests
         Assert.Null(vm.Prepared);
     }
 
-    private sealed class Backend : INativeAccountLifecycleBackend
+    [Fact]
+    public async Task Account_page_blocks_overlapping_actions_and_refreshes_after_verified_commit()
+    {
+        var backend=new Backend();
+        var vm=new NativeAccountsPageViewModel();
+        vm.AttachReader(backend,()=>Admin);
+        await vm.SearchAsync();
+        var row=Assert.Single(vm.Rows);
+        Assert.False(vm.DeactivateCommand.CanExecute(row with { }));
+        Assert.True(vm.DeactivateCommand.CanExecute(row));
+        vm.DeactivateCommand.Execute(row);
+        Assert.True(vm.Lifecycle.IsOpen);
+        Assert.False(vm.ChangePasswordCommand.CanExecute(row));
+        Assert.False(vm.CanQuery);
+        vm.Term="محاولة تغيير";
+        Assert.Equal("",vm.Term);
+        await vm.RefreshAsync();
+        Assert.Equal(1,backend.Reads);
+        vm.Lifecycle.Preview();
+        await vm.Lifecycle.ConfirmAsync("","");
+        Assert.NotNull(vm.Lifecycle.Receipt);
+        await vm.CloseLifecycleAsync();
+        Assert.False(vm.Lifecycle.IsOpen);
+        Assert.Equal(2,backend.Reads);
+        var disabled=Assert.Single(vm.Rows);
+        Assert.False(disabled.Active);
+        Assert.Equal(8L,disabled.Revision);
+        Assert.True(vm.ReactivateCommand.CanExecute(disabled));
+    }
+
+    private sealed class Backend : INativeAccountLifecycleBackend, INativeAccountReader
     {
         public List<NativeAccountLifecycleIntent> Intents=[];
         public bool Fail,Rejected;
+        public int Reads;
+        private NativeAccountRow _current=Row;
+        public Task<NativeAccountPage> ReadAccountsAsync(NativeIdentity actor,NativeAccountRequest request,CancellationToken ct=default)
+        {
+            Reads++;
+            return Task.FromResult(new NativeAccountPage(request,1,false,[_current]));
+        }
         public Task<NativeAccountLifecycleReceipt>? Pending;
         public Task<NativeAccountLifecycleReceipt> ApplyAccountActionAsync(NativeIdentity actor,
             NativeAccountLifecycleIntent intent,string password,CancellationToken ct=default)
@@ -131,8 +168,10 @@ public sealed class NativeAccountLifecyclePhase11Tests
             Intents.Add(intent);
             if(Fail) throw new IOException("response lost");
             if(Rejected) throw new NativeAccountLifecycleRejectedException();
-            return Pending??Task.FromResult(new NativeAccountLifecycleReceipt(intent.Row.UserId,
-                intent.Action!=NativeAccountAction.Deactivate,intent.Row.Revision+1));
+            var receipt=new NativeAccountLifecycleReceipt(intent.Row.UserId,
+                intent.Action!=NativeAccountAction.Deactivate,intent.Row.Revision+1);
+            if(Pending is null) _current=intent.Row with { Active=receipt.Active,Revision=receipt.Revision };
+            return Pending??Task.FromResult(receipt);
         }
     }
 }
