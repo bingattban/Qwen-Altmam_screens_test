@@ -84,7 +84,10 @@
                             <TextBlock Text="{Binding Inspection.Comparison.Incoming.Users}"/>
                         </UniformGrid>
                     </StackPanel>
-                    <TextBlock Text="هذه معاينة فقط؛ لا يتم استبدال قاعدة البيانات أو حذف السجلات. القيم تعكس وقت الفحص." TextWrapping="Wrap" Foreground="#92400E" Margin="0,8"/>
+                    <TextBlock Text="المعاينة لا تغير البيانات. الاستعادة الفعلية تستبدل قاعدة البيانات بعد التحقق من كلمة المرور وتأكيد مستقل وإنشاء نسخ إنقاذ. القيم تعكس وقت الفحص." TextWrapping="Wrap" Foreground="#92400E" Margin="0,8"/>
+                    <Button Content="متابعة الاستعادة الآمنة (الإدارة العامة فقط)" Click="OnRestoreClick"
+                            Visibility="{Binding Inspection.CanRequestRestore, Converter={StaticResource ShowIfTrue}}"
+                            IsEnabled="{Binding Inspection.CanRequestRestore}" Padding="12,6" Margin="0,4,0,8"/>
                     <Button Content="إغلاق الفحص" Command="{Binding CloseInspectionCommand}" Padding="12,6" HorizontalAlignment="Left"/>
                 </StackPanel>
             </Border>
