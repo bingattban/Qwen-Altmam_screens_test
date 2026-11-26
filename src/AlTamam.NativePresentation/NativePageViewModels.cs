@@ -28,10 +28,14 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     private Func<NativeIdentity?>? _liveActor;
     private INativeManualBackupBackend? _backupBackend;
     private INativeBackupScheduleBackend? _scheduleBackend;
+    private INativeBackupInspectionBackend? _inspectionBackend;
+    private Func<NativeIdentity?>? _inspectionActor;
     private Func<NativeIdentity?>? _scheduleActor;
     private Func<NativeIdentity?>? _backupActor;
     public SettingsPageViewModel() : base(NativeScreen.Settings, "الإعدادات")
     {
+        CloseInspectionCommand=new NativeCommand(_=>Inspection.Close(),_=>Inspection.IsOpen);
+        Inspection.PropertyChanged+=(_,_)=>NotifySessionChanged();
         OpenScheduleCommand=new NativeCommand(_=>OpenSchedule(),_=>CanOpenSchedule);
         CloseScheduleCommand=new NativeCommand(_=>_ = CloseScheduleAsync(),_=>Schedule.CanClose);
         Schedule.PropertyChanged+=(_,_)=>NotifySessionChanged();
@@ -65,6 +69,18 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public NativeSettingsOverviewViewModel Overview { get; }=new();
     public NativeManualBackupReview Backup { get; }=new();
     public NativeBackupScheduleReview Schedule { get; }=new();
+    public NativeBackupInspectionReview Inspection { get; }=new();
+    public NativeCommand CloseInspectionCommand { get; }
+    public bool CanOpenInspection=>!IsReviewOpen && !Overview.IsLoading && _inspectionBackend is not null &&
+        _inspectionActor?.Invoke() is { } actor &&
+        AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role);
+    public void AttachBackupInspection(INativeBackupInspectionBackend backend,Func<NativeIdentity?> actor)
+    {
+        if(_inspectionBackend is not null) throw new InvalidOperationException("Inspection backend already attached.");
+        _inspectionBackend=backend; _inspectionActor=actor; NotifySessionChanged();
+    }
+    public bool OpenInspection(string path)=>CanOpenInspection && _inspectionBackend is { } backend &&
+        _inspectionActor?.Invoke() is { } actor && Inspection.Open(backend,actor,_inspectionActor,path);
     public NativeCommand OpenScheduleCommand { get; }
     public NativeCommand CloseScheduleCommand { get; }
     public bool CanOpenSchedule=>!IsReviewOpen && !Overview.IsLoading && _scheduleBackend is not null &&
@@ -115,6 +131,8 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenManualBackupCommand.NotifyAvailabilityChanged();
         CloseBackupCommand.NotifyAvailabilityChanged();
         OpenScheduleCommand.NotifyAvailabilityChanged(); CloseScheduleCommand.NotifyAvailabilityChanged();
+        CloseInspectionCommand.NotifyAvailabilityChanged();
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenInspection)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenSchedule)));
     }
     public NativeAdministrativeCatchUpReview CatchUp { get; }
@@ -130,7 +148,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
+    public bool IsReviewOpen => Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -263,6 +281,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     public void Clear()
     {
+        Inspection.ForceClear();
         Schedule.ForceClear();
         Backup.ForceClear();
         Overview.Clear();
