@@ -119,10 +119,29 @@ public sealed class NativeAccountCreatePhase11Tests
         Assert.Empty(vm.People);
     }
 
+    [Fact]
+    public async Task Create_forged_receipt_is_uncertain_and_canonical_rejection_allows_review()
+    {
+        var backend=new Backend { Forged=true };
+        var vm=new NativeAccountCreateReview();
+        Assert.True(vm.Open(backend,Admin,()=>Admin));
+        vm.Term="اسم"; await vm.SearchAsync(); vm.SelectedPerson=Assert.Single(vm.People);
+        vm.Username="newuser"; vm.Role=UserRole.Supervisor; vm.Preview();
+        await vm.ConfirmAsync("abc123","abc123");
+        Assert.Null(vm.Receipt);
+        Assert.True(vm.HasUnverifiedCommit);
+        backend.Forged=false; backend.Rejected=true;
+        await vm.ConfirmAsync("abc123","abc123");
+        Assert.False(vm.HasUnverifiedCommit);
+        Assert.Null(vm.Prepared);
+        Assert.True(vm.CanEdit);
+        Assert.True(vm.Close());
+    }
+
     private sealed class Backend : INativeAccountCreateBackend
     {
         public List<NativeAccountCreateIntent> Intents=[];
-        public bool Fail;
+        public bool Fail,Forged,Rejected;
         public Task<NativeAccountPersonSearch>? Pending;
         public Task<NativeAccountCreateReceipt>? CommitPending;
         public Task<NativeAccountPersonSearch> SearchAccountPeopleAsync(NativeIdentity actor,string term,CancellationToken ct=default)
@@ -134,7 +153,8 @@ public sealed class NativeAccountCreatePhase11Tests
         {
             Intents.Add(intent);
             if(Fail) throw new IOException("response lost");
-            return CommitPending??Task.FromResult(Receipt(intent));
+            if(Rejected) throw new NativeAccountCreateRejectedException("Canonical rejection.");
+            return CommitPending??Task.FromResult(Forged?Receipt(intent) with { PersonId="PER-OTHER" }:Receipt(intent));
         }
     }
 }
