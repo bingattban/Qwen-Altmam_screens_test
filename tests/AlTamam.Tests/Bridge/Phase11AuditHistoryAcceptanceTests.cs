@@ -162,6 +162,68 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
     }
 
     [Fact]
+    public async Task Hidden_overlay_preserves_latest_description_across_list_search_history_and_future_receipts()
+    {
+        var created=await new AdminConfigurationService(_db).CreateSiteAsync(
+            new JsonObject{["name"]="موقع اتساق العرض المخفي"},General,default);
+        Assert.True(created.Success,created.UserMessage);
+        var siteId=Assert.IsType<JsonObject>(created.Data)["siteId"]!.GetValue<string>();
+        var audit=new AuditOverlayService(_db);
+        async Task<JsonObject> Read(string term="")
+        {
+            var result=await audit.QueryAuditLogAsync(new JsonObject{
+                ["operation"]="SITE_CREATE",["target"]=siteId,["includeTombstoned"]=true,["term"]=term
+            },default,General);
+            Assert.True(result.Success,result.UserMessage);
+            return Assert.IsType<JsonObject>(Assert.Single(
+                Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(result.Data)["items"])));
+        }
+        var original=await Read();
+        var id=original["auditEventId"]!.GetValue<string>();
+        var raw=original["rawDescription"]!.GetValue<string>();
+        var hash=original["eventHash"]!.GetValue<string>();
+        const string corrected="وصف معتمد فريد لا يوجد في الأصل";
+        var edit=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=id,["expectedOverlayVersion"]=0,["correctedDescription"]=corrected,
+            ["reason"]="اعتماد وصف القيد",["operationId"]="PHASE11-PARITY-EDIT-001"
+        },Admin,default);
+        Assert.True(edit.Success,edit.UserMessage);
+        var hide=await audit.DeleteAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=id,["expectedOverlayVersion"]=1,
+            ["reason"]="إخفاء دون تغيير الوصف",["operationId"]="PHASE11-PARITY-HIDE-001"
+        },Admin,default);
+        Assert.True(hide.Success,hide.UserMessage);
+        var hidden=await Read(corrected);
+        Assert.True(hidden["isTombstoned"]!.GetValue<bool>());
+        Assert.Equal(corrected,hidden["description"]!.GetValue<string>());
+        Assert.Equal(raw,hidden["rawDescription"]!.GetValue<string>());
+        Assert.Equal(hash,hidden["eventHash"]!.GetValue<string>());
+        var publicList=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="SITE_CREATE",["target"]=siteId,["term"]=corrected
+        },default,Supervisor);
+        Assert.Empty(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(publicList.Data)["items"]));
+        // Legacy authorized mutation can edit a previously hidden entry.
+        // Its immutable meta-receipt must report the actual prior description.
+        var editAgain=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=id,["expectedOverlayVersion"]=2,["correctedDescription"]="وصف لاحق",
+            ["reason"]="اختبار اتساق الحالة السابقة",["operationId"]="PHASE11-PARITY-EDIT-002"
+        },Admin,default);
+        Assert.True(editAgain.Success,editAgain.UserMessage);
+        Assert.Equal(corrected,editAgain.Data!["beforeState"]!["displayDescription"]!.GetValue<string>());
+        Assert.True(editAgain.Data!["beforeState"]!["isTombstoned"]!.GetValue<bool>());
+        var detail=await audit.GetAuditEntryDetailsAsync(new JsonObject{["auditEventId"]=id},default);
+        Assert.True(detail.Success,detail.UserMessage);
+        Assert.True(detail.Data!["chainValid"]!.GetValue<bool>());
+        var versions=Assert.IsType<JsonArray>(detail.Data!["overlays"]);
+        Assert.Equal(corrected,versions[2]!["beforeState"]!["displayDescription"]!.GetValue<string>());
+        var history=await audit.QueryAuditPresentationChangesAsync(new JsonObject{["auditEventId"]=id},default,Admin);
+        Assert.True(history.Success,history.UserMessage);
+        var archived=Assert.IsType<JsonArray>(history.Data!["items"]);
+        var third=Assert.Single(archived.Where(x=>x!["overlayVersion"]!.GetValue<int>()==3));
+        Assert.Equal(corrected,third!["beforeState"]!["displayDescription"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task AuditOverlay_EditHideReturnActualNewAuditReceipt_NotOriginalTargetId_AndReplayIsStable()
     {
         var added=await new AdminConfigurationService(_db).CreateSiteAsync(
