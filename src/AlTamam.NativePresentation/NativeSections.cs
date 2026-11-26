@@ -8,7 +8,8 @@ public enum NativeScreen
     Administration,
     Reports,
     Settings,
-    AuditLog
+    AuditLog,
+    Accounts
 }
 
 public sealed record NativeSectionDescriptor(NativeScreen Screen, string Title);
@@ -24,6 +25,7 @@ public static class NativeSections
             new NativeSectionDescriptor(NativeScreen.Administration, "الإدارة"),
             new NativeSectionDescriptor(NativeScreen.Reports, "التقارير"),
             new NativeSectionDescriptor(NativeScreen.AuditLog, "سجل العمليات"),
+            new NativeSectionDescriptor(NativeScreen.Accounts, "حسابات المستخدمين"),
             new NativeSectionDescriptor(NativeScreen.Settings, "الإعدادات")
         });
 }

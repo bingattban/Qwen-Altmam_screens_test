@@ -34,6 +34,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Administration = new AdministrationPageViewModel();
         Settings = new SettingsPageViewModel();
         Audit = new NativeAuditPageViewModel();
+        Accounts = new NativeAccountsPageViewModel();
         Pages = new NativePageViewModel[]
         {
             Dashboard,
@@ -42,6 +43,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Administration,
             new ReportsPageViewModel(),
             Audit,
+            Accounts,
             Settings
         };
         _pages = Pages.ToDictionary(page => page.Screen);
@@ -80,6 +82,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     }
                     if (screen != NativeScreen.AuditLog)
                         Audit.Clear();
+                    if (screen != NativeScreen.Accounts)
+                        Accounts.Clear();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.Dashboard)
                         _ = Dashboard.RefreshAsync();
@@ -91,6 +95,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         _ = Administration.RefreshAsync();
                     if (screen == NativeScreen.AuditLog)
                         _ = Audit.RefreshAsync();
+                    if (screen == NativeScreen.Accounts)
+                        _ = Accounts.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
@@ -117,6 +123,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public AdministrationPageViewModel Administration { get; }
     public SettingsPageViewModel Settings { get; }
     public NativeAuditPageViewModel Audit { get; }
+    public NativeAccountsPageViewModel Accounts { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -125,6 +132,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         Dashboard.AttachReader(reader, () => _active);
         DailyAttendance.AttachReader(reader, () => _active);
+        if (reader is INativeAccountReader accountReader)
+            Accounts.AttachReader(accountReader, () => _active);
         if (reader is INativeAuditReader auditReader)
             Audit.AttachReader(auditReader, () => _active);
         if (reader is INativeMonthlyAttendanceReader archiveReader)
@@ -182,6 +191,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private bool CanNavigate(NativeScreen screen)
         => IsAuthenticated && _pages.ContainsKey(screen) &&
            _active is { } identity && RoleAuthorizationPolicy.CanPerformStandardOperations(identity.Role) &&
+           (screen != NativeScreen.Accounts || Accounts.CanRead &&
+            (!ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview)) &&
            (screen != NativeScreen.AuditLog || Audit.CanRead &&
             (!ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview)) &&
            (screen != NativeScreen.Administration ||
@@ -260,6 +271,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             }
 
             _active = confirmed;
+            Accounts.Clear();
             Audit.Clear();
             Settings.NotifySessionChanged();
             _isFirstRun = false;
@@ -352,6 +364,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         MonthlyAttendance.Clear();
         Administration.Clear();
         _active = null;
+        Accounts.Clear();
         Audit.Clear();
         Settings.Clear();
         Settings.NotifySessionChanged();

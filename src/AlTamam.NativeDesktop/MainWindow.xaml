@@ -88,6 +88,7 @@
                 </Grid.ColumnDefinitions>
                 <Border CornerRadius="12" Background="#E7F0F7" BorderBrush="#CBD5E1"
                         BorderThickness="1" Padding="14">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="القائمة الرئيسية" FontSize="17" FontWeight="Bold"
                                    Foreground="#0F2942" Margin="0,4,0,16"/>
@@ -103,9 +104,23 @@
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Reports}"/>
                         <Button Content="سجل العمليات" Style="{StaticResource NavButton}"
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.AuditLog}"/>
+                        <Button Content="حسابات المستخدمين" Command="{Binding NavigateCommand}"
+                                CommandParameter="{x:Static present:NativeScreen.Accounts}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButton}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CanManageAccounts}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                         <Button Content="الإعدادات" Style="{StaticResource NavButton}"
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Settings}"/>
                     </StackPanel>
+                    </ScrollViewer>
                 </Border>
                 <Border Grid.Column="1" Margin="14,0,0,0" Padding="20"
                         Background="#FFFFFF" CornerRadius="12"
