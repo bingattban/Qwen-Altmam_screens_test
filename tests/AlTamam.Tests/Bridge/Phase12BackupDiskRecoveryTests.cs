@@ -121,6 +121,32 @@ public sealed class Phase12BackupDiskRecoveryTests : IAsyncLifetime, IDisposable
         Assert.True(_db.HasValidIntegrity());
     }
 
+    [Fact]
+    public async Task ReviewedManualBackupRejectsChangedDirectoryAndVerifiesRegisteredEncryptedFile()
+    {
+        var settings=new OutputDirectorySettings(_db);
+        Assert.True((await settings.SaveAsync(_folder,Admin,default)).Success);
+        var backup=new SettingsReadBackupService(_db,_clock);
+        var stale=await backup.BackupAsync(Admin,default,Path.Combine(_folder,"old"));
+        Assert.False(stale.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ConflictStale,stale.Code);
+        Assert.Empty(Directory.EnumerateFiles(_folder,"*.dbbackup"));
+        var created=await backup.BackupAsync(Admin,default,await settings.GetAsync());
+        Assert.True(created.Success,created.UserMessage);
+        var data=Assert.IsType<JsonObject>(created.Data);
+        var path=data["path"]!.GetValue<string>();
+        Assert.True(File.Exists(path));
+        Assert.True(data["verificationPassed"]!.GetValue<bool>());
+        var verified=await new BackupInspectionService(_db).VerifyAsync(path,default);
+        Assert.True(verified.Success,verified.UserMessage);
+        var details=Assert.IsType<JsonObject>(verified.Data);
+        Assert.True(details["verified"]!.GetValue<bool>());
+        Assert.True(details["registeredInCurrentCatalog"]!.GetValue<bool>());
+        Assert.Equal(data["sha256"]!.GetValue<string>(),details["sha256"]!.GetValue<string>(),
+            ignoreCase:true);
+        Assert.Single(Directory.EnumerateFiles(_folder,"*.dbbackup"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
