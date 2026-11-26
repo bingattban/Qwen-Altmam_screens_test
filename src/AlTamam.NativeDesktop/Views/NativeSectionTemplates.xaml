@@ -41,6 +41,7 @@
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}"/>
                 <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+                <Button Content="أرشيف القيود المعدلة والمخفية" Command="{Binding OpenHistoryCommand}" Visibility="{Binding CanOpenHistory, Converter={StaticResource VisibilityIfTrue}}" Margin="0,6" Padding="10,5" HorizontalAlignment="Right"/>
             </StackPanel>
             <WrapPanel Grid.Row="1" Margin="0,8" IsEnabled="{Binding CanQuery}">
                 <StackPanel Margin="4"><TextBlock Text="بحث عام"/>
@@ -148,6 +149,7 @@
                             <TextBlock Text="معرف الارتباط وإصدار العرض" FontWeight="SemiBold"/>
                             <TextBox Text="{Binding Detail.CorrelationId, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding Detail.OverlayVersion}"/>
+                            <Button Content="تاريخ تعديلات هذا القيد" Command="{Binding OpenEntryHistoryCommand}" Visibility="{Binding CanOpenEntryHistory, Converter={StaticResource VisibilityIfTrue}}" Padding="10,5" Margin="0,6" HorizontalAlignment="Right"/>
                             <WrapPanel HorizontalAlignment="Right">
                                 <Button Content="تعديل الوصف الظاهر" Command="{Binding OpenEditCommand}"
                                         Visibility="{Binding CanOpenEdit, Converter={StaticResource VisibilityIfTrue}}"
@@ -200,6 +202,50 @@
                 </StackPanel>
                 <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold"/>
             </DockPanel>
+            <Border Grid.Row="0" Grid.RowSpan="5" Panel.ZIndex="10" Background="#FFFFFF"
+                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="12"
+                    Visibility="{Binding History.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" Content="إغلاق الأرشيف" Command="{Binding History.CloseCommand}" Padding="10,5"/>
+                            <TextBlock Text="أرشيف القيود المعدلة والمخفية" FontWeight="Bold" FontSize="18" TextWrapping="Wrap"/>
+                        </DockPanel>
+                        <TextBlock Text="{Binding History.ScopeLabel}" FontWeight="SemiBold" Margin="0,5"/>
+                        <TextBlock Text="للقراءة فقط — يعرض جميع إصدارات التعديل والإخفاء، ولا يحذف الدليل الأصلي." TextWrapping="Wrap" Foreground="#475569"/>
+                        <TextBlock Text="{Binding History.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                        <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding History.IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+                    </StackPanel>
+                    <DockPanel DockPanel.Dock="Bottom" Margin="0,6">
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                            <Button Content="السابق" Command="{Binding History.PreviousCommand}" Margin="4" Padding="10,5"/>
+                            <Button Content="التالي" Command="{Binding History.NextCommand}" Margin="4" Padding="10,5"/>
+                            <Button Content="تحديث" Command="{Binding History.RefreshCommand}" Margin="4" Padding="10,5"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding History.PageLabel}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    </DockPanel>
+                    <DataGrid ItemsSource="{Binding History.Rows}" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                              CanUserSortColumns="False" EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                              HeadersVisibility="Column" SelectionMode="Single" Margin="0,8">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="معرف القيد" Binding="{Binding AuditEventId}" Width="115"/>
+                            <DataGridTextColumn Header="العملية الأصلية" Binding="{Binding OperationCode}" Width="110"/>
+                            <DataGridTextColumn Header="الإصدار" Binding="{Binding After.Version}" Width="55"/>
+                            <DataGridTextColumn Header="الإجراء" Binding="{Binding ActionLabel}" Width="85"/>
+                            <DataGridTextColumn Header="المنفذ" Binding="{Binding EditedByDisplay}" Width="120"/>
+                            <DataGridTextColumn Header="معرف المنفذ" Binding="{Binding EditedByUserId}" Width="100"/>
+                            <DataGridTextColumn Header="التوقيت UTC" Binding="{Binding EditedAtUtc}" Width="150"/>
+                            <DataGridTextColumn Header="السبب" Binding="{Binding Reason}" Width="160"/>
+                            <DataGridTextColumn Header="الوصف الأصلي" Binding="{Binding RawDescription}" Width="180"/>
+                            <DataGridTextColumn Header="الوصف السابق" Binding="{Binding Before.Description}" Width="180"/>
+                            <DataGridTextColumn Header="الوصف اللاحق" Binding="{Binding After.Description}" Width="180"/>
+                            <DataGridTextColumn Header="الحالة السابقة" Binding="{Binding BeforeVisibility}" Width="90"/>
+                            <DataGridTextColumn Header="الحالة اللاحقة" Binding="{Binding AfterVisibility}" Width="90"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
         </Grid>
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
