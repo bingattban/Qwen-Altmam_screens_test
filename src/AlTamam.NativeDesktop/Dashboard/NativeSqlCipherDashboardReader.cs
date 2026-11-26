@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -340,6 +340,61 @@ public sealed class NativeSqlCipherDashboardReader(
             intent.Role,RequiredText(data,"linkedPersonId"));
         if(receipt.UserId==actor.UserId || !receipt.Matches(intent))
             throw new InvalidDataException("Canonical account creation receipt mismatch.");
+        return receipt;
+    }
+
+    public async Task<NativeAccountLifecycleReceipt> ApplyAccountActionAsync(NativeIdentity actor,
+        NativeAccountLifecycleIntent intent,string password,CancellationToken ct=default)
+    {
+        if(intent is null || !intent.IsValid(actor) ||
+            (intent.Action==NativeAccountAction.ChangePassword
+                ? !PasswordPolicyValidator.Validate(password).IsValid : password!=""))
+            throw new UnauthorizedAccessException("Invalid account lifecycle intent.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Account lifecycle session changed.");
+        var payload=new JsonObject
+        {
+            ["userId"]=intent.Row.UserId,["expectedRevision"]=intent.Row.Revision,
+            ["operationId"]=intent.OperationId
+        };
+        var service=new UserAccountManagementService(database);
+        BridgeResponse response;
+        try
+        {
+            switch(intent.Action)
+            {
+                case NativeAccountAction.ChangePassword:
+                    payload["password"]=password;
+                    response=await service.ChangePasswordAsync(payload,principal,ct).ConfigureAwait(false);
+                    break;
+                case NativeAccountAction.Deactivate:
+                    response=await service.DeactivateAsync(payload,principal,ct).ConfigureAwait(false);
+                    break;
+                case NativeAccountAction.Reactivate:
+                    payload["reason"]=intent.Reason;
+                    response=await service.ReactivateAsync(payload,principal,ct).ConfigureAwait(false);
+                    break;
+                default: throw new InvalidDataException("Unknown account action.");
+            }
+        }
+        finally { payload.Remove("password"); }
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        // The caller distinguishes first rejection from rejection following
+        // an ambiguous attempt. A pre-replay eligibility failure is not proof
+        // that an earlier reactivation did not commit.
+        if(!response.Success && response.Code is BridgeErrorCodes.ConflictStale or
+            BridgeErrorCodes.ValidationError or BridgeErrorCodes.Unauthorized)
+            throw new NativeAccountLifecycleRejectedException();
+        var data=RequiredObject(response,"AccountLifecycle");
+        var receipt=new NativeAccountLifecycleReceipt(RequiredText(data,"userId"),
+            RequiredBoolean(data,"active"),RequiredNumber(data,"rowVersion"));
+        if(!receipt.Matches(intent))
+            throw new InvalidDataException("Canonical account lifecycle receipt mismatch.");
         return receipt;
     }
 
