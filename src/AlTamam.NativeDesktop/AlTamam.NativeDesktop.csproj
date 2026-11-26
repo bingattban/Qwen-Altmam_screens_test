@@ -16,5 +16,7 @@
          No copy, fork, duplicate scheduling policy, or desktop-host runtime dep. -->
     <Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"
              Link="Scheduling/EightPmSchedulerService.cs" />
+    <Compile Include="../AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs"
+             Link="Scheduling/AutomaticBackupSchedulerService.cs" />
   </ItemGroup>
 </Project>
