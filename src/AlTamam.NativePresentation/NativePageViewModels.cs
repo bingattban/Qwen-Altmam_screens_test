@@ -71,6 +71,15 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public NativeBackupScheduleReview Schedule { get; }=new();
     public NativeBackupInspectionReview Inspection { get; }=new();
     public NativeCommand CloseInspectionCommand { get; }
+    public bool CanExportRecovery=>!IsReviewOpen && !Overview.IsLoading &&
+        _inspectionActor?.Invoke() is { Role:AlTamam.Domain.Enums.UserRole.GeneralAdministration };
+    public NativeIdentity? RecoveryExportActor=>CanExportRecovery?_inspectionActor?.Invoke():null;
+    public NativeRecoveryExportIntent? GetRecoveryExportIntent(string destination)
+    {
+        if(RecoveryExportActor is not { } actor) return null;
+        var intent=new NativeRecoveryExportIntent(actor,destination);
+        return intent.Matches(RecoveryExportActor)?intent:null;
+    }
     public bool CanOpenInspection=>!IsReviewOpen && !Overview.IsLoading && _inspectionBackend is not null &&
         _inspectionActor?.Invoke() is { } actor &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role);
@@ -133,6 +142,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenScheduleCommand.NotifyAvailabilityChanged(); CloseScheduleCommand.NotifyAvailabilityChanged();
         CloseInspectionCommand.NotifyAvailabilityChanged();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenInspection)));
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanExportRecovery)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenSchedule)));
     }
     public NativeAdministrativeCatchUpReview CatchUp { get; }
