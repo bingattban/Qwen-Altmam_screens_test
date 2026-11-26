@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -415,6 +415,33 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!receipt.Matches(intent))
             throw new InvalidDataException("Canonical account lifecycle receipt mismatch.");
         return receipt;
+    }
+
+    public async Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,
+        CancellationToken ct=default)
+    {
+        if(!RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role))
+            throw new UnauthorizedAccessException("Settings overview denied.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce)
+            throw new UnauthorizedAccessException("Settings session changed.");
+        var response=await new SettingsReadBackupService(database).OverviewAsync(principal,ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"GetSettingsOverview");
+        if(RequiredText(data,"role")!=actor.Role.ToString() || !data.ContainsKey("lastAutoBackupDate"))
+            throw new InvalidDataException("Invalid settings identity or backup evidence.");
+        var overview=new NativeSettingsOverview(RequiredText(data,"username"),actor.Role,
+            RequiredText(data,"backupDirectory"),RequiredBoolean(data,"defaultDriveAvailable"),
+            RequiredText(data,"backupTime"),RequiredBoolean(data,"automaticBackupEnabled"),
+            checked((int)RequiredNumber(data,"automaticBackupRetentionCount")),
+            data["lastAutoBackupDate"]?.GetValue<string>(),RequiredText(data,"lastAutoBackupFailure"),
+            RequiredText(data,"theme"));
+        if(!overview.Matches(actor))
+            throw new InvalidDataException("Invalid canonical settings overview.");
+        return overview;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
