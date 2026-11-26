@@ -177,6 +177,21 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             }).ConfigureAwait(false);
     }
 
+    internal async Task<bool> ExportRecoveryKeyAsync(NativeRecoveryExportIntent intent,
+        string currentAdminPassword,string recoveryPassphrase,CancellationToken ct=default)
+    {
+        if(_disposed || intent is null || !intent.IsValid) return false;
+        using var nativeOperation = _operations.Enter();
+        var actor=intent.Actor;
+        var principal=await _services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return false;
+        var keyStore=new WindowsDatabaseKeyStore(Path.Combine(AppDataLayout.DataRoot,"db.key.protected"));
+        return await new NativePortableRecoveryExportService(_database,_services,keyStore)
+            .TryExportAsync(principal,currentAdminPassword,recoveryPassphrase,intent.Destination,ct)
+            .ConfigureAwait(false);
+    }
+
     public ValueTask DisposeAsync()
     {
         lock (_lifecycleSync)
