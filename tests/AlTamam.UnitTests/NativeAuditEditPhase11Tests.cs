@@ -105,10 +105,46 @@ public sealed class NativeAuditEditPhase11Tests
         Assert.Null(review.Prepared);
     }
 
-    private sealed class Backend : INativeAuditEditBackend
+    [Fact]
+    public async Task Page_edit_freezes_filters_and_reloads_after_verified_receipt()
+    {
+        var backend=new Backend();
+        var vm=new NativeAuditPageViewModel();
+        vm.AttachReader(backend,()=>Admin);
+        await vm.SearchAsync();
+        await vm.OpenDetailAsync(Assert.Single(vm.Rows));
+        Assert.True(vm.CanOpenEdit);
+        vm.OpenEdit();
+        Assert.True(vm.Edit.IsOpen);
+        vm.Term="محاولة بحث";
+        Assert.Equal("",vm.Term);
+        await vm.RefreshAsync();
+        vm.CloseDetail();
+        Assert.NotNull(vm.Detail);
+        Assert.Equal(1,backend.ListReads);
+        vm.Edit.Description="وصف جديد";
+        vm.Edit.Reason="توضيح الوصف";
+        vm.Edit.Preview();
+        await vm.Edit.ConfirmAsync();
+        Assert.NotNull(vm.Edit.Receipt);
+        await vm.CloseEditAsync();
+        Assert.False(vm.Edit.IsOpen);
+        Assert.Null(vm.Detail);
+        Assert.Equal(2,backend.ListReads);
+    }
+
+    private sealed class Backend : INativeAuditEditBackend, INativeAuditReader, INativeAuditDetailReader
     {
         public List<NativeAuditEditRequest> Requests=[];
         public bool Fail,Forged,Stale;
+        public int ListReads;
+        public Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,CancellationToken ct=default)
+        {
+            ListReads++;
+            return Task.FromResult(new NativeAuditSnapshot(filter,1,false,[Row]));
+        }
+        public Task<NativeAuditDetail> ReadAuditDetailAsync(NativeIdentity actor,NativeAuditRow row,CancellationToken ct=default)
+            =>Task.FromResult(Detail);
         public Task<NativeAuditEditReceipt>? Pending;
         public Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,NativeAuditEditRequest request,CancellationToken ct=default)
         {
