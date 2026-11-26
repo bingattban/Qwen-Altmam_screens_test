@@ -84,6 +84,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         Audit.Clear();
                     if (screen != NativeScreen.Accounts)
                         Accounts.Clear();
+                    if (screen != NativeScreen.Settings)
+                        Settings.Overview.Clear();
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.Dashboard)
                         _ = Dashboard.RefreshAsync();
@@ -97,6 +99,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                         _ = Audit.RefreshAsync();
                     if (screen == NativeScreen.Accounts)
                         _ = Accounts.RefreshAsync();
+                    if (screen == NativeScreen.Settings)
+                        _ = Settings.Overview.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
@@ -142,6 +146,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             MonthlyAttendance.AttachReader(archiveReader, () => _active);
         if (reader is INativePersonnelDirectoryReader personnelReader)
             Administration.AttachReader(personnelReader, () => _active);
+        if (reader is INativeSettingsOverviewReader overviewReader)
+            Settings.Overview.Attach(overviewReader, () => _active);
         if (reader is INativeAdministrativeCatchUpBackend catchUpBackend)
             Settings.AttachCatchUp(catchUpBackend, () => _active);
         if (reader is INativeClosedDayPolicyBackend policyBackend)
