@@ -12,6 +12,9 @@ PATHS = {
     "original": "src/AlTamam.Application/Bridge/PersonnelReportService.cs",
     "audit_contracts": "src/AlTamam.NativePresentation/NativeAuditReadContracts.cs",
     "audit_detail": "src/AlTamam.NativePresentation/NativeAuditDetailContracts.cs",
+    "audit_history_contract": "src/AlTamam.NativePresentation/NativeAuditHistoryContracts.cs",
+    "audit_history_vm": "src/AlTamam.NativePresentation/NativeAuditHistoryViewModel.cs",
+    "audit_history_tests": "tests/AlTamam.UnitTests/NativeAuditHistoryPhase11Tests.cs",
     "audit_edit_contract": "src/AlTamam.NativePresentation/NativeAuditEditContracts.cs",
     "audit_edit_review": "src/AlTamam.NativePresentation/NativeAuditEditReview.cs",
     "audit_edit_tests": "tests/AlTamam.UnitTests/NativeAuditEditPhase11Tests.cs",
@@ -53,6 +56,15 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
+    "audit_history_contract": ("CanReviewAuditOverlayHistory(role)", "After.Version==Before.Version+1",
+                               "After.Description==Before.Description", "!keys.Add((row.AuditEventId,row.After.Version))",
+                               "row.AuditEventId!=expected.AuditEventId"),
+    "audit_history_vm": ("generation!=_generation", "AuthorizedActor!=actor", "_pending?.Cancel()",
+                         "result.Matches(request)", "Array.AsReadOnly(result.Rows.ToArray())"),
+    "audit_history_tests": ("History_preserves_versions_and_rejects_duplicate_or_forged_states",
+                            "History_reads_selected_scope_and_pages_then_clears",
+                            "History_denies_supervisor_and_discards_wrong_scope",
+                            "History_cannot_repaint_after_close_or_session_change"),
     "audit_edit_contract": ("Hide ? Description==Row.Description", "request.Hide,request.Description", "CanEditOrDeleteVisibleAuditLog(role)", "detail.ChainValid",
                             "OperationAuditEventId!=AuditEventId", "RawEvidenceUntouched",
                             "Before==new NativeAuditEditState", "After==new NativeAuditEditState"),
@@ -75,7 +87,8 @@ REQUIRED = {
                            "Detail_requires_reference_bound_row_and_preserves_list",
                            "Detail_discards_late_response_on_filter_edit_or_session_change",
                            "Detail_clear_during_read_scrubs_all_evidence"),
-    "audit_list": ("public bool CanOpenHide=>CanOpenEdit", "()=>Detail,hide:true", "Edit.ForceClear()", "if(Edit.IsOpen) return;", "Edit.Receipt is not null || Edit.NeedsReload",
+    "audit_list": ("History.Close()", "History.Attach(historyReader,liveActor)", "History.OpenAsync(row.AuditEventId,ct)",
+                   "public bool CanOpenHide=>CanOpenEdit", "()=>Detail,hide:true", "Edit.ForceClear()", "if(Edit.IsOpen) return;", "Edit.Receipt is not null || Edit.NeedsReload",
                    "ReferenceEquals(current,row)", "generation!=_detailGeneration",
                    "result.Matches(row,actor.Role)", "_detailPending?.Cancel()", "ResetDetail();",
                    "_pending?.Cancel()", "generation!=_generation", "AuthorizedActor!=actor",
@@ -88,7 +101,9 @@ REQUIRED = {
     "audit_shell": ("!Audit.Edit.IsOpen", "Audit.AttachReader(auditReader, () => _active)", "Audit.Clear();",
                     "screen == NativeScreen.AuditLog", "screen != NativeScreen.AuditLog || Audit.CanRead"),
     "audit_host": ("present:NativeScreen.AuditLog",),
-    "audit_template": ("Binding OpenHideCommand", "Binding Edit.ShowDescriptionEditor", "Binding Edit.AfterLabel", "Binding Edit.PreviewCommand", "Binding Edit.ConfirmCommand", "Binding CloseEditCommand",
+    "audit_template": ("Binding OpenHistoryCommand", "Binding OpenEntryHistoryCommand", "Binding History.Rows",
+                       "Binding Before.Description", "Binding After.Description", "Binding History.CloseCommand",
+                       "Binding OpenHideCommand", "Binding Edit.ShowDescriptionEditor", "Binding Edit.AfterLabel", "Binding Edit.PreviewCommand", "Binding Edit.ConfirmCommand", "Binding CloseEditCommand",
                        "Binding DataContext.OpenDetailCommand", "Binding Detail.ChainStatus",
                        "Binding Detail.RawDescription", "Binding Detail.EventHash",
                        "Binding Detail.OldValueDisplay", "Binding Detail.NewValueDisplay",
@@ -105,6 +120,9 @@ REQUIRED = {
                     "Audit_snapshot_checks_actual_page_size_and_canonical_offset"),
     "adapter": ("new PersonnelReportService(database)",
                 "new AuditOverlayService(database).QueryAuditLogAsync",
+                "new AuditOverlayService(database).QueryAuditPresentationChangesAsync",
+                '["pageSize"]=NativeAuditHistoryRequest.PageSize',
+                "!request.IsAuthorized(principal.Role)", "!page.Matches(request)",
                 "new AuditOverlayService(database).GetAuditEntryDetailsAsync",
                 "new AuditOverlayService(database).UpdateAuditPresentationAsync",
                 "new AuditOverlayService(database).DeleteAuditPresentationAsync",
@@ -152,12 +170,13 @@ def validate(files):
                 errors.append(f"{key}: missing original report invariant: {token}")
     if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
         errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
-    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review"):
+    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review", "audit_history_contract", "audit_history_vm"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
     try:
         ElementTree.fromstring(files["view"])
+        ElementTree.fromstring(files["audit_template"])
     except ElementTree.ParseError as exc:
         errors.append(f"view: malformed XML: {exc}")
     if files["tests"].count("[Fact]") < 5 or "[Theory]" not in files["tests"]:
@@ -183,6 +202,11 @@ if __name__ == "__main__":
         ("audit_list", "generation!=_generation"),
         ("audit_list", "generation!=_detailGeneration"),
         ("audit_detail", "OverlayVersion==row.OverlayVersion"),
+        ("audit_history_contract", "!keys.Add((row.AuditEventId,row.After.Version))"),
+        ("audit_history_vm", "AuthorizedActor!=actor"),
+        ("audit_history_tests", "History_cannot_repaint_after_close_or_session_change"),
+        ("adapter", "new AuditOverlayService(database).QueryAuditPresentationChangesAsync"),
+        ("audit_template", "Binding History.Rows"),
         ("audit_edit_contract", "OperationAuditEventId!=AuditEventId"),
         ("audit_edit_review", "_uncertain=true"),
         ("audit_edit_review", "_backend.HideAuditEntryAsync(_actor!,request,ct)"),
