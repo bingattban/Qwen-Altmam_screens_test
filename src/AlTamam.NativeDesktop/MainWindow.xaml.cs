@@ -275,7 +275,7 @@ public partial class MainWindow : Window
             {
                 string retained=data["backupFilesNotDeleted"]?.ToString()??"غير معروف";
                 MessageBox.Show(this,"اكتمل التصفير. نسخة الإنقاذ المشفرة: "+rescue+
-                    "\\nعدد النسخ التي تعذر حذفها: "+retained+"\\nافتح البرنامج مجددا للتهيئة الأولى.",
+                    "\nعدد النسخ التي تعذر حذفها: "+retained+"\nافتح البرنامج مجددا للتهيئة الأولى.",
                     "اكتمل التصفير",MessageBoxButton.OK,MessageBoxImage.Information);
             }
             else
