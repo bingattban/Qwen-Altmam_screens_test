@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -442,6 +442,62 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");
         return overview;
+    }
+
+    private async Task<BridgePrincipal> ResolveBackupPrincipalAsync(NativeIdentity actor,CancellationToken ct)
+    {
+        if(!RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role))
+            throw new UnauthorizedAccessException("Backup denied.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce)
+            throw new UnauthorizedAccessException("Backup session changed.");
+        return principal;
+    }
+
+    public async Task<NativeManualBackupReceipt> CreateManualBackupAsync(NativeIdentity actor,string directory,
+        CancellationToken ct=default)
+    {
+        if(!NativeManualBackupReceipt.ValidDirectory(directory)) throw new NativeBackupRejectedException();
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        var response=await new SettingsReadBackupService(database).BackupAsync(principal,ct,directory).ConfigureAwait(false);
+        if(!response.Success && response.Code is BridgeErrorCodes.ConflictStale or BridgeErrorCodes.ValidationError)
+            throw new NativeBackupRejectedException();
+        var data=RequiredObject(response,"CreateVerifiedBackup");
+        string path=RequiredText(data,"path"),hash=RequiredText(data,"sha256"),id=RequiredText(data,"backupId");
+        if(!RequiredBoolean(data,"verificationPassed") ||
+            !new NativeManualBackupReceipt(id,path,hash,1,true).Matches(directory))
+            throw new InvalidDataException("Invalid backup creation receipt.");
+        var verification=await new BackupInspectionService(database).VerifyAsync(path,ct).ConfigureAwait(false);
+        var verified=RequiredObject(verification,"VerifyBackup");
+        var result=new NativeManualBackupReceipt(id,path,hash,RequiredNumber(verified,"fileSizeBytes"),
+            RequiredBoolean(verified,"verified") && RequiredBoolean(verified,"schemaCompatible") &&
+            RequiredBoolean(verified,"registeredInCurrentCatalog") &&
+            string.Equals(RequiredText(verified,"path"),path,StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(RequiredText(verified,"sha256"),hash,StringComparison.OrdinalIgnoreCase));
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if(!result.Matches(directory)) throw new InvalidDataException("Unverified manual backup.");
+        return result;
+    }
+
+    public async Task<string> SaveBackupDirectoryAsync(NativeIdentity actor,string directory,CancellationToken ct=default)
+    {
+        if(!NativeManualBackupReceipt.ValidDirectory(directory)) throw new NativeBackupRejectedException();
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        var settings=new OutputDirectorySettings(database);
+        var response=await settings.SaveAsync(directory,principal,ct).ConfigureAwait(false);
+        if(!response.Success && response.Code==BridgeErrorCodes.ValidationError)
+            throw new NativeBackupRejectedException();
+        string saved=RequiredText(RequiredObject(response,"SetOutputDirectory"),"directory");
+        var persisted=await settings.GetAsync(ct).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if(!NativeManualBackupReceipt.SameDirectory(saved,directory) ||
+            !NativeManualBackupReceipt.SameDirectory(persisted,saved))
+            throw new InvalidDataException("Unverified output directory.");
+        return saved;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
