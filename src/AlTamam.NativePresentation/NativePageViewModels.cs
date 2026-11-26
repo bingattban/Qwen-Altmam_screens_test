@@ -42,7 +42,8 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
         CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
         Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
-        Overview.PropertyChanged+=(_,_)=>NotifyBackupCommands();
+        Overview.PropertyChanged+=(_,_)=>{ NotifyBackupCommands(); Diagnostics.Notify(); };
+        Diagnostics.PropertyChanged+=(_,_)=>NotifySessionChanged();
         CatchUp = new NativeAdministrativeCatchUpReview();
         Policy = new NativeClosedDayPolicyReview();
         Historical = new NativeHistoricalPeriodReview();
@@ -67,6 +68,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         Policy.PropertyChanged += (_, _) => NotifySessionChanged();
     }
     public NativeSettingsOverviewViewModel Overview { get; }=new();
+    public NativeProgramDiagnosticsViewModel Diagnostics { get; }=new();
     public NativeManualBackupReview Backup { get; }=new();
     public NativeBackupScheduleReview Schedule { get; }=new();
     public NativeBackupInspectionReview Inspection { get; }=new();
@@ -158,7 +160,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
+    public bool IsReviewOpen => Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -294,6 +296,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         Inspection.ForceClear();
         Schedule.ForceClear();
         Backup.ForceClear();
+        Diagnostics.Clear();
         Overview.Clear();
         CatchUp.ForceClear();
         Policy.ForceClear();
