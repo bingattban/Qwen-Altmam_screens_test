@@ -348,6 +348,36 @@
         <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
             <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
+            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+                    CornerRadius="6" Padding="14" Margin="6">
+                <StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Left" Content="تحديث الإعدادات" Command="{Binding Overview.RefreshCommand}" Padding="10,5"/>
+                        <TextBlock Text="الإعدادات الحالية" FontSize="18" FontWeight="Bold" Foreground="#123752"/>
+                    </DockPanel>
+                    <ProgressBar Height="4" IsIndeterminate="True" Margin="0,5"
+                                 Visibility="{Binding Overview.IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+                    <TextBlock Text="{Binding Overview.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <StackPanel Visibility="{Binding Overview.HasSnapshot, Converter={StaticResource VisibilityIfTrue}}">
+                        <TextBlock Text="الحساب والصلاحية" FontWeight="SemiBold" Margin="0,8,0,3"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.Username}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.RoleLabel}"/>
+                        <TextBlock Text="مجلد النسخ الاحتياطي المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.BackupDirectory}" TextWrapping="Wrap" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.DirectoryLabel}" TextWrapping="Wrap"/>
+                        <TextBlock Text="موعد النسخ التلقائي المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.BackupTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.BackupEnabledLabel}"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.RetentionLabel}"/>
+                        <TextBlock Text="آخر نسخة تلقائية ناجحة مسجلة" FontWeight="SemiBold" Margin="0,8,0,3"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.LastBackupLabel}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                        <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
+                        <TextBlock Text="هذه قراءة للإعدادات المحفوظة فقط. لا تثبت تشغيل مجدول النسخ الاحتياطي في الواجهة التجريبية ولا تغير أي إعداد." TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
             <Button Content="استدراك يوم سابق (خلال 7 أيام)"
                     Command="{Binding OpenCatchUpCommand}" Padding="12,8" Margin="6"/>
             <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
