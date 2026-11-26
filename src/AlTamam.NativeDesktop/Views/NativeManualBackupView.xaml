@@ -16,6 +16,10 @@
                         Visibility="{Binding CanExportRecovery, Converter={StaticResource ShowIfTrue}}"
                         IsEnabled="{Binding CanExportRecovery}" Padding="12,6" Margin="4"/>
             </WrapPanel>
+            <Button Content="مراجعة تصفير جميع البيانات" Click="OnFullResetClick"
+                    Visibility="{Binding CanExportRecovery, Converter={StaticResource ShowIfTrue}}"
+                    IsEnabled="{Binding CanExportRecovery}" Foreground="#B91C1C"
+                    Padding="12,6" Margin="4" HorizontalAlignment="Right"/>
             <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F1F5F9" Padding="12" Margin="0,8,0,0"
                     Visibility="{Binding Backup.IsOpen, Converter={StaticResource ShowIfTrue}}">
                 <StackPanel>
