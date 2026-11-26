@@ -16,6 +16,7 @@ public sealed class NativeAccountCreateReview : INotifyPropertyChanged
     private UserRole? _role;
     private NativeAccountPerson? _selected;
     private IReadOnlyList<NativeAccountPerson> _people=[];
+    private IReadOnlyList<NativeAccountRoleChoice> _roleChoices=[];
 
     public NativeAccountCreateReview()
     {
@@ -39,7 +40,7 @@ public sealed class NativeAccountCreateReview : INotifyPropertyChanged
     public bool HasPreview=>IsOpen && Prepared is not null;
     public IReadOnlyList<NativeAccountPerson> People=>IsOpen?_people:[];
     public IReadOnlyList<NativeAccountRoleChoice> RoleChoices=>IsOpen
-        ? NativeAccountRequest.AllowedCreationRoles(_actor!.Role).Select(role=>new NativeAccountRoleChoice(role,role.ToArabicLabel())).ToArray():[];
+        ? _roleChoices:[];
     public string Error=>IsOpen?_error:"";
     public string ConfirmLabel=>_uncertain?"إعادة تأكيد الإنشاء بنفس كلمة المرور":"تأكيد إنشاء الحساب";
     public string CompletionMessage=>Receipt is { } receipt?$"تم إنشاء الحساب: {receipt.Username}": "";
@@ -80,7 +81,10 @@ public sealed class NativeAccountCreateReview : INotifyPropertyChanged
     public bool Open(INativeAccountCreateBackend backend,NativeIdentity actor,Func<NativeIdentity?> liveActor)
     {
         if(_actor is not null || liveActor()!=actor || !RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)) return false;
-        _backend=backend; _actor=actor; _liveActor=liveActor; Notify(); return true;
+        _backend=backend; _actor=actor; _liveActor=liveActor;
+        _roleChoices=Array.AsReadOnly(NativeAccountRequest.AllowedCreationRoles(actor.Role)
+            .Select(role=>new NativeAccountRoleChoice(role,role.ToArabicLabel())).ToArray());
+        Notify(); return true;
     }
     private void CancelSearch()
     {
@@ -186,7 +190,7 @@ public sealed class NativeAccountCreateReview : INotifyPropertyChanged
     public void ForceClear()
     {
         CancelSearch(); _backend=null; _actor=null; _liveActor=null;
-        _people=[]; _selected=null; _role=null; _term=_username=_error="";
+        _people=[]; _roleChoices=[]; _selected=null; _role=null; _term=_username=_error="";
         _busy=_uncertain=false; Prepared=null; Receipt=null; Notify();
     }
     private void Notify()
