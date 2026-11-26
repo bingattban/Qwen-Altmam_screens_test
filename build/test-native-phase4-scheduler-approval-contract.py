@@ -196,6 +196,7 @@ def problems(contents):
                   "Reinspection_invalidates_previous_restore_intent"):
         need("restore_tests",token)
     need("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions")
+    need("reset_tests","NativeReset_ChangedDataFromAdmittedWorkDuringDrainRejectsPreviewWithoutRescue")
     need("restore_view",'Click="OnFullResetClick"')
     need("restore_code","await host.RequestFullResetAsync(settings)")
     for token in ("Actor==liveActor","Actor.Role==UserRole.GeneralAdministration",
