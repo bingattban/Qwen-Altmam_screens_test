@@ -21,7 +21,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -272,6 +272,75 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!page.Matches(request,actor))
             throw new InvalidDataException("Canonical account list scope or permission mismatch.");
         return page;
+    }
+
+    public async Task<NativeAccountPersonSearch> SearchAccountPeopleAsync(NativeIdentity actor,
+        string term,CancellationToken ct=default)
+    {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            throw new UnauthorizedAccessException("Account roster search denied.");
+        if(!NativeAccountPersonSearch.ValidTerm(term))
+            throw new InvalidDataException("Invalid account roster search.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var response=await services.SearchPersonsAsync(term,50,ct,activeOnly:true).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"SearchActivePersonsForAccount");
+        var items=RequiredArray(data,"items");
+        if(items.Count>50 || RequiredNumber(data,"count")!=items.Count)
+            throw new InvalidDataException("Invalid account roster search count.");
+        var people=items.Select(node=>
+        {
+            var item=RequireObject(node);
+            return new NativeAccountPerson(RequiredText(item,"personId"),RequiredText(item,"displayName"),
+                RequiredText(item,"serviceNumberA"),RequiredText(item,"siteName"),
+                checked((int)RequiredNumber(item,"organizationalStatus")),RequiredNumber(item,"revision"));
+        }).ToArray();
+        var result=new NativeAccountPersonSearch(term,Array.AsReadOnly(people));
+        if(!result.Matches(term)) throw new InvalidDataException("Invalid active person evidence.");
+        return result;
+    }
+
+    public async Task<NativeAccountCreateReceipt> CreateAccountAsync(NativeIdentity actor,
+        NativeAccountCreateIntent intent,string password,string confirmation,CancellationToken ct=default)
+    {
+        if(intent is null || !intent.IsValid(actor.Role) ||
+            !NativeAccountCreateIntent.ValidPassword(password,confirmation))
+            throw new UnauthorizedAccessException("Invalid account creation intent.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce || !intent.IsValid(principal.Role))
+            throw new UnauthorizedAccessException("Account creation session changed.");
+        // The canonical service validates active roster linkage, uniqueness and role
+        // atomically. Keep operationId stable on retry and never log the payload.
+        var payload=new JsonObject
+        {
+            ["personId"]=intent.Person.PersonId,["username"]=intent.Username,["role"]=intent.Role.ToString(),
+            ["password"]=password,["passwordConfirmation"]=confirmation,["operationId"]=intent.OperationId
+        };
+        BridgeResponse response;
+        try
+        {
+            response=await new UserAccountManagementService(database).CreateAsync(payload,principal,ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            payload.Remove("password"); payload.Remove("passwordConfirmation");
+        }
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        // Do not classify operation-ID payload mismatch or transport errors as rejection.
+        if(!response.Success && response.Code is BridgeErrorCodes.DuplicateUsername or BridgeErrorCodes.ValidationError)
+            throw new NativeAccountCreateRejectedException("Canonical account creation rejected.");
+        var data=RequiredObject(response,"CreateUserAccount");
+        if(RequiredText(data,"role")!=intent.Role.ToString())
+            throw new InvalidDataException("Account creation receipt role mismatch.");
+        var receipt=new NativeAccountCreateReceipt(RequiredText(data,"userId"),RequiredText(data,"username"),
+            intent.Role,RequiredText(data,"linkedPersonId"));
+        if(receipt.UserId==actor.UserId || !receipt.Matches(intent))
+            throw new InvalidDataException("Canonical account creation receipt mismatch.");
+        return receipt;
     }
 
     private readonly NativeSqlCipherAttendanceReviewBackend _review =
