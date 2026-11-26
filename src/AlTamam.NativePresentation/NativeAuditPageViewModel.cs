@@ -35,6 +35,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
             row=>row is NativeAuditRow item && CanOpenDetail(item));
         CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen && !Edit.IsOpen);
         OpenEditCommand=new NativeCommand(_=>OpenEdit(),_=>CanOpenEdit);
+        OpenHideCommand=new NativeCommand(_=>OpenHide(),_=>CanOpenHide);
         CloseEditCommand=new NativeCommand(_=>_ = CloseEditAsync(),_=>Edit.CanClose);
         Edit.PropertyChanged+=(_,_)=>Notify();
     }
@@ -48,7 +49,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     private bool CanPage => !_loading && IsDataConnected && !Edit.IsOpen;
     public override bool IsDataConnected => _snapshot is not null && _boundActor is not null &&
         _boundActor==AuthorizedActor && _snapshot.Filter.IsAuthorized(_boundActor.Role);
-    public override string StatusMessage => "سجل العمليات — تعديل الوصف الظاهر بصلاحية الإدارة فقط، والدليل الأصلي محفوظ.";
+    public override string StatusMessage => "سجل العمليات — تعديل الوصف أو إخفاء القيد من العرض بصلاحية الإدارة فقط، والدليل الأصلي محفوظ.";
     public IReadOnlyList<NativeAuditRow> Rows => IsDataConnected ? _snapshot!.Rows : [];
     public long Total => IsDataConnected ? _snapshot!.Total : 0;
     public int Page => IsDataConnected ? _snapshot!.Filter.Page : 1;
@@ -68,6 +69,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         !_loading && IsCurrentRow(row) && !IsDetailLoading && !Edit.IsOpen;
     public NativeAuditEditReview Edit { get; }=new();
     public NativeCommand OpenEditCommand { get; }
+    public NativeCommand OpenHideCommand { get; }
     public NativeCommand CloseEditCommand { get; }
     public bool CanOpenEdit=>!Edit.IsOpen && _reader is INativeAuditEditBackend &&
         AuthorizedActor is { } actor && DetailRow is { } row && Detail is { } detail &&
@@ -77,6 +79,13 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         if(!CanOpenEdit || _reader is not INativeAuditEditBackend backend ||
             AuthorizedActor is not { } actor || DetailRow is not { } row || Detail is not { } detail) return;
         Edit.Open(backend,actor,row,detail,()=>AuthorizedActor,()=>DetailRow,()=>Detail);
+    }
+    public bool CanOpenHide=>CanOpenEdit;
+    public void OpenHide()
+    {
+        if(!CanOpenHide || _reader is not INativeAuditEditBackend backend ||
+            AuthorizedActor is not { } actor || DetailRow is not { } row || Detail is not { } detail) return;
+        Edit.Open(backend,actor,row,detail,()=>AuthorizedActor,()=>DetailRow,()=>Detail,hide:true);
     }
     public async Task CloseEditAsync(CancellationToken ct=default)
     {
@@ -263,6 +272,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         OpenDetailCommand.NotifyAvailabilityChanged();
         CloseDetailCommand.NotifyAvailabilityChanged();
         OpenEditCommand.NotifyAvailabilityChanged();
+        OpenHideCommand.NotifyAvailabilityChanged();
         CloseEditCommand.NotifyAvailabilityChanged();
     }
 }
