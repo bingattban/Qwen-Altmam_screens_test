@@ -29,6 +29,12 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
     public bool NeedsReload { get; private set; }
     public string Error { get; private set; }="";
     public bool IsOpen=>_row is not null;
+    public bool IsHide { get; private set; }
+    public bool ShowDescriptionEditor=>!IsHide;
+    public string ReviewTitle=>IsHide?"مراجعة إخفاء القيد من العرض":"مراجعة تعديل الوصف الظاهر فقط";
+    public string PreviewLabel=>IsHide?"معاينة الإخفاء":"معاينة التعديل";
+    public string AfterLabel=>IsHide?"بعد الإخفاء: يختفي القيد من الكشف المعتاد ويبقى الدليل والوصف محفوظين":"بعد التعديل";
+    public string ReasonLabel=>IsHide?"سبب الإخفاء (إلزامي)":"سبب التعديل (إلزامي)";
     public bool IsBusy=>_busy;
     public bool HasUnverifiedCommit=>_uncertain;
     public bool CanEdit=>IsOpen && !_busy && !_uncertain && !NeedsReload && Receipt is null && ContextValid();
@@ -36,12 +42,12 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
     public bool CanConfirm=>!_busy && !NeedsReload && Prepared is not null && ContextValid();
     public bool HasPreview=>Prepared is not null;
     public string BeforeDescription=>_row?.Description??"";
-    public string ConfirmLabel=>_uncertain?"إعادة تأكيد العملية نفسها":"تأكيد تعديل الوصف";
-    public string CompletionMessage=>Receipt is null?"":$"تم اعتماد التعديل. رقم قيد العملية: {Receipt.OperationAuditEventId}";
+    public string ConfirmLabel=>_uncertain?"إعادة تأكيد العملية نفسها":IsHide?"تأكيد إخفاء القيد":"تأكيد تعديل الوصف";
+    public string CompletionMessage=>Receipt is null?"":$"تم اعتماد {(IsHide?"الإخفاء":"التعديل")}. رقم قيد العملية: {Receipt.OperationAuditEventId}";
     public string Description
     {
         get=>_description;
-        set { if(!CanEdit || _description==value) return; _description=value??""; RevokePreview(); }
+        set { if(!CanEdit || IsHide || _description==value) return; _description=value??""; RevokePreview(); }
     }
     public string Reason
     {
@@ -54,13 +60,14 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
 
     public bool Open(INativeAuditEditBackend backend,NativeIdentity actor,NativeAuditRow row,
         NativeAuditDetail detail,Func<NativeIdentity?> liveActor,Func<NativeAuditRow?> currentRow,
-        Func<NativeAuditDetail?> currentDetail)
+        Func<NativeAuditDetail?> currentDetail,bool hide=false)
     {
         if(IsOpen || liveActor()!=actor || !ReferenceEquals(currentRow(),row) ||
             !ReferenceEquals(currentDetail(),detail) || !NativeAuditEditRequest.CanUse(row,detail,actor.Role))
             return false;
         _backend=backend; _actor=actor; _row=row; _detail=detail;
         _liveActor=liveActor; _currentRow=currentRow; _currentDetail=currentDetail;
+        IsHide=hide;
         _description=row.Description;
         Notify();
         return true;
@@ -77,9 +84,9 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
     {
         if(!CanEdit) return;
         Prepared=null;
-        var request=new NativeAuditEditRequest(_row!,_detail!,_description.Trim(),_reason.Trim(),Guid.NewGuid().ToString("N"));
+        var request=new NativeAuditEditRequest(_row!,_detail!,IsHide?_row!.Description:_description.Trim(),_reason.Trim(),Guid.NewGuid().ToString("N"),IsHide);
         if(!request.IsValid(_actor!.Role))
-            Error="أدخل وصفا مختلفا وسببا واضحا (الوصف حتى 2000 حرف والسبب حتى 400 حرف).";
+            Error=IsHide?"أدخل سببا واضحا للإخفاء حتى 400 حرف.":"أدخل وصفا مختلفا وسببا واضحا (الوصف حتى 2000 حرف والسبب حتى 400 حرف).";
         else { Prepared=request; Error=""; }
         Notify();
     }
@@ -91,7 +98,9 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
         _busy=true; _uncertain=true; Error=""; Notify();
         try
         {
-            var result=await _backend.EditAuditDescriptionAsync(_actor!,request,ct);
+            var result=request.Hide
+                ? await _backend.HideAuditEntryAsync(_actor!,request,ct)
+                : await _backend.EditAuditDescriptionAsync(_actor!,request,ct);
             if(generation!=_generation || !ContextValid()) return;
             if(result is null || !result.Matches(request))
                 throw new InvalidOperationException("Unverified audit edit receipt.");
@@ -129,7 +138,7 @@ public sealed class NativeAuditEditReview : INotifyPropertyChanged
         _backend=null; _actor=null; _row=null; _detail=null;
         _liveActor=null; _currentRow=null; _currentDetail=null;
         _description=_reason=Error=""; _busy=_uncertain=NeedsReload=false;
-        Prepared=null; Receipt=null; Notify();
+        IsHide=false; Prepared=null; Receipt=null; Notify();
     }
 
     private void Notify()
