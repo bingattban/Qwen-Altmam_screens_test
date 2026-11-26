@@ -23,14 +23,41 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
         PreviousCommand=new NativeCommand(_=>_ = PreviousAsync(),_=>CanPage && Page>1);
         OpenCreateCommand=new NativeCommand(_=>OpenCreate(),_=>CanOpenCreate);
         CloseCreateCommand=new NativeCommand(_=>_ = CloseCreateAsync(),_=>Create.CanClose);
+        ChangePasswordCommand=new NativeCommand(row=>OpenAction(row,NativeAccountAction.ChangePassword),row=>CanOpenAction(row,NativeAccountAction.ChangePassword));
+        DeactivateCommand=new NativeCommand(row=>OpenAction(row,NativeAccountAction.Deactivate),row=>CanOpenAction(row,NativeAccountAction.Deactivate));
+        ReactivateCommand=new NativeCommand(row=>OpenAction(row,NativeAccountAction.Reactivate),row=>CanOpenAction(row,NativeAccountAction.Reactivate));
+        CloseLifecycleCommand=new NativeCommand(_=>_ = CloseLifecycleAsync(),_=>Lifecycle.CanClose);
+        Lifecycle.PropertyChanged+=(_,_)=>Notify();
         Create.PropertyChanged+=(_,_)=>Notify();
     }
 
     private NativeIdentity? AuthorizedActor=>_liveActor?.Invoke() is { } actor &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)?actor:null;
     public bool CanRead=>_reader is not null && AuthorizedActor is not null;
-    public bool CanQuery=>CanRead && !Create.IsOpen;
+    public bool CanQuery=>CanRead && !Create.IsOpen && !Lifecycle.IsOpen;
     public NativeAccountCreateReview Create { get; }=new();
+    public NativeAccountLifecycleReview Lifecycle { get; }=new();
+    public NativeCommand ChangePasswordCommand { get; }
+    public NativeCommand DeactivateCommand { get; }
+    public NativeCommand ReactivateCommand { get; }
+    public NativeCommand CloseLifecycleCommand { get; }
+    private NativeAccountRow? CurrentRow(NativeAccountRow row)=>Rows.FirstOrDefault(item=>ReferenceEquals(item,row));
+    public bool CanOpenAction(object? parameter,NativeAccountAction action)=>CanQuery && !IsLoading &&
+        _reader is INativeAccountLifecycleBackend && AuthorizedActor is { } actor &&
+        parameter is NativeAccountRow row && CurrentRow(row) is not null &&
+        NativeAccountLifecycleIntent.CanUse(actor,row,action);
+    public void OpenAction(object? parameter,NativeAccountAction action)
+    {
+        if(CanOpenAction(parameter,action) && parameter is NativeAccountRow row &&
+            _reader is INativeAccountLifecycleBackend backend && AuthorizedActor is { } actor)
+            Lifecycle.Open(backend,actor,row,action,()=>AuthorizedActor,()=>CurrentRow(row));
+    }
+    public async Task CloseLifecycleAsync(CancellationToken ct=default)
+    {
+        bool refresh=Lifecycle.Receipt is not null || Lifecycle.NeedsReload;
+        if(!Lifecycle.Close()) return;
+        if(refresh) await RefreshAsync(ct);
+    }
     public NativeCommand OpenCreateCommand { get; }
     public NativeCommand CloseCreateCommand { get; }
     public bool CanOpenCreate=>CanQuery && !_loading && _reader is INativeAccountCreateBackend;
@@ -46,9 +73,9 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
         if(refresh) await SearchAsync(ct);
     }
     public override bool IsDataConnected=>_page is not null && _boundActor is not null && _boundActor==AuthorizedActor;
-    public override string StatusMessage=>"قائمة الحسابات والصلاحيات — إنشاء حساب مرتبط بفرد نشط وفق الصلاحيات المعتمدة.";
+    public override string StatusMessage=>"قائمة الحسابات والصلاحيات — إنشاء الحساب وإدارة كلمة المرور وحالة التفعيل وفق الصلاحيات المعتمدة.";
     public bool IsLoading=>_loading;
-    private bool CanPage=>!IsLoading && IsDataConnected && !Create.IsOpen;
+    private bool CanPage=>!IsLoading && IsDataConnected && !Create.IsOpen && !Lifecycle.IsOpen;
     public IReadOnlyList<NativeAccountRow> Rows=>IsDataConnected?_page!.Rows:[];
     public long Total=>IsDataConnected?_page!.Total:0;
     public int Page=>IsDataConnected?_page!.Request.Page:1;
@@ -62,7 +89,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
         get=>_term;
         set
         {
-            if(Create.IsOpen || _term==value) return;
+            if(Create.IsOpen || Lifecycle.IsOpen || _term==value) return;
             _term=value??"";
             Invalidate();
             Notify();
@@ -89,6 +116,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
     private async Task ReadAsync(NativeAccountRequest request,CancellationToken ct)
     {
         if(Create.IsOpen) return;
+        if(Lifecycle.IsOpen) return;
         Invalidate();
         if(_reader is null || AuthorizedActor is not { } actor || !request.IsValid)
         {
@@ -127,7 +155,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
     }
     public void Clear()
     {
-        Create.ForceClear(); Invalidate(); _term=""; Notify();
+        Lifecycle.ForceClear(); Create.ForceClear(); Invalidate(); _term=""; Notify();
     }
     private void Notify()
     {
@@ -135,5 +163,7 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
         SearchCommand.NotifyAvailabilityChanged(); RefreshCommand.NotifyAvailabilityChanged();
         NextCommand.NotifyAvailabilityChanged(); PreviousCommand.NotifyAvailabilityChanged();
         OpenCreateCommand.NotifyAvailabilityChanged(); CloseCreateCommand.NotifyAvailabilityChanged();
+        ChangePasswordCommand.NotifyAvailabilityChanged(); DeactivateCommand.NotifyAvailabilityChanged();
+        ReactivateCommand.NotifyAvailabilityChanged(); CloseLifecycleCommand.NotifyAvailabilityChanged();
     }
 }

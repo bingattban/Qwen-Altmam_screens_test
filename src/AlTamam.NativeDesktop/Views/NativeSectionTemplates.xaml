@@ -289,6 +289,20 @@
                     <DataGridTextColumn Header="صلاحية الإدارة" Binding="{Binding ModifyLabel}" Width="110"/>
                     <DataGridTextColumn Header="أنشئ بواسطة" Binding="{Binding CreatedBy}" Width="150"/>
                     <DataGridTextColumn Header="تاريخ الإنشاء UTC" Binding="{Binding CreatedAtUtc}" Width="155"/>
+                    <DataGridTemplateColumn Header="إدارة الحساب" Width="255">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <WrapPanel>
+                                    <Button Content="كلمة المرور" Padding="5,3" Margin="2"
+                                            Command="{Binding DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
+                                    <Button Content="تعطيل" Padding="5,3" Margin="2" Foreground="#BE123C"
+                                            Command="{Binding DataContext.DeactivateCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
+                                    <Button Content="تفعيل" Padding="5,3" Margin="2" Foreground="#166534"
+                                            Command="{Binding DataContext.ReactivateCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
+                                </WrapPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
             <DockPanel Grid.Row="2">
@@ -305,6 +319,15 @@
                     <Button DockPanel.Dock="Top" Content="إغلاق مراجعة الإنشاء" Command="{Binding CloseCreateCommand}"
                             HorizontalAlignment="Left" Padding="12,5" Margin="0,0,0,6"/>
                     <views:NativeAccountCreateView DataContext="{Binding Create}"/>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="11" Background="#FFFFFF"
+                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="10"
+                    Visibility="{Binding Lifecycle.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Top" Content="إغلاق مراجعة الحساب" Command="{Binding CloseLifecycleCommand}"
+                            HorizontalAlignment="Left" Padding="12,5" Margin="0,0,0,6"/>
+                    <views:NativeAccountLifecycleView DataContext="{Binding Lifecycle}"/>
                 </DockPanel>
             </Border>
         </Grid>

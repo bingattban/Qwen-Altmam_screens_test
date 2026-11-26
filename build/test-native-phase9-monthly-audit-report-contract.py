@@ -14,6 +14,11 @@ PATHS = {
     "audit_detail": "src/AlTamam.NativePresentation/NativeAuditDetailContracts.cs",
     "account_contract": "src/AlTamam.NativePresentation/NativeAccountReadContracts.cs",
     "create_contract": "src/AlTamam.NativePresentation/NativeAccountCreateContracts.cs",
+    "lifecycle_contract": "src/AlTamam.NativePresentation/NativeAccountLifecycleContracts.cs",
+    "lifecycle_review": "src/AlTamam.NativePresentation/NativeAccountLifecycleReview.cs",
+    "lifecycle_tests": "tests/AlTamam.UnitTests/NativeAccountLifecyclePhase11Tests.cs",
+    "lifecycle_view": "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml",
+    "lifecycle_code": "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml.cs",
     "create_review": "src/AlTamam.NativePresentation/NativeAccountCreateReview.cs",
     "create_tests": "tests/AlTamam.UnitTests/NativeAccountCreatePhase11Tests.cs",
     "create_view": "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
@@ -64,6 +69,23 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
+    "lifecycle_contract": ("row.UserId!=actor.UserId", "row.Revision<long.MaxValue",
+                           "row.Role!=UserRole.GeneralAdministration", "Reason is { Length:>=5 and <=400 }",
+                           "Revision==intent.Row.Revision+1", "Active==(intent.Action!=NativeAccountAction.Deactivate)"),
+    "lifecycle_review": ("ReferenceEquals(_currentRow?.Invoke(),row)", "generation!=_generation",
+                         "NativeAccountCreateIntent.ValidPassword(password,confirmation)", "_uncertain=true",
+                         "result.Matches(intent)", "bool retry=_uncertain", "if(!retry)",
+                         "ApplyAccountActionAsync(actor,intent,password,ct)"),
+    "lifecycle_tests": ("Lifecycle_intent_and_receipt_enforce_scope_revision_and_action",
+                        "Review_requires_exact_row_preview_and_password_confirmation",
+                        "Activation_review_uses_exact_operation_on_retry",
+                        "Review_distinguishes_stale_rejection_and_ambiguous_reactivation",
+                        "Lifecycle_session_teardown_discards_late_receipt",
+                        "Account_page_blocks_overlapping_actions_and_refreshes_after_verified_commit"),
+    "lifecycle_view": ('<PasswordBox x:Name="PasswordInput"', '<PasswordBox x:Name="ConfirmationInput"',
+                       "Binding NeedsReason", "Binding NeedsPassword", "Binding PreviewCommand", 'Click="OnConfirmClick"'),
+    "lifecycle_code": ("ClearPasswords();", "review.ConfirmAsync(password,confirmation)",
+                       "PasswordInput?.Clear()", "ConfirmationInput?.Clear()", "OnUnloaded"),
     "create_contract": ("OrganizationalStatus==1", "CanCreateAccountWithRole(actorRole,Role)",
                         "PasswordPolicyValidator.Validate(password).IsValid", "PersonId==intent.Person.PersonId"),
     "create_review": ("ReferenceEquals(person,value)", "generation!=_generation", "_uncertain=true",
@@ -82,7 +104,8 @@ REQUIRED = {
     "account_contract": ("CanAccessUsersManagement(role)", "CanCreateAccountWithRole(actorRole,role)",
                          "actor.Role!=UserRole.OrdinaryAdministration || Role==UserRole.Supervisor",
                          "actor.UserId!=UserId", "!ids.Add(row.UserId)", "row.Index!=offset+i+1"),
-    "account_vm": ("Create.ForceClear()", "if(Create.IsOpen) return;", "Create.Receipt is not null", "generation!=_generation", "AuthorizedActor!=actor", "_pending?.Cancel()",
+    "account_vm": ("Lifecycle.ForceClear()", "if(Lifecycle.IsOpen) return;", "ReferenceEquals(item,row)",
+                   "Lifecycle.Receipt is not null || Lifecycle.NeedsReload", "Create.ForceClear()", "if(Create.IsOpen) return;", "Create.Receipt is not null", "generation!=_generation", "AuthorizedActor!=actor", "_pending?.Cancel()",
                    "result.Matches(request,actor)", "Array.AsReadOnly(result.Rows.ToArray())"),
     "account_tests": ("Account_page_rejects_scope_leaks_forged_permissions_and_duplicate_identity",
                       "Account_creation_roles_exclude_founder_and_follow_canonical_policy",
@@ -131,11 +154,13 @@ REQUIRED = {
                          "Audit_list_denies_hidden_scope_to_supervisor_and_rejects_bad_echo",
                          "Audit_list_discards_pending_results_after_clear_or_identity_change",
                          "Audit_list_cannot_repaint_old_results_after_filter_edit"),
-    "audit_shell": ("!Accounts.Create.IsOpen", "Accounts.AttachReader(accountReader, () => _active)", "Accounts.Clear();",
+    "audit_shell": ("!Accounts.Lifecycle.IsOpen", "!Accounts.Create.IsOpen", "Accounts.AttachReader(accountReader, () => _active)", "Accounts.Clear();",
                     "screen != NativeScreen.Accounts || Accounts.CanRead", "!Audit.Edit.IsOpen", "Audit.AttachReader(auditReader, () => _active)", "Audit.Clear();",
                     "screen == NativeScreen.AuditLog", "screen != NativeScreen.AuditLog || Audit.CanRead"),
     "audit_host": ("present:NativeScreen.AuditLog", "present:NativeScreen.Accounts", "Binding CanManageAccounts"),
-    "audit_template": ("views:NativeAccountCreateView", "Binding OpenCreateCommand", "Binding CloseCreateCommand", "vm:NativeAccountsPageViewModel", "Binding CreationRoleLabel", "Binding ModifyLabel",
+    "audit_template": ("views:NativeAccountLifecycleView", "DataContext.ChangePasswordCommand",
+                       "DataContext.DeactivateCommand", "DataContext.ReactivateCommand", "Binding CloseLifecycleCommand",
+                       "views:NativeAccountCreateView", "Binding OpenCreateCommand", "Binding CloseCreateCommand", "vm:NativeAccountsPageViewModel", "Binding CreationRoleLabel", "Binding ModifyLabel",
                        "Binding OpenHistoryCommand", "Binding OpenEntryHistoryCommand", "Binding History.Rows",
                        "Binding Before.Description", "Binding After.Description", "Binding History.CloseCommand",
                        "Binding OpenHideCommand", "Binding Edit.ShowDescriptionEditor", "Binding Edit.AfterLabel", "Binding Edit.PreviewCommand", "Binding Edit.ConfirmCommand", "Binding CloseEditCommand",
@@ -159,6 +184,9 @@ REQUIRED = {
                 "new UserAccountManagementService(database).ListAsync",
                 "services.SearchPersonsAsync(term,50,ct,activeOnly:true)",
                 "new UserAccountManagementService(database).CreateAsync",
+                "service.ChangePasswordAsync(payload,principal,ct)", "service.DeactivateAsync(payload,principal,ct)",
+                "service.ReactivateAsync(payload,principal,ct)", '["expectedRevision"]=intent.Row.Revision',
+                'finally { payload.Remove("password"); }',
                 '["operationId"]=intent.OperationId', 'payload.Remove("password"); payload.Remove("passwordConfirmation");',
                 "!receipt.Matches(intent)",
                 '["pageSize"]=NativeAccountRequest.PageSize', "!page.Matches(request,actor)",
@@ -212,7 +240,7 @@ def validate(files):
                 errors.append(f"{key}: missing original report invariant: {token}")
     if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
         errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
-    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review", "audit_history_contract", "audit_history_vm", "account_contract", "account_vm", "create_contract", "create_review", "create_view", "create_code"):
+    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review", "audit_history_contract", "audit_history_vm", "account_contract", "account_vm", "create_contract", "create_review", "create_view", "create_code", "lifecycle_contract", "lifecycle_review", "lifecycle_view", "lifecycle_code"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
@@ -220,10 +248,13 @@ def validate(files):
         ElementTree.fromstring(files["view"])
         ElementTree.fromstring(files["audit_template"])
         ElementTree.fromstring(files["create_view"])
+        ElementTree.fromstring(files["lifecycle_view"])
     except ElementTree.ParseError as exc:
         errors.append(f"view: malformed XML: {exc}")
     if "Password=\"{Binding" in files["create_view"] or "PasswordChanged=" in files["create_view"]:
         errors.append("create_view: password binding or mirroring is forbidden")
+    if "Password=\"{Binding" in files["lifecycle_view"] or "PasswordChanged=" in files["lifecycle_view"]:
+        errors.append("lifecycle_view: password binding or mirroring is forbidden")
     if files["tests"].count("[Fact]") < 5 or "[Theory]" not in files["tests"]:
         errors.append("tests: test-first monthly/audit cases absent")
     for key in ("core", "release"):
@@ -249,6 +280,12 @@ if __name__ == "__main__":
         ("audit_detail", "OverlayVersion==row.OverlayVersion"),
         ("account_contract", "actor.Role!=UserRole.OrdinaryAdministration || Role==UserRole.Supervisor"),
         ("account_vm", "AuthorizedActor!=actor"),
+        ("lifecycle_contract", "Revision==intent.Row.Revision+1"),
+        ("lifecycle_review", "bool retry=_uncertain"),
+        ("lifecycle_tests", "Review_distinguishes_stale_rejection_and_ambiguous_reactivation"),
+        ("adapter", "service.ReactivateAsync(payload,principal,ct)"),
+        ("audit_shell", "!Accounts.Lifecycle.IsOpen"),
+        ("lifecycle_code", "review.ConfirmAsync(password,confirmation)"),
         ("create_contract", "OrganizationalStatus==1"),
         ("create_review", "ReferenceEquals(person,value)"),
         ("create_tests", "Create_ambiguous_commit_freezes_nonsecret_intent_and_reuses_operation_id"),
