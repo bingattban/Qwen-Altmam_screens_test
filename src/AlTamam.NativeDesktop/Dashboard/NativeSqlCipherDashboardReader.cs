@@ -115,12 +115,20 @@ public sealed class NativeSqlCipherDashboardReader(
     }
 
     // Canonical append-only overlay mutation; no independent SQL or audit writer.
-    public async Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,
+    public Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,
         NativeAuditEditRequest request,CancellationToken ct=default)
+        =>ApplyAuditOverlayAsync(actor,request,hide:false,ct);
+
+    public Task<NativeAuditEditReceipt> HideAuditEntryAsync(NativeIdentity actor,
+        NativeAuditEditRequest request,CancellationToken ct=default)
+        =>ApplyAuditOverlayAsync(actor,request,hide:true,ct);
+
+    private async Task<NativeAuditEditReceipt> ApplyAuditOverlayAsync(NativeIdentity actor,
+        NativeAuditEditRequest request,bool hide,CancellationToken ct)
     {
         if (!RoleAuthorizationPolicy.CanEditOrDeleteVisibleAuditLog(actor.Role))
             throw new UnauthorizedAccessException("Audit edit denied.");
-        if (request is null || !request.IsValid(actor.Role))
+        if (request is null || request.Hide!=hide || !request.IsValid(actor.Role))
             throw new InvalidDataException("Invalid native audit edit intent.");
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
         var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
@@ -130,13 +138,16 @@ public sealed class NativeSqlCipherDashboardReader(
             throw new UnauthorizedAccessException("Audit edit session changed.");
         // Do not reread the old revision before a retry: canonical idempotency
         // must first resolve the same operation even if the first response was lost.
-        var response=await new AuditOverlayService(database).UpdateAuditPresentationAsync(new JsonObject
+        var payload=new JsonObject
         {
             ["auditEventId"]=request.Row.AuditEventId,
             ["expectedOverlayVersion"]=request.Row.OverlayVersion,
-            ["correctedDescription"]=request.Description,
             ["reason"]=request.Reason,["operationId"]=request.OperationId
-        },principal,ct).ConfigureAwait(false);
+        };
+        if (!hide) payload["correctedDescription"]=request.Description;
+        var response=hide
+            ? await new AuditOverlayService(database).DeleteAuditPresentationAsync(payload,principal,ct).ConfigureAwait(false)
+            : await new AuditOverlayService(database).UpdateAuditPresentationAsync(payload,principal,ct).ConfigureAwait(false);
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (!response.Success && response.Code==BridgeErrorCodes.ConflictStale &&
@@ -146,7 +157,7 @@ public sealed class NativeSqlCipherDashboardReader(
             conflict["reason"]?.GetValue<string>()=="OverlayVersionStale" &&
             conflict["auditEventId"]?.GetValue<string>()==request.Row.AuditEventId)
             throw new NativeAuditEditStaleException();
-        var data=RequiredObject(response,"UpdateAuditPresentation");
+        var data=RequiredObject(response,hide?"DeleteAuditPresentation":"UpdateAuditPresentation");
         NativeAuditEditState ReadState(string key)
         {
             var state=RequireObject(data[key]);
