@@ -1,0 +1,53 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeAccountLifecycleView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft" Unloaded="OnUnloaded">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ShowIfTrue"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="8">
+            <TextBlock Text="{Binding ActionLabel}" FontSize="19" FontWeight="Bold" Foreground="#123752"/>
+            <TextBlock Text="{Binding EffectLabel}" TextWrapping="Wrap" Foreground="#475569" Margin="0,5,0,12"/>
+            <TextBlock Text="الحساب المحدد" FontWeight="Bold"/>
+            <TextBlock Text="{Binding Row.Username}" FontWeight="SemiBold" Margin="0,4"/>
+            <TextBlock Text="{Binding Row.FullName}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Row.RoleLabel}" Margin="0,4"/>
+            <TextBlock Text="{Binding Row.ActiveLabel}"/>
+            <StackPanel IsEnabled="{Binding CanEdit}" Margin="0,10,0,0">
+                <StackPanel Visibility="{Binding NeedsReason, Converter={StaticResource ShowIfTrue}}">
+                    <TextBlock Text="سبب إعادة التفعيل (5 إلى 400 حرف)" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}" MaxLength="400"
+                             TextWrapping="Wrap" MinHeight="44" Margin="0,4,0,8"/>
+                </StackPanel>
+                <Button Content="معاينة الإجراء" Command="{Binding PreviewCommand}" Padding="12,6" HorizontalAlignment="Right"/>
+            </StackPanel>
+            <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6"
+                    Padding="10" Margin="0,10,0,0"
+                    Visibility="{Binding HasPreview, Converter={StaticResource ShowIfTrue}}"
+                    IsVisibleChanged="OnPreviewVisibilityChanged">
+                <StackPanel>
+                    <TextBlock Text="تأكيد الإجراء على الحساب المحدد" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Prepared.Row.Username}" Margin="0,5"/>
+                    <TextBlock Text="{Binding Prepared.Row.UserId}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Prepared.Reason}" TextWrapping="Wrap" Margin="0,4"/>
+                    <StackPanel IsEnabled="{Binding CanConfirm}">
+                        <StackPanel Visibility="{Binding NeedsPassword, Converter={StaticResource ShowIfTrue}}">
+                            <TextBlock Text="كلمة المرور الجديدة (ثلاثة أحرف إنجليزية وثلاثة أرقام على الأقل)"
+                                       TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                            <PasswordBox x:Name="PasswordInput" FlowDirection="LeftToRight" Margin="0,4,0,8"
+                                         AutomationProperties.Name="كلمة المرور الجديدة"/>
+                            <TextBlock Text="تأكيد كلمة المرور" FontWeight="SemiBold"/>
+                            <PasswordBox x:Name="ConfirmationInput" FlowDirection="LeftToRight" Margin="0,4,0,8"
+                                         AutomationProperties.Name="تأكيد كلمة المرور الجديدة"/>
+                        </StackPanel>
+                        <Button Content="{Binding ConfirmLabel}" Click="OnConfirmClick" Padding="12,6" HorizontalAlignment="Right"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource ShowIfTrue}}" Margin="0,5"/>
+            <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap" Margin="0,5"/>
+            <TextBlock Text="{Binding CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
