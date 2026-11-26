@@ -14,7 +14,7 @@ public sealed class NativeAuditEditPhase11Tests
         Row.EffectiveLocalDate,Row.ExecutedAtUtc,"COR-1",Row.EventHash,"GENESIS",null,null,false,0,true);
     private static NativeAuditEditRequest Request()=>new(Row,Detail,"وصف جديد","توضيح الوصف",Guid.NewGuid().ToString("N"));
     private static NativeAuditEditReceipt Receipt(NativeAuditEditRequest request)=>new(
-        request.Row.AuditEventId,"AUD-2",new(0,false,Row.Description),new(1,false,request.Description),true);
+        request.Row.AuditEventId,"AUD-2",new(0,false,Row.Description),new(1,request.Hide,request.Description),true);
 
     [Fact]
     public void Edit_request_and_receipt_enforce_identity_role_revision_and_raw_evidence()
@@ -133,11 +133,86 @@ public sealed class NativeAuditEditPhase11Tests
         Assert.Equal(2,backend.ListReads);
     }
 
+    [Fact]
+    public void Hide_intent_requires_reason_visible_verified_row_and_unchanged_description()
+    {
+        var request=Request() with { Hide=true,Description=Row.Description };
+        Assert.True(request.IsValid(Admin.Role));
+        Assert.True(request.IsValid(UserRole.OrdinaryAdministration));
+        Assert.False(request.IsValid(UserRole.Supervisor));
+        Assert.False((request with { Reason="" }).IsValid(Admin.Role));
+        Assert.False((request with { Description="استبدال النص" }).IsValid(Admin.Role));
+        Assert.False((request with { Detail=Detail with { ChainValid=false } }).IsValid(Admin.Role));
+        var hidden=Row with { IsTombstoned=true,OverlayVersion=1 };
+        Assert.False((request with { Row=hidden,Detail=Detail with { IsTombstoned=true,OverlayVersion=1 } }).IsValid(Admin.Role));
+        var receipt=Receipt(request);
+        Assert.True(receipt.Matches(request));
+        Assert.False((receipt with { After=receipt.After with { IsTombstoned=false } }).Matches(request));
+        Assert.False((receipt with { After=receipt.After with { Description="تغيير" } }).Matches(request));
+        Assert.False((receipt with { OperationAuditEventId=Row.AuditEventId }).Matches(request));
+    }
+
+    [Fact]
+    public async Task Hide_review_uses_distinct_canonical_action_and_exact_retry()
+    {
+        var backend=new Backend();
+        var review=new NativeAuditEditReview();
+        Assert.True(review.Open(backend,Admin,Row,Detail,()=>Admin,()=>Row,()=>Detail,hide:true));
+        Assert.True(review.IsHide);
+        review.Description="محاولة تغيير";
+        Assert.Equal(Row.Description,review.Description);
+        await review.ConfirmAsync();
+        Assert.Empty(backend.Requests);
+        review.Preview();
+        Assert.Null(review.Prepared);
+        review.Reason="سبب الإخفاء";
+        review.Preview();
+        Assert.True(review.Prepared!.Hide);
+        backend.Fail=true;
+        await review.ConfirmAsync();
+        Assert.True(review.HasUnverifiedCommit);
+        Assert.False(review.Close());
+        var first=Assert.Single(backend.Requests);
+        review.Reason="سبب مختلف";
+        backend.Fail=false;
+        await review.ConfirmAsync();
+        Assert.Equal(first,backend.Requests[1]);
+        Assert.Equal(2,backend.HideCalls);
+        Assert.Equal(0,backend.EditCalls);
+        Assert.True(review.Receipt!.After.IsTombstoned);
+        Assert.True(review.Close());
+        Assert.False(review.IsHide);
+    }
+
+    [Fact]
+    public async Task Page_hide_cannot_overlap_edit_and_refreshes_only_after_verified_receipt()
+    {
+        var backend=new Backend();
+        var vm=new NativeAuditPageViewModel();
+        vm.AttachReader(backend,()=>Admin);
+        await vm.SearchAsync();
+        await vm.OpenDetailAsync(Assert.Single(vm.Rows));
+        Assert.True(vm.CanOpenHide);
+        vm.OpenHide();
+        Assert.True(vm.Edit.IsHide);
+        Assert.False(vm.CanOpenEdit);
+        vm.OpenEdit();
+        Assert.True(vm.Edit.IsHide);
+        vm.Edit.Reason="سبب الإخفاء";
+        vm.Edit.Preview();
+        await vm.Edit.ConfirmAsync();
+        Assert.True(vm.Edit.Receipt!.After.IsTombstoned);
+        await vm.CloseEditAsync();
+        Assert.False(vm.Edit.IsOpen);
+        Assert.Null(vm.Detail);
+        Assert.Equal(2,backend.ListReads);
+    }
+
     private sealed class Backend : INativeAuditEditBackend, INativeAuditReader, INativeAuditDetailReader
     {
         public List<NativeAuditEditRequest> Requests=[];
         public bool Fail,Forged,Stale;
-        public int ListReads;
+        public int ListReads,HideCalls,EditCalls;
         public Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,CancellationToken ct=default)
         {
             ListReads++;
@@ -147,6 +222,18 @@ public sealed class NativeAuditEditPhase11Tests
             =>Task.FromResult(Detail);
         public Task<NativeAuditEditReceipt>? Pending;
         public Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,NativeAuditEditRequest request,CancellationToken ct=default)
+        {
+            EditCalls++;
+            Assert.False(request.Hide);
+            return Apply(request);
+        }
+        public Task<NativeAuditEditReceipt> HideAuditEntryAsync(NativeIdentity actor,NativeAuditEditRequest request,CancellationToken ct=default)
+        {
+            HideCalls++;
+            Assert.True(request.Hide);
+            return Apply(request);
+        }
+        private Task<NativeAuditEditReceipt> Apply(NativeAuditEditRequest request)
         {
             Requests.Add(request);
             if(Fail) throw new IOException("response lost");
