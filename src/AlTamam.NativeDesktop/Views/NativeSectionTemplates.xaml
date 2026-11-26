@@ -248,6 +248,56 @@
             </Border>
         </Grid>
     </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:NativeAccountsPageViewModel}">
+        <Grid FlowDirection="RightToLeft">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}"/>
+                <TextBlock Text="{Binding StatusMessage}" Foreground="#475569" TextWrapping="Wrap"/>
+                <WrapPanel Margin="0,8">
+                    <TextBlock Text="الأدوار المتاحة للإنشاء حسب صلاحيتك:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding CreationRoleLabel}" Foreground="#166534" TextWrapping="Wrap"/>
+                </WrapPanel>
+                <WrapPanel Margin="0,4">
+                    <TextBlock Text="بحث بالاسم أو اسم المستخدم أو الرقم (ع)" VerticalAlignment="Center" Margin="4"/>
+                    <TextBox Text="{Binding Term, UpdateSourceTrigger=PropertyChanged}" MaxLength="200"
+                             Width="180" Margin="4" AutomationProperties.Name="بحث حسابات المستخدمين"/>
+                    <Button Content="بحث" Command="{Binding SearchCommand}" Padding="10,5" Margin="4"/>
+                    <Button Content="تحديث" Command="{Binding RefreshCommand}" Padding="10,5" Margin="4"/>
+                </WrapPanel>
+                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
+            </StackPanel>
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                      CanUserSortColumns="False" EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                      HeadersVisibility="Column" Margin="0,8" SelectionMode="Single"
+                      AutomationProperties.Name="كشف حسابات المستخدمين للقراءة فقط">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="الرقم" Binding="{Binding Index}" Width="55"/>
+                    <DataGridTextColumn Header="اسم المستخدم" Binding="{Binding Username}" Width="120"/>
+                    <DataGridTextColumn Header="الاسم" Binding="{Binding FullName}" Width="180"/>
+                    <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="85"/>
+                    <DataGridTextColumn Header="الصلاحية" Binding="{Binding RoleLabel}" Width="130"/>
+                    <DataGridTextColumn Header="الحالة" Binding="{Binding ActiveLabel}" Width="75"/>
+                    <DataGridTextColumn Header="صلاحية الإدارة" Binding="{Binding ModifyLabel}" Width="110"/>
+                    <DataGridTextColumn Header="أنشئ بواسطة" Binding="{Binding CreatedBy}" Width="150"/>
+                    <DataGridTextColumn Header="تاريخ الإنشاء UTC" Binding="{Binding CreatedAtUtc}" Width="155"/>
+                </DataGrid.Columns>
+            </DataGrid>
+            <DockPanel Grid.Row="2">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Content="السابق" Command="{Binding PreviousCommand}" Margin="4" Padding="10,5"/>
+                    <Button Content="التالي" Command="{Binding NextCommand}" Margin="4" Padding="10,5"/>
+                </StackPanel>
+                <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </DockPanel>
+        </Grid>
+    </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ReportsPageViewModel}">
         <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
