@@ -33,6 +33,8 @@ FILES={
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
  "restore_integration":"tests/AlTamam.Tests/Bridge/NativeRestoreActivationCoordinatorTests.cs",
+ "reset_service":"src/AlTamam.Application/Bridge/FullDataResetService.cs",
+ "reset_tests":"tests/AlTamam.Tests/Bridge/Section03FullResetTests.cs",
  "contracts":"src/AlTamam.NativePresentation/NativeAttendanceRevisionContracts.cs",
  "review_vm":"src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
  "review_backend":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
@@ -190,6 +192,37 @@ def problems(contents):
                   "Reinspection_invalidates_previous_restore_intent"):
         need("restore_tests",token)
     need("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions")
+    for token in ('Operation+":native:"+',
+                  "SHA256.HashData(Encoding.UTF8.GetBytes(actor.SessionNonce))",
+                  "actor.SessionRevocation.IsCancellationRequested",
+                  "s.SessionNonce=$nonce AND s.RevokedFlag=0 AND s.ExpiresAtUtc>$now",
+                  "u.UserId=$user AND u.Username=$username AND u.ActiveFlag=1",
+                  "s.Role=1 AND u.Role=1",
+                  "PreviewCoreAsync(actor,NativeOperation(actor),true,ct)",
+                  "CommitCoreAsync(payload,actor,NativeOperation(actor),true,ct)",
+                  "CommitCoreAsync(payload,actor,Operation,false,ct)",
+                  "PreviewCoreAsync(actor,Operation,false,ct)",
+                  "VerifyCurrentGeneralAdministratorPasswordAsync(actor,password,ct)",
+                  "IsNativeSessionLiveAsync(c,null,actor,ct)",
+                  "IsNativeSessionLiveAsync(connection,null,actor,ct)",
+                  "IsNativeSessionLiveAsync(c,t,actor,ct)",
+                  "BridgePreviewTokens.Issue(_db,_clock,operation,actor.UserId",
+                  "_db,_clock,c,t,token,operation,actor.UserId,expected,ct"):
+        need("reset_service",token)
+    reset=contents["reset_service"]
+    order=[reset.find(t) for t in ("IsNativeSessionLiveAsync(connection,null,actor,ct)",
+                    "new ResetRescueService(_db).CreateAsync(ct)",
+                    "IsNativeSessionLiveAsync(c,t,actor,ct)",
+                    "BridgePreviewTokens.ConsumeAsync(",
+                    "foreach(string table in tables)\n                await Execute(c,t,")]
+    if min(order)<0 or order!=sorted(order):
+        errors.append("Native reset must check session before rescue and inside transaction before consuming token or deleting rows")
+    for token in ("NativeResetPreview_RejectsForgedAndRevokedSession",
+                  "NativeResetPreview_CannotBeConsumedByAnotherSessionOrLegacyEntry",
+                  "NativeResetWrongPassword_UsesExistingLockoutGateBeforeRescue",
+                  "NativeReset_ValidSessionAndFreshPasswordPreserveVerifiedRescueAndClearSessions"):
+        need("reset_tests",token)
+
     need("gate", "_stopTask ??= StopCoreAsync()")
     need("gate_tests", "Concurrent_shutdown_callers_share_the_same_drain")
     need("gate_tests", "Failed_drain_never_reports_success_to_a_later_disposal")
@@ -338,6 +371,10 @@ if __name__=="__main__":
         ("backend","new NativePortableRecoveryExportService(_database,_services,keyStore)"),
         ("host","NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination)"),
         ("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions"),
+        ("reset_service","IsNativeSessionLiveAsync(c,t,actor,ct)"),
+        ("reset_service","CommitCoreAsync(payload,actor,NativeOperation(actor),true,ct)"),
+        ("reset_service","VerifyCurrentGeneralAdministratorPasswordAsync(actor,password,ct)"),
+        ("reset_tests","NativeResetPreview_CannotBeConsumedByAnotherSessionOrLegacyEntry"),
         ("host","_backend.StartAutomaticBackupScheduler();"),
         ("gate","_stopTask ??= StopCoreAsync()"),
         ("backup_adapter","new AutomaticBackupService(database)"),

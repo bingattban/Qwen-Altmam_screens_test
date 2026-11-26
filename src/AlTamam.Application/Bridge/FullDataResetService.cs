@@ -91,11 +91,46 @@ public sealed class FullDataResetService
         return Convert.ToInt64(await q.ExecuteScalarAsync(ct).ConfigureAwait(false));
     }
 
-    public async Task<BridgeResponse> PreviewAsync(BridgePrincipal actor, CancellationToken ct)
+    // The native token belongs to a single authenticated session, not just
+    // an account. Hash the nonce rather than persist it in token metadata.
+    private static string NativeOperation(BridgePrincipal actor)=>Operation+":native:"+
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(actor.SessionNonce)));
+
+    private async Task<bool> IsNativeSessionLiveAsync(SqliteConnection c,SqliteTransaction? t,
+        BridgePrincipal actor,CancellationToken ct)
+    {
+        if(actor.Role!=UserRole.GeneralAdministration ||
+            !BridgeProtocol.IsValidSessionNonceFormat(actor.SessionNonce) ||
+            actor.SessionRevocation.IsCancellationRequested) return false;
+        using var query=c.CreateCommand();
+        query.Transaction=t;
+        query.CommandText="""
+            SELECT 1 FROM UserSessions s JOIN Users u ON u.UserId=s.UserId
+            WHERE s.SessionNonce=$nonce AND s.RevokedFlag=0 AND s.ExpiresAtUtc>$now
+              AND u.UserId=$user AND u.Username=$username AND u.ActiveFlag=1
+              AND s.Role=1 AND u.Role=1;
+            """;
+        query.Parameters.AddWithValue("$nonce",actor.SessionNonce);
+        query.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
+        query.Parameters.AddWithValue("$user",actor.UserId);
+        query.Parameters.AddWithValue("$username",actor.Username);
+        return await query.ExecuteScalarAsync(ct).ConfigureAwait(false) is not null;
+    }
+
+    public Task<BridgeResponse> PreviewAsync(BridgePrincipal actor,CancellationToken ct)
+        =>PreviewCoreAsync(actor,Operation,false,ct);
+
+    public Task<BridgeResponse> PreviewNativeAsync(BridgePrincipal actor,CancellationToken ct)
+        =>PreviewCoreAsync(actor,NativeOperation(actor),true,ct);
+
+    private async Task<BridgeResponse> PreviewCoreAsync(BridgePrincipal actor,string operation,
+        bool requireNativeSession,CancellationToken ct)
     {
         if(actor.Role!=UserRole.GeneralAdministration)
             return Refuse(BridgeErrorCodes.Unauthorized,"تصفير البيانات محصور بالإدارة العامة.");
         using var c=_db.CreateOpenConnection();
+        if(requireNativeSession && !await IsNativeSessionLiveAsync(c,null,actor,ct).ConfigureAwait(false))
+            return Refuse(BridgeErrorCodes.Unauthorized,"جلسة الإدارة العامة غير صالحة.");
         long revision=await Revision(c,null,ct).ConfigureAwait(false);
         long people=await Count(c,"Persons",ct).ConfigureAwait(false);
         long attendance=await Count(c,"AttendanceRecords",ct).ConfigureAwait(false);
@@ -117,7 +152,7 @@ public sealed class FullDataResetService
                     listedBackups.Add(file);
             }
         }
-        string token=BridgePreviewTokens.Issue(_db,_clock,Operation,actor.UserId,
+        string token=BridgePreviewTokens.Issue(_db,_clock,operation,actor.UserId,
             new {people,attendance,backups,revision},revision,ct);
         return BridgeHelpers.Ok(new JsonObject{
             ["previewToken"]=token,["expectedRevision"]=revision,
@@ -133,7 +168,23 @@ public sealed class FullDataResetService
 
     private sealed record BackupFile(string Path,string Sha256);
 
-    public async Task<BridgeResponse> CommitAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
+    public Task<BridgeResponse> CommitAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
+        =>CommitCoreAsync(payload,actor,Operation,false,ct);
+
+    public async Task<BridgeResponse> CommitNativeAsync(JsonObject? payload,BridgePrincipal actor,
+        BridgeSharedServices sessions,CancellationToken ct)
+    {
+        if(actor.Role!=UserRole.GeneralAdministration)
+            return Refuse(BridgeErrorCodes.Unauthorized,"هذه العملية مخصصة للإدارة العامة فقط.");
+        string? password=payload?["password"]?.GetValue<string>();
+        if(!await new NativeRestoreReauthenticationGate(_db,sessions,_clock)
+            .VerifyCurrentGeneralAdministratorPasswordAsync(actor,password,ct).ConfigureAwait(false))
+            return Refuse(BridgeErrorCodes.Unauthorized,"تعذر إعادة التحقق من الحساب أو الجلسة.");
+        return await CommitCoreAsync(payload,actor,NativeOperation(actor),true,ct).ConfigureAwait(false);
+    }
+
+    private async Task<BridgeResponse> CommitCoreAsync(JsonObject? payload,BridgePrincipal actor,
+        string operation,bool requireNativeSession,CancellationToken ct)
     {
         if(actor.Role!=UserRole.GeneralAdministration)
             return Refuse(BridgeErrorCodes.Unauthorized,"هذه العملية مخصصة للإدارة العامة فقط.");
@@ -159,6 +210,8 @@ public sealed class FullDataResetService
         // rescue. These checks are repeated INSIDE the final transaction.
         using(var connection=_db.CreateOpenConnection())
         {
+            if(requireNativeSession && !await IsNativeSessionLiveAsync(connection,null,actor,ct).ConfigureAwait(false))
+                return Refuse(BridgeErrorCodes.Unauthorized,"جلسة الإدارة العامة غير صالحة.");
             using(var check=connection.CreateCommand())
             {
                 check.CommandText="SELECT CredentialHash,PasswordSalt,Role FROM Users WHERE UserId=$id AND ActiveFlag=1;";
@@ -178,7 +231,7 @@ public sealed class FullDataResetService
                   AND ConsumedFlag=0 AND ExpiresAtUtc>$now;
                 """;
             issued.Parameters.AddWithValue("$token",token);
-            issued.Parameters.AddWithValue("$operation",Operation);
+            issued.Parameters.AddWithValue("$operation",operation);
             issued.Parameters.AddWithValue("$actor",actor.UserId);
             issued.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
             string? at=(await issued.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
@@ -207,6 +260,8 @@ public sealed class FullDataResetService
         var backups=new List<BackupFile>();
         BridgeResponse result=await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            if(requireNativeSession && !await IsNativeSessionLiveAsync(c,t,actor,ct).ConfigureAwait(false))
+                return Refuse(BridgeErrorCodes.Unauthorized,"انتهت جلسة الإدارة العامة قبل التصفير.");
             using(var check=c.CreateCommand())
             {
                 check.Transaction=t;
@@ -230,7 +285,7 @@ public sealed class FullDataResetService
                       AND ConsumedFlag=0;
                     """;
                 issued.Parameters.AddWithValue("$token",token);
-                issued.Parameters.AddWithValue("$operation",Operation);
+                issued.Parameters.AddWithValue("$operation",operation);
                 issued.Parameters.AddWithValue("$actor",actor.UserId);
                 string? issuedUtc=(await issued.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
                 if(!DateTimeOffset.TryParse(issuedUtc,out var previewIssuedAt) ||
@@ -239,7 +294,7 @@ public sealed class FullDataResetService
                         "لم تنتهِ مهلة الخمس ثوانٍ اللازمة قبل تصفير البيانات.");
             }
             long? consumption=await BridgePreviewTokens.ConsumeAsync(
-                _db,_clock,c,t,token,Operation,actor.UserId,expected,ct).ConfigureAwait(false);
+                _db,_clock,c,t,token,operation,actor.UserId,expected,ct).ConfigureAwait(false);
             if(consumption!=expected)
                 return Refuse(BridgeErrorCodes.ConflictStale,"معاينة التصفير منتهية أو مستعملة أو غير مرتبطة بالحساب.");
 
