@@ -26,8 +26,14 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     private INativeClosedDayCorrectionBackend? _historicalCatalogue;
     private Func<NativeIdentity?>? _historicalActor;
     private Func<NativeIdentity?>? _liveActor;
+    private INativeManualBackupBackend? _backupBackend;
+    private Func<NativeIdentity?>? _backupActor;
     public SettingsPageViewModel() : base(NativeScreen.Settings, "الإعدادات")
     {
+        OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
+        CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
+        Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
+        Overview.PropertyChanged+=(_,_)=>NotifyBackupCommands();
         CatchUp = new NativeAdministrativeCatchUpReview();
         Policy = new NativeClosedDayPolicyReview();
         Historical = new NativeHistoricalPeriodReview();
@@ -52,6 +58,35 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         Policy.PropertyChanged += (_, _) => NotifySessionChanged();
     }
     public NativeSettingsOverviewViewModel Overview { get; }=new();
+    public NativeManualBackupReview Backup { get; }=new();
+    public NativeCommand OpenManualBackupCommand { get; }
+    public NativeCommand CloseBackupCommand { get; }
+    public bool CanOpenBackup=>!IsReviewOpen && !Overview.IsLoading && _backupBackend is not null &&
+        _backupActor?.Invoke() is { } actor && Overview.Snapshot is { } snapshot && snapshot.Matches(actor);
+    public void AttachManualBackup(INativeManualBackupBackend backend,Func<NativeIdentity?> actor)
+    {
+        if(_backupBackend is not null) throw new InvalidOperationException("Backup backend already attached.");
+        _backupBackend=backend; _backupActor=actor; NotifySessionChanged();
+    }
+    public bool OpenBackupReview(string? directory=null)
+    {
+        if(!CanOpenBackup || _backupBackend is null || _backupActor?.Invoke() is not { } actor ||
+            Overview.Snapshot is not { } snapshot) return false;
+        return Backup.Open(_backupBackend,actor,snapshot,_backupActor,()=>Overview.Snapshot,directory);
+    }
+    public async Task CloseBackupAsync(CancellationToken ct=default)
+    {
+        bool reload=Backup.Receipt is not null || Backup.SavedDirectory is not null || Backup.NeedsReload;
+        if(!Backup.Close()) return;
+        if(reload) await Overview.RefreshAsync(ct);
+    }
+    private void NotifyBackupCommands()
+    {
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenBackup)));
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
+        OpenManualBackupCommand.NotifyAvailabilityChanged();
+        CloseBackupCommand.NotifyAvailabilityChanged();
+    }
     public NativeAdministrativeCatchUpReview CatchUp { get; }
     public System.Windows.Input.ICommand OpenCatchUpCommand { get; }
     public NativeClosedDayPolicyReview Policy { get; }
@@ -65,7 +100,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
+    public bool IsReviewOpen => Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -178,6 +213,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public void NotifySessionChanged()
     {
         Overview.Notify();
+        NotifyBackupCommands();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenCatchUp)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(StatusMessage)));
@@ -197,6 +233,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     public void Clear()
     {
+        Backup.ForceClear();
         Overview.Clear();
         CatchUp.ForceClear();
         Policy.ForceClear();
