@@ -13,6 +13,11 @@ PATHS = {
     "audit_contracts": "src/AlTamam.NativePresentation/NativeAuditReadContracts.cs",
     "audit_detail": "src/AlTamam.NativePresentation/NativeAuditDetailContracts.cs",
     "account_contract": "src/AlTamam.NativePresentation/NativeAccountReadContracts.cs",
+    "create_contract": "src/AlTamam.NativePresentation/NativeAccountCreateContracts.cs",
+    "create_review": "src/AlTamam.NativePresentation/NativeAccountCreateReview.cs",
+    "create_tests": "tests/AlTamam.UnitTests/NativeAccountCreatePhase11Tests.cs",
+    "create_view": "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
+    "create_code": "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml.cs",
     "account_vm": "src/AlTamam.NativePresentation/NativeAccountsPageViewModel.cs",
     "account_tests": "tests/AlTamam.UnitTests/NativeAccountListPhase11Tests.cs",
     "audit_history_contract": "src/AlTamam.NativePresentation/NativeAuditHistoryContracts.cs",
@@ -59,10 +64,24 @@ REQUIRED = {
                   "month.Period + \"-01\"", "month.Count <= 0",
                   "item.UsernameSnapshot", "version != _generation",
                   "_pending?.Cancel();"),
+    "create_contract": ("OrganizationalStatus==1", "CanCreateAccountWithRole(actorRole,Role)",
+                        "PasswordPolicyValidator.Validate(password).IsValid", "PersonId==intent.Person.PersonId"),
+    "create_review": ("ReferenceEquals(person,value)", "generation!=_generation", "_uncertain=true",
+                      "receipt.Matches(intent)", "NativeAccountCreateRejectedException", "Prepared=intent",
+                      "CreateAccountAsync(actor,intent,password,confirmation,ct)"),
+    "create_tests": ("Create_intent_validates_role_active_person_password_and_receipt",
+                     "Create_requires_current_search_selection_explicit_review_and_password_confirmation",
+                     "Create_ambiguous_commit_freezes_nonsecret_intent_and_reuses_operation_id",
+                     "Create_search_late_result_cannot_repaint_after_scope_change",
+                     "Create_rejects_supervisor_and_clears_late_receipt_after_session_teardown"),
+    "create_view": ('<PasswordBox x:Name="PasswordInput"', '<PasswordBox x:Name="ConfirmationInput"',
+                    "Binding Prepared.Person.Label", "Binding PreviewCommand", 'Click="OnConfirmClick"'),
+    "create_code": ("ClearPasswords();", "review.ConfirmAsync(password,confirmation)", "PasswordInput?.Clear()",
+                    "ConfirmationInput?.Clear()", "OnUnloaded"),
     "account_contract": ("CanAccessUsersManagement(role)", "CanCreateAccountWithRole(actorRole,role)",
                          "actor.Role!=UserRole.OrdinaryAdministration || Role==UserRole.Supervisor",
                          "actor.UserId!=UserId", "!ids.Add(row.UserId)", "row.Index!=offset+i+1"),
-    "account_vm": ("generation!=_generation", "AuthorizedActor!=actor", "_pending?.Cancel()",
+    "account_vm": ("Create.ForceClear()", "if(Create.IsOpen) return;", "Create.Receipt is not null", "generation!=_generation", "AuthorizedActor!=actor", "_pending?.Cancel()",
                    "result.Matches(request,actor)", "Array.AsReadOnly(result.Rows.ToArray())"),
     "account_tests": ("Account_page_rejects_scope_leaks_forged_permissions_and_duplicate_identity",
                       "Account_creation_roles_exclude_founder_and_follow_canonical_policy",
@@ -111,11 +130,11 @@ REQUIRED = {
                          "Audit_list_denies_hidden_scope_to_supervisor_and_rejects_bad_echo",
                          "Audit_list_discards_pending_results_after_clear_or_identity_change",
                          "Audit_list_cannot_repaint_old_results_after_filter_edit"),
-    "audit_shell": ("Accounts.AttachReader(accountReader, () => _active)", "Accounts.Clear();",
+    "audit_shell": ("!Accounts.Create.IsOpen", "Accounts.AttachReader(accountReader, () => _active)", "Accounts.Clear();",
                     "screen != NativeScreen.Accounts || Accounts.CanRead", "!Audit.Edit.IsOpen", "Audit.AttachReader(auditReader, () => _active)", "Audit.Clear();",
                     "screen == NativeScreen.AuditLog", "screen != NativeScreen.AuditLog || Audit.CanRead"),
     "audit_host": ("present:NativeScreen.AuditLog", "present:NativeScreen.Accounts", "Binding CanManageAccounts"),
-    "audit_template": ("vm:NativeAccountsPageViewModel", "Binding CreationRoleLabel", "Binding ModifyLabel",
+    "audit_template": ("views:NativeAccountCreateView", "Binding OpenCreateCommand", "Binding CloseCreateCommand", "vm:NativeAccountsPageViewModel", "Binding CreationRoleLabel", "Binding ModifyLabel",
                        "Binding OpenHistoryCommand", "Binding OpenEntryHistoryCommand", "Binding History.Rows",
                        "Binding Before.Description", "Binding After.Description", "Binding History.CloseCommand",
                        "Binding OpenHideCommand", "Binding Edit.ShowDescriptionEditor", "Binding Edit.AfterLabel", "Binding Edit.PreviewCommand", "Binding Edit.ConfirmCommand", "Binding CloseEditCommand",
@@ -137,6 +156,10 @@ REQUIRED = {
     "adapter": ("new PersonnelReportService(database)",
                 "new AuditOverlayService(database).QueryAuditLogAsync",
                 "new UserAccountManagementService(database).ListAsync",
+                "services.SearchPersonsAsync(term,50,ct,activeOnly:true)",
+                "new UserAccountManagementService(database).CreateAsync",
+                '["operationId"]=intent.OperationId', 'payload.Remove("password"); payload.Remove("passwordConfirmation");',
+                "!receipt.Matches(intent)",
                 '["pageSize"]=NativeAccountRequest.PageSize', "!page.Matches(request,actor)",
                 "new AuditOverlayService(database).QueryAuditPresentationChangesAsync",
                 '["pageSize"]=NativeAuditHistoryRequest.PageSize',
@@ -188,15 +211,18 @@ def validate(files):
                 errors.append(f"{key}: missing original report invariant: {token}")
     if "new AuditOverlayService(database,services.Time)" in files["adapter"]:
         errors.append("adapter: internal BridgeSharedServices.Time is not accessible from NativeDesktop")
-    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review", "audit_history_contract", "audit_history_vm", "account_contract", "account_vm"):
+    for key in ("contracts", "viewmodel", "view", "audit_contracts", "audit_list", "audit_template", "audit_detail", "audit_edit_contract", "audit_edit_review", "audit_history_contract", "audit_history_vm", "account_contract", "account_vm", "create_contract", "create_review", "create_view", "create_code"):
         for token in FORBIDDEN:
             if token in files[key]:
                 errors.append(f"{key}: native report may not write: {token}")
     try:
         ElementTree.fromstring(files["view"])
         ElementTree.fromstring(files["audit_template"])
+        ElementTree.fromstring(files["create_view"])
     except ElementTree.ParseError as exc:
         errors.append(f"view: malformed XML: {exc}")
+    if "Password=\"{Binding" in files["create_view"] or "PasswordChanged=" in files["create_view"]:
+        errors.append("create_view: password binding or mirroring is forbidden")
     if files["tests"].count("[Fact]") < 5 or "[Theory]" not in files["tests"]:
         errors.append("tests: test-first monthly/audit cases absent")
     for key in ("core", "release"):
@@ -222,6 +248,13 @@ if __name__ == "__main__":
         ("audit_detail", "OverlayVersion==row.OverlayVersion"),
         ("account_contract", "actor.Role!=UserRole.OrdinaryAdministration || Role==UserRole.Supervisor"),
         ("account_vm", "AuthorizedActor!=actor"),
+        ("create_contract", "OrganizationalStatus==1"),
+        ("create_review", "ReferenceEquals(person,value)"),
+        ("create_tests", "Create_ambiguous_commit_freezes_nonsecret_intent_and_reuses_operation_id"),
+        ("create_view", '<PasswordBox x:Name="ConfirmationInput"'),
+        ("create_code", "review.ConfirmAsync(password,confirmation)"),
+        ("adapter", "new UserAccountManagementService(database).CreateAsync"),
+        ("audit_shell", "!Accounts.Create.IsOpen"),
         ("account_tests", "Account_list_cannot_repaint_after_clear_or_session_change"),
         ("adapter", "new UserAccountManagementService(database).ListAsync"),
         ("audit_shell", "Accounts.AttachReader(accountReader, () => _active)"),
