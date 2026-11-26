@@ -147,7 +147,9 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         if (reader is INativePersonnelDirectoryReader personnelReader)
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeSettingsOverviewReader overviewReader)
-            Settings.Overview.Attach(overviewReader, () => _active);
+            Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen);
+        if (reader is INativeManualBackupBackend backupBackend)
+            Settings.AttachManualBackup(backupBackend, () => _active);
         if (reader is INativeAdministrativeCatchUpBackend catchUpBackend)
             Settings.AttachCatchUp(catchUpBackend, () => _active);
         if (reader is INativeClosedDayPolicyBackend policyBackend)
