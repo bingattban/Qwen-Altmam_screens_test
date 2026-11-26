@@ -23,7 +23,7 @@ public partial class MainWindow : Window
     private bool _closeInProgress;
     private bool _mayClose;
     private bool _restoreInProgress;
-    private bool _restoreQuiescing;
+    private volatile bool _restoreQuiescing;
     private bool _restoreDrainCompleted;
 
     public MainWindow()
@@ -117,12 +117,17 @@ public partial class MainWindow : Window
                     (prepared,ct)=>Dispatcher.InvokeAsync(()=>
                         !ct.IsCancellationRequested && settings.Inspection.MatchesRestoreIntent(intent) &&
                         NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)).Task,
-                    ()=>Dispatcher.InvokeAsync(()=>
+                    ()=>
                     {
+                        // Publish the boundary before dispatching to STA so a
+                        // timed-out callback cannot accidentally reopen input.
                         _restoreQuiescing=true;
-                        _sessionTimer.Stop();
-                        DataContext=null;
-                    }).Task,
+                        return Dispatcher.InvokeAsync(()=>
+                        {
+                            _sessionTimer.Stop();
+                            DataContext=null;
+                        }).Task;
+                    },
                     ()=>Dispatcher.InvokeAsync(()=>
                     {
                         _restoreDrainCompleted=true;
