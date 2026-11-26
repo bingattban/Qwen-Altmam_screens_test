@@ -113,6 +113,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Audit.Edit.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Accounts.Create.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        Accounts.Lifecycle.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         _logoutCommand = new NativeCommand(
             _ => _ = LogoutAsync(),
             _ => IsAuthenticated && !IsBusy);
@@ -203,7 +204,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
            (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
            (screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&
-           !Audit.Edit.IsOpen && !Accounts.Create.IsOpen;
+           !Audit.Edit.IsOpen && !Accounts.Create.IsOpen && !Accounts.Lifecycle.IsOpen;
 
     public async Task InitializeAuthenticationAsync(
         INativeAuthenticationBackend backend, CancellationToken ct = default)
