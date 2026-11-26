@@ -5,6 +5,7 @@ Fail-closed source gate executed identically in Windows Core and Release,
 in addition to real xUnit and live SQLCipher/WebView2/full-package CI tests.
 This is not a replacement for native interactive acceptance on clean Windows.
 """
+import re
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -22,6 +23,8 @@ FILES={
  "scheduler":"src/AlTamam.NativeDesktop/Scheduling/NativeDurableAttendanceScheduler.cs",
  "gate":"src/AlTamam.NativePresentation/NativeAutomaticSchedulerGate.cs",
  "gate_tests":"tests/AlTamam.UnitTests/NativeAutomaticSchedulerPhase4Tests.cs",
+ "operation_gate":"src/AlTamam.NativePresentation/NativeOperationDrainGate.cs",
+ "operation_tests":"tests/AlTamam.UnitTests/NativeOperationDrainPhase12Tests.cs",
  "contracts":"src/AlTamam.NativePresentation/NativeAttendanceRevisionContracts.cs",
  "review_vm":"src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
  "review_backend":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
@@ -79,6 +82,40 @@ def problems(contents):
         if min(indices) < 0 or indices != sorted(indices):
             errors.append("Both scheduler drains must complete before SQLCipher disposal")
     need("host", "_backend.StartAutomaticBackupScheduler();")
+    for token in ("ObjectDisposedException.ThrowIf(_stopping,this)", "_stopping=true",
+                  "if(_stopping && _active==0) _drained.TrySetResult()", "Interlocked.Exchange(ref _gate,null)"):
+        need("operation_gate", token)
+    for token in ("Drain_waits_for_all_existing_operations_and_denies_new_ones",
+                  "Concurrent_stop_callers_share_completion",
+                  "Async_wrapper_keeps_lease_until_completion_and_releases_on_failure",
+                  "Idle_gate_stops_immediately_and_cancellation_does_not_leak"):
+        need("operation_tests", token)
+    for token in ("new NativeSqlCipherDashboardReader(_services, _database, _operations)",
+                  "Task nativeDrain = _operations.StopAndDrainAsync();",
+                  "await nativeDrain.ConfigureAwait(false);",
+                  "_operations.RunAsync(() => _services.IsProvisionedAsync(ct))",
+                  "_operations.RunAsync(() => _services.RefreshSessionIdleDeadlineAsync(nonce, ct))",
+                  "_operations.RunAsync(() => _services.RevokeSessionAsync(nonce, ct))"):
+        need("backend", token)
+    if contents["backend"].count("using var nativeOperation = _operations.Enter();") != 2:
+        errors.append("Authentication and session resolution must be admitted")
+    if len(shutdown) == 2:
+        stop = shutdown[1]
+        tokens = ("Task nativeDrain = _operations.StopAndDrainAsync();",
+                  "Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
+                  "await nativeDrain.ConfigureAwait(false);", "_database.Dispose();")
+        indices = [stop.find(token) for token in tokens]
+        if min(indices) < 0 or indices != sorted(indices):
+            errors.append("All admitted native requests must drain before DB disposal")
+    reader = contents["reader"]
+    async_entries = re.findall(r"^    public async Task[^\{]+?\n    \{([^\n]*\n[^\n]*)", reader, re.M)
+    forwarded = re.findall(r"^    (?:public )?Task[^\n]*[\s\S]*?=>\s*([^;]+);", reader, re.M)
+    if len(async_entries) < 62 or any("using var nativeOperation = operations.Enter();" not in e for e in async_entries):
+        errors.append("Every async native reader entrypoint requires an operation lease")
+    if len(forwarded) < 16 or any(not e.startswith("operations.RunAsync(") for e in forwarded):
+        errors.append("Every native task forwarder requires an operation lease")
+    need("host", "IsEnabled = false;")
+    need("host", "if (!_mayClose && !drainStarted)")
     need("gate", "_stopTask ??= StopCoreAsync()")
     need("gate_tests", "Concurrent_shutdown_callers_share_the_same_drain")
     need("gate_tests", "Failed_drain_never_reports_success_to_a_later_disposal")
@@ -215,6 +252,9 @@ if __name__=="__main__":
         ("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"'),
         ("backend","await _autoAttendance.DisposeAsync()"),
         ("backend","await backupDrain.ConfigureAwait(false);"),
+        ("backend","await nativeDrain.ConfigureAwait(false);"),
+        ("reader","using var nativeOperation = operations.Enter();"),
+        ("operation_gate","ObjectDisposedException.ThrowIf(_stopping,this)"),
         ("host","_backend.StartAutomaticBackupScheduler();"),
         ("gate","_stopTask ??= StopCoreAsync()"),
         ("backup_adapter","new AutomaticBackupService(database)"),
