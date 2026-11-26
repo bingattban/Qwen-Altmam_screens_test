@@ -131,9 +131,11 @@ public sealed class SettingsReadBackupService
             ?BridgeHelpers.Ok(new JsonObject{["integrity"]="ok",["encrypted"]=true})
             :BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,"فشل فحص سلامة قاعدة البيانات.");
     }
-    public async Task<BridgeResponse> BackupAsync(BridgePrincipal person,CancellationToken ct)
+    public async Task<BridgeResponse> BackupAsync(BridgePrincipal person,CancellationToken ct,string? expectedDirectory=null)
     {
         string folder=await new OutputDirectorySettings(_db).GetAsync(ct);
+        if(expectedDirectory is not null && !string.Equals(folder,expectedDirectory,StringComparison.Ordinal))
+            return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير مجلد النسخ منذ المعاينة. حدّث الإعدادات.");
         // Fail visibly before creating any file: an existing folder may be
         // disconnected, read-only, full, or no longer be local.
         if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))

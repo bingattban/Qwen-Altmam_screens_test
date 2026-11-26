@@ -378,6 +378,7 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+            <views:NativeManualBackupView/>
             <Button Content="استدراك يوم سابق (خلال 7 أيام)"
                     Command="{Binding OpenCatchUpCommand}" Padding="12,8" Margin="6"/>
             <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
