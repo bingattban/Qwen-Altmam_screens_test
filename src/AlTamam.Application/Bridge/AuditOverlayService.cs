@@ -84,7 +84,8 @@ public sealed class AuditOverlayService
                            WHERE o.AuditEventId = e.AuditEventId
                              AND o.OverlayVersion =
                                  (SELECT MAX(p.OverlayVersion) FROM AuditLogPresentationEdits p
-                                  WHERE p.AuditEventId = e.AuditEventId)
+                                  WHERE p.AuditEventId = e.AuditEventId
+                                    AND p.CorrectedDescription IS NOT NULL)
                              AND altamam_normalize_search(o.CorrectedDescription) LIKE $term ESCAPE '\'))
                 """);
             args.Add(("$term", "%" + EscapeLike(NormalizeTerm(term)) + "%"));
@@ -139,7 +140,8 @@ public sealed class AuditOverlayService
                    e.ActorRosterFullNameSnapshot, e.TargetEntityType, e.TargetEntityId, e.TargetDisplaySnapshot,
                    e.DefaultArabicDescription, e.Reason, e.EffectiveLocalDate, e.ExecutedAtUtc, e.EventHash,
                    COALESCE((SELECT o.CorrectedDescription FROM AuditLogPresentationEdits o
-                             WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), ''),
+                             WHERE o.AuditEventId = e.AuditEventId AND o.CorrectedDescription IS NOT NULL
+                             ORDER BY o.OverlayVersion DESC LIMIT 1), ''),
                    COALESCE((SELECT o.IsTombstoned FROM AuditLogPresentationEdits o
                              WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
                    COALESCE((SELECT o.OverlayVersion FROM AuditLogPresentationEdits o
@@ -547,7 +549,7 @@ public sealed class AuditOverlayService
             FROM AuditLogPresentationEdits o
             JOIN AuditEvents e ON e.AuditEventId = o.AuditEventId
             {filter}
-            ORDER BY o.EditedAtUtc DESC, o.OverlayVersion DESC
+            ORDER BY o.EditedAtUtc DESC, o.OverlayVersion DESC, o.AuditEventId DESC
             LIMIT $limit OFFSET $offset;
             """;
         cmd.Parameters.Add("$limit", SqliteType.Integer).Value = pageSize;

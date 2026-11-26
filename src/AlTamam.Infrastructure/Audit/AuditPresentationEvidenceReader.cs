@@ -16,7 +16,11 @@ public static class AuditPresentationEvidenceReader
         cmd.Transaction=transaction;
         cmd.CommandText="""
             SELECT e.DefaultArabicDescription,COALESCE(o.OverlayVersion,0),
-                   COALESCE(o.IsTombstoned,0),o.CorrectedDescription
+                   COALESCE(o.IsTombstoned,0),
+                   (SELECT corrected.CorrectedDescription FROM AuditLogPresentationEdits corrected
+                    WHERE corrected.AuditEventId=e.AuditEventId
+                      AND corrected.CorrectedDescription IS NOT NULL
+                    ORDER BY corrected.OverlayVersion DESC LIMIT 1)
             FROM AuditEvents e
             LEFT JOIN AuditLogPresentationEdits o ON o.AuditEventId=e.AuditEventId
                 AND o.OverlayVersion=(SELECT MAX(last.OverlayVersion)
