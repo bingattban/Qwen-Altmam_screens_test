@@ -20,5 +20,7 @@
              Link="Scheduling/AutomaticBackupSchedulerService.cs" />
     <Compile Include="../AlTamam.DesktopHost/Bridge/NativeRestoreConfirmationDialog.cs"
              Link="Restore/NativeRestoreConfirmationDialog.cs" />
+    <Compile Include="../AlTamam.DesktopHost/Bridge/NativeRecoveryKeyExportDialog.cs"
+             Link="Restore/NativeRecoveryKeyExportDialog.cs" />
   </ItemGroup>
 </Project>
