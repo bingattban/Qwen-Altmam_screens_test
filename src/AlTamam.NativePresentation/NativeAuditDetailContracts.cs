@@ -17,6 +17,11 @@ public sealed record NativeAuditDetail(string AuditEventId,string OperationCode,
     public string OldValueDisplay=>OldValueJson??"لا توجد قيمة سابقة";
     public string NewValueDisplay=>NewValueJson??"لا توجد قيمة لاحقة";
 
+    public static bool MatchesPresentation(NativeAuditRow row,NativeAuditEditState state)=>
+        row is not null && state is not null && row.IsValid &&
+        state.Version==row.OverlayVersion && state.IsTombstoned==row.IsTombstoned &&
+        state.Description==row.Description;
+
     public bool Matches(NativeAuditRow row,UserRole role)=>
         row is not null && row.IsValid &&
         RoleAuthorizationPolicy.CanPerformStandardOperations(role) &&
