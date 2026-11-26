@@ -166,7 +166,12 @@ public sealed class Phase12BackupDiskRecoveryTests : IAsyncLifetime, IDisposable
         {
             var replay=await scheduler.ConfigureAsync(intent,Admin,default);
             Assert.True(replay.Success,replay.UserMessage);
-            Assert.Equal(first.Data!.ToJsonString(),replay.Data!.ToJsonString());
+            var originalReceipt=Assert.IsType<JsonObject>(first.Data);
+            var replayReceipt=Assert.IsType<JsonObject>(replay.Data);
+            Assert.True(JsonNode.DeepEquals(originalReceipt,replayReceipt));
+            Assert.True(replayReceipt["enabled"]!.GetValue<bool>());
+            Assert.Equal("17:30",replayReceipt["backupTime"]!.GetValue<string>());
+            Assert.Equal(3,replayReceipt["retentionCount"]!.GetValue<int>());
 
             var changed=(JsonObject)intent.DeepClone();
             changed["backupTime"]="18:30";
