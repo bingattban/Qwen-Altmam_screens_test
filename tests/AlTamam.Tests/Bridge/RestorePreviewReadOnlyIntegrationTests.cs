@@ -194,6 +194,27 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal(1L,CurrentCount());
     }
 
+    [Fact]
+    public async Task PreviewRejectsDifferentValidEncryptedSnapshotAtSamePath()
+    {
+        var service=new BackupInspectionService(_db);
+        var verified=await service.VerifyAsync(_backup,default);
+        Assert.True(verified.Success,verified.UserMessage);
+        var data=Assert.IsType<JsonObject>(verified.Data);
+        string digest=data["sha256"]!.GetValue<string>();
+        string replacement=Path.Combine(Path.GetDirectoryName(_path)!,"replacement-preview.dbbackup");
+        await _db.CreateVerifiedEncryptedBackupAsync(replacement);
+        File.Copy(replacement,_backup,true);
+        var newEvidence=await service.VerifyAsync(_backup,default);
+        Assert.True(newEvidence.Success,newEvidence.UserMessage);
+        Assert.NotEqual(digest,Assert.IsType<JsonObject>(newEvidence.Data)["sha256"]!.GetValue<string>());
+        var stale=await service.PreviewRestoreAsync(_backup,digest,default);
+        Assert.False(stale.Success);
+        Assert.Equal(BridgeErrorCodes.BackupIntegrityFailed,stale.Code);
+        Assert.Equal(1L,CurrentCount());
+        Assert.True(_db.HasValidIntegrity());
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
