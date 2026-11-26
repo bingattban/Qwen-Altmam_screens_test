@@ -148,30 +148,37 @@
                             <TextBlock Text="معرف الارتباط وإصدار العرض" FontWeight="SemiBold"/>
                             <TextBox Text="{Binding Detail.CorrelationId, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding Detail.OverlayVersion}"/>
-                            <Button Content="تعديل الوصف الظاهر" Command="{Binding OpenEditCommand}"
-                                    Visibility="{Binding CanOpenEdit, Converter={StaticResource VisibilityIfTrue}}"
-                                    Margin="0,8" Padding="12,6" HorizontalAlignment="Right"/>
+                            <WrapPanel HorizontalAlignment="Right">
+                                <Button Content="تعديل الوصف الظاهر" Command="{Binding OpenEditCommand}"
+                                        Visibility="{Binding CanOpenEdit, Converter={StaticResource VisibilityIfTrue}}"
+                                        Margin="4,8" Padding="12,6"/>
+                                <Button Content="إخفاء القيد من العرض" Command="{Binding OpenHideCommand}"
+                                        Visibility="{Binding CanOpenHide, Converter={StaticResource VisibilityIfTrue}}"
+                                        Margin="4,8" Padding="12,6" Foreground="#BE123C"/>
+                            </WrapPanel>
                             <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1"
                                     CornerRadius="6" Padding="10" Margin="0,8"
                                     Visibility="{Binding Edit.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                                 <StackPanel>
-                                    <TextBlock Text="مراجعة تعديل الوصف الظاهر فقط" FontWeight="Bold" FontSize="16"/>
-                                    <TextBlock Text="يبقى القيد الأصلي محفوظا. لا يكتب أي تعديل قبل التأكيد." TextWrapping="Wrap" Margin="0,4"/>
+                                    <TextBlock Text="{Binding Edit.ReviewTitle}" FontWeight="Bold" FontSize="16"/>
+                                    <TextBlock Text="يبقى القيد الأصلي محفوظا. لا يعتمد أي تغيير قبل التأكيد." TextWrapping="Wrap" Margin="0,4"/>
                                     <StackPanel IsEnabled="{Binding Edit.CanEdit}">
-                                        <TextBlock Text="الوصف الجديد" FontWeight="SemiBold"/>
-                                        <TextBox Text="{Binding Edit.Description, UpdateSourceTrigger=PropertyChanged}"
-                                                 MaxLength="2000" TextWrapping="Wrap" MinHeight="44" Margin="0,3,0,8"/>
-                                        <TextBlock Text="سبب التعديل (إلزامي)" FontWeight="SemiBold"/>
+                                        <StackPanel Visibility="{Binding Edit.ShowDescriptionEditor, Converter={StaticResource VisibilityIfTrue}}">
+                                            <TextBlock Text="الوصف الجديد" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding Edit.Description, UpdateSourceTrigger=PropertyChanged}"
+                                                     MaxLength="2000" TextWrapping="Wrap" MinHeight="44" Margin="0,3,0,8"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Edit.ReasonLabel}" FontWeight="SemiBold"/>
                                         <TextBox Text="{Binding Edit.Reason, UpdateSourceTrigger=PropertyChanged}"
                                                  MaxLength="400" TextWrapping="Wrap" MinHeight="36" Margin="0,3,0,8"/>
-                                        <Button Content="معاينة التعديل" Command="{Binding Edit.PreviewCommand}" Padding="10,5" HorizontalAlignment="Right"/>
+                                        <Button Content="{Binding Edit.PreviewLabel}" Command="{Binding Edit.PreviewCommand}" Padding="10,5" HorizontalAlignment="Right"/>
                                     </StackPanel>
                                     <StackPanel Visibility="{Binding Edit.HasPreview, Converter={StaticResource VisibilityIfTrue}}" Margin="0,8">
                                         <TextBlock Text="قبل التعديل" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding Edit.BeforeDescription}" TextWrapping="Wrap"/>
-                                        <TextBlock Text="بعد التعديل" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                        <TextBlock Text="{Binding Edit.AfterLabel}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,6,0,0"/>
                                         <TextBlock Text="{Binding Edit.Prepared.Description}" TextWrapping="Wrap"/>
-                                        <TextBlock Text="سبب التعديل" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                        <TextBlock Text="{Binding Edit.ReasonLabel}" FontWeight="SemiBold" Margin="0,6,0,0"/>
                                         <TextBlock Text="{Binding Edit.Prepared.Reason}" TextWrapping="Wrap"/>
                                         <Button Content="{Binding Edit.ConfirmLabel}" Command="{Binding Edit.ConfirmCommand}"
                                                 Padding="10,6" Margin="0,8,0,0" HorizontalAlignment="Right"/>
@@ -179,7 +186,7 @@
                                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Edit.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
                                     <TextBlock Text="{Binding Edit.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding Edit.CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
-                                    <Button Content="إغلاق مراجعة التعديل" Command="{Binding CloseEditCommand}" Margin="0,8,0,0" Padding="10,5" HorizontalAlignment="Right"/>
+                                    <Button Content="إغلاق المراجعة" Command="{Binding CloseEditCommand}" Margin="0,8,0,0" Padding="10,5" HorizontalAlignment="Right"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
