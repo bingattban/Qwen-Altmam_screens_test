@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool _closeInProgress;
     private bool _mayClose;
     private bool _restoreInProgress;
+    private bool _recoveryExportInProgress;
     private volatile bool _restoreQuiescing;
     private bool _restoreDrainCompleted;
 
@@ -65,7 +66,7 @@ public partial class MainWindow : Window
 
     private async void OnSessionTimerTick(object? sender, EventArgs e)
     {
-        if (_restoreInProgress || _restoreQuiescing || _closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
+        if (_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
         _sessionCheckRunning = true;
         try { await _viewModel.VerifyCurrentSessionAsync(); }
         finally { _sessionCheckRunning = false; }
@@ -73,19 +74,19 @@ public partial class MainWindow : Window
 
     private void OnNativePointerInput(object sender, MouseButtonEventArgs e)
     {
-        if (!_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated)
+        if (!_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private void OnNativeKeyboardInput(object sender, KeyEventArgs e)
     {
-        if (!_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
+        if (!_recoveryExportInProgress && !_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private async void OnLogoutClick(object sender, RoutedEventArgs e)
     {
-        if (_restoreInProgress || _restoreQuiescing || _closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
+        if (_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
         await _viewModel.LogoutAsync();
         if (_viewModel.IsAuthenticated)
             MessageBox.Show("لم يكتمل إلغاء جلسة المستخدم. حاول تسجيل الخروج مجددا.",
@@ -96,7 +97,7 @@ public partial class MainWindow : Window
     // selected file and completed comparison. No XAML password binding.
     internal async Task RequestRestoreAsync(SettingsPageViewModel settings)
     {
-        if(_restoreInProgress || _restoreQuiescing || _closeInProgress || _mayClose ||
+        if(_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress || _mayClose ||
             _viewModel.IsBusy || _backend is not { } backend ||
             !ReferenceEquals(settings,_viewModel.Settings) ||
             !ReferenceEquals(_viewModel.CurrentPage,settings) ||
@@ -175,9 +176,71 @@ public partial class MainWindow : Window
         }
     }
 
+    internal async Task RequestRecoveryExportAsync(SettingsPageViewModel settings)
+    {
+        if(_recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress ||
+            _mayClose || _viewModel.IsBusy || _backend is not { } backend ||
+            !ReferenceEquals(settings,_viewModel.Settings) ||
+            !ReferenceEquals(_viewModel.CurrentPage,settings) ||
+            settings.RecoveryExportActor is not { } actor) return;
+
+        _recoveryExportInProgress=true;
+        try
+        {
+            var picker=new Microsoft.Win32.SaveFileDialog
+            {
+                Title="حفظ مفتاح الاسترداد المشفر في ملف جديد",
+                Filter="مفتاح استرداد التمام (*.altrecovery)|*.altrecovery",
+                DefaultExt=".altrecovery",AddExtension=true,OverwritePrompt=false,
+                CheckPathExists=true,RestoreDirectory=true
+            };
+            if(picker.ShowDialog(this)!=true) return;
+            if(settings.GetRecoveryExportIntent(picker.FileName) is not { } intent ||
+                !intent.Matches(actor)) return;
+            if(System.IO.File.Exists(intent.Destination))
+            {
+                MessageBox.Show(this,"الملف موجود مسبقا. اختر اسما جديدا؛ لا يتم استبدال مفتاح استرداد سابق.",
+                    "ملف موجود",MessageBoxButton.OK,MessageBoxImage.Warning);
+                return;
+            }
+
+            var credentials=NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination);
+            if(credentials is null || !intent.Matches(settings.RecoveryExportActor)) return;
+            IsEnabled=false;
+            Task<bool> exporting;
+            try
+            {
+                exporting=backend.ExportRecoveryKeyAsync(intent,credentials.CurrentAdminPassword,
+                    credentials.RecoveryPassphrase);
+            }
+            finally { credentials=null; }
+            bool saved=await exporting;
+            MessageBox.Show(this,saved
+                ? "تم حفظ ملف مفتاح الاسترداد المشفر. احفظ كلمة مروره في مكان آمن منفصل عن الملف والنسخة الاحتياطية."
+                : "لم يتم تصدير المفتاح؛ تعذر التحقق من الحساب أو كلمة المرور أو صلاحية الجلسة.",
+                "مفتاح الاسترداد",MessageBoxButton.OK,saved?MessageBoxImage.Information:MessageBoxImage.Warning);
+        }
+        catch
+        {
+            MessageBox.Show(this,"تعذر تأكيد حفظ مفتاح الاسترداد. تحقق من المسار والملف؛ لا تستبدل أي مفتاح سابق.",
+                "تعذر التصدير",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+        finally
+        {
+            _recoveryExportInProgress=false;
+            IsEnabled=true;
+            await _viewModel.VerifyCurrentSessionAsync();
+        }
+    }
+
     private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_mayClose) return;
+        if (_recoveryExportInProgress)
+        {
+            e.Cancel=true;
+            return;
+        }
         if (_restoreInProgress || _restoreQuiescing)
         {
             if (!_restoreInProgress && _restoreDrainCompleted)
