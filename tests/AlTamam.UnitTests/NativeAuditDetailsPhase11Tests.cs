@@ -34,6 +34,19 @@ public sealed class NativeAuditDetailsPhase11Tests
     }
 
     [Fact]
+    public void Presentation_evidence_must_match_exact_list_description_revision_and_visibility()
+    {
+        var row=Row(true,2);
+        var finalState=new NativeAuditEditState(2,true,row.Description);
+        Assert.True(NativeAuditDetail.MatchesPresentation(row,finalState));
+        Assert.False(NativeAuditDetail.MatchesPresentation(row,finalState with { Description=row.RawDescription }));
+        Assert.False(NativeAuditDetail.MatchesPresentation(row,finalState with { Version=1 }));
+        Assert.False(NativeAuditDetail.MatchesPresentation(row,finalState with { IsTombstoned=false }));
+        var original=Row() with { Description="الأصل" };
+        Assert.True(NativeAuditDetail.MatchesPresentation(original,new(0,false,original.RawDescription)));
+    }
+
+    [Fact]
     public async Task Detail_requires_reference_bound_row_and_preserves_list()
     {
         var reader=new Reader();
