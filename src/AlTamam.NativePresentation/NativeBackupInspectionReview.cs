@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using AlTamam.Domain.Policies;
+using AlTamam.Domain.Enums;
 
 namespace AlTamam.NativePresentation;
 
@@ -43,6 +44,13 @@ public sealed record NativeRestoreComparison(string Path,string Sha256,int Schem
         SchemaVersion==evidence.SchemaVersion && Incoming==evidence.Counts && Current is { IsValid:true };
 }
 
+public sealed record NativeRestoreIntent(NativeIdentity Actor,NativeBackupInspection Evidence,NativeRestoreComparison Comparison)
+{
+    public bool IsValid=>Actor is { Role:UserRole.GeneralAdministration } &&
+        !string.IsNullOrWhiteSpace(Actor.SessionNonce) && Evidence is not null &&
+        Comparison is not null && Comparison.Matches(Evidence);
+}
+
 public interface INativeBackupInspectionBackend
 {
     Task<NativeBackupInspection> InspectBackupAsync(NativeIdentity actor,string path,CancellationToken ct=default);
@@ -70,6 +78,13 @@ public sealed class NativeBackupInspectionReview:INotifyPropertyChanged
     public bool CanInspect=>IsOpen && !_busy;
     public bool CanPreview=>CanInspect && Evidence is { Compatible:true } &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(_actor!.Role);
+    public bool CanRequestRestore=>CanInspect && _actor?.Role==UserRole.GeneralAdministration &&
+        Evidence is { } evidence && Comparison is { } comparison && comparison.Matches(evidence);
+    public NativeRestoreIntent? GetRestoreIntent()=>CanRequestRestore
+        ?new(_actor!,Evidence!,Comparison!):null;
+    public bool MatchesRestoreIntent(NativeRestoreIntent intent)=>CanRequestRestore && intent.IsValid &&
+        _actor==intent.Actor && ReferenceEquals(Evidence,intent.Evidence) &&
+        ReferenceEquals(Comparison,intent.Comparison);
     public bool HasEvidence=>IsOpen && Evidence is not null;
     public bool HasComparison=>IsOpen && Comparison is not null;
     public string SelectedPath { get; private set; }="";
