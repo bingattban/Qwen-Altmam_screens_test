@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <Compile Include="../../src/AlTamam.DesktopHost/Bridge/WebViewSelfCheckTimeProvider.cs" Link="SelfCheck/WebViewSelfCheckTimeProvider.cs" />
+    <Compile Include="../../src/AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs" Link="Scheduling/AutomaticBackupSchedulerService.cs" />
   </ItemGroup>
 
   <ItemGroup>
