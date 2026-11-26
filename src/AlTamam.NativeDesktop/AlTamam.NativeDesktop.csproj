@@ -18,5 +18,7 @@
              Link="Scheduling/EightPmSchedulerService.cs" />
     <Compile Include="../AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs"
              Link="Scheduling/AutomaticBackupSchedulerService.cs" />
+    <Compile Include="../AlTamam.DesktopHost/Bridge/NativeRestoreConfirmationDialog.cs"
+             Link="Restore/NativeRestoreConfirmationDialog.cs" />
   </ItemGroup>
 </Project>
