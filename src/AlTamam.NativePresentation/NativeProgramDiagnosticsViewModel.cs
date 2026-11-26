@@ -109,6 +109,10 @@ public sealed class NativeProgramDiagnosticsViewModel : INotifyPropertyChanged
     public void Notify()
     {
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(string.Empty));
+        NotifyAvailability();
+    }
+    public void NotifyAvailability()
+    {
         RefreshCommand.NotifyAvailabilityChanged(); CheckCommand.NotifyAvailabilityChanged();
     }
 }
