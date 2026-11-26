@@ -22,6 +22,8 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     private readonly BridgeSharedServices _services;
     private bool _disposed;
     private readonly NativeAutomaticSchedulerGate _autoAttendance;
+    private readonly NativeAutomaticSchedulerGate _autoBackup;
+    private readonly object _lifecycleSync = new();
     private Task? _shutdownTask;
 
     private NativeSqlCipherAuthenticationBackend(AlTamamDbContext database)
@@ -30,6 +32,8 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
         _services = new BridgeSharedServices(database);
         _autoAttendance = new NativeAutomaticSchedulerGate(
             new NativeDurableAttendanceScheduler(database));
+        _autoBackup = new NativeAutomaticSchedulerGate(
+            new NativeDurableBackupScheduler(database));
     }
 
     public static async Task<NativeSqlCipherAuthenticationBackend> OpenAsync(
@@ -70,8 +74,20 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     // actual due-time writes, not the dashboard countdown or a login click.
     public void StartAutomaticAttendanceScheduler()
     {
-        if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
-        _autoAttendance.StartOnce();
+        lock (_lifecycleSync)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+            _autoAttendance.StartOnce();
+        }
+    }
+
+    public void StartAutomaticBackupScheduler()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+            _autoBackup.StartOnce();
+        }
     }
 
     // Reuse one audited DB instance and session resolver for native dashboard.
@@ -130,23 +146,27 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
 
     public ValueTask DisposeAsync()
     {
-        _shutdownTask ??= ShutdownCoreAsync();
-        return new ValueTask(_shutdownTask);
+        lock (_lifecycleSync)
+        {
+            _disposed = true;
+            return new ValueTask(_shutdownTask ??= ShutdownCoreAsync());
+        }
     }
 
     private async Task ShutdownCoreAsync()
     {
-        _disposed = true;
+        // Request both stops even if one later fails. Only release SQLCipher
+        // after both canonical schedulers have drained successfully.
+        Task backupDrain = _autoBackup.DisposeAsync().AsTask();
         try
         {
-            // Wait for original scheduler to cancel and drain all pending
-            // SQLCipher operations while the original OS mutex is still held.
             await _autoAttendance.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
-            _database.Dispose();
+            await backupDrain.ConfigureAwait(false);
         }
+        _database.Dispose();
     }
 
     // Safety fallback for exceptional UI teardown: preserve stop-before-DB order.

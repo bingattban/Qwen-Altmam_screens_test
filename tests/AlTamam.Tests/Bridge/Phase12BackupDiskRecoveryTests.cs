@@ -202,6 +202,35 @@ public sealed class Phase12BackupDiskRecoveryTests : IAsyncLifetime, IDisposable
         finally { Directory.Move(disconnected,_folder); }
     }
 
+    [Fact]
+    public async Task OriginalHostScheduler_StartsDueBackupAndDrainsBeforeDatabaseDisposal()
+    {
+        var settings=new OutputDirectorySettings(_db);
+        Assert.True((await settings.SaveAsync(_folder,Admin,default)).Success);
+        var service=new AutomaticBackupService(_db,_clock);
+        Assert.True((await service.ConfigureAsync(new JsonObject
+        {
+            ["enabled"]=true,["backupTime"]="16:00",["retentionCount"]=0
+        },Admin,default)).Success);
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        await using (var scheduler=new AlTamam.DesktopHost.Scheduling.AutomaticBackupSchedulerService(service))
+        {
+            scheduler.Start();
+            scheduler.Start();
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            while(await service.LastSuccessfulDateAsync(deadline.Token)!="2026-10-24")
+                await Task.Delay(100,deadline.Token);
+        }
+        Assert.False(await service.RunIfDueAsync());
+        var path=Assert.Single(Directory.EnumerateFiles(_folder,"*.dbbackup"));
+        var verified=await new BackupInspectionService(_db).VerifyAsync(path,default);
+        Assert.True(verified.Success,verified.UserMessage);
+        var details=Assert.IsType<JsonObject>(verified.Data);
+        Assert.True(details["verified"]!.GetValue<bool>());
+        Assert.True(details["registeredInCurrentCatalog"]!.GetValue<bool>());
+        Assert.True(_db.HasValidIntegrity());
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {

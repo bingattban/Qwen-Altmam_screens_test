@@ -70,7 +70,7 @@ public sealed class NativeManualBackupReview : INotifyPropertyChanged
     public bool CanClose=>IsOpen && !_busy && !_uncertain;
     public string ReviewTitle=>IsFolderChange?"مراجعة تغيير مجلد الحفظ":"مراجعة إنشاء نسخة احتياطية يدوية";
     public string EffectLabel=>IsFolderChange
-        ?"سيتم تغيير المجلد المشترك للنسخ وتقارير Excel وتفعيل إعداد النسخ التلقائي وفق السلوك الأصلي. لا يعني ذلك تشغيل المجدول في الواجهة التجريبية."
+        ?"سيتم تغيير المجلد المشترك للنسخ وتقارير Excel وتفعيل إعداد النسخ التلقائي وفق السلوك الأصلي. قد يبدأ النسخ عند حلول الموعد أثناء تشغيل البرنامج؛ لا يعني الحفظ نجاح نسخة تلقائية."
         :"سيتم إنشاء نسخة SQLCipher مشفرة في المجلد المحدد، والتحقق من سلامتها وبصمتها وتسجيلها في سجل العمليات. لا يتم استعادة أو حذف البيانات.";
     public string CompletionMessage=>SavedDirectory is not null?"تم حفظ المجلد المعتمد.":Receipt is not null?"تم إنشاء نسخة مشفرة والتحقق منها وتسجيلها.":"";
 

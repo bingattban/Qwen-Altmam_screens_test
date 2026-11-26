@@ -41,10 +41,12 @@ public partial class MainWindow : Window
             _backend = await _openingTask;
             if (_closeInProgress) return;
             await _viewModel.InitializeAuthenticationAsync(_backend);
+            if (_closeInProgress || _mayClose) return;
             _viewModel.AttachDashboardReader(_backend.CreateDashboardReader());
             // Start the SAME durable 08:00/catch-up engine as DesktopHost,
             // only after SQLCipher recovery and native UI initialization.
             _backend.StartAutomaticAttendanceScheduler();
+            _backend.StartAutomaticBackupScheduler();
             _sessionTimer.Start();
         }
         catch
@@ -123,7 +125,7 @@ public partial class MainWindow : Window
                 catch
                 {
                     MessageBox.Show(
-                        "تعذر إيقاف مجدول التحضير التلقائي بأمان. لم يتم تحرير قاعدة البيانات؛ حاول الإغلاق مجددا.",
+                        "تعذر تأكيد إيقاف المجدولات بأمان. لم يتم تحرير قاعدة البيانات. يلزم التحقق من حالة البرنامج قبل إعادة تشغيله.",
                         "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }

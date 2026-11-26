@@ -12,6 +12,10 @@ ROOT=Path(__file__).resolve().parents[1]
 FILES={
  "project":"src/AlTamam.NativeDesktop/AlTamam.NativeDesktop.csproj",
  "canonical":"src/AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs",
+ "backup_canonical":"src/AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs",
+ "backup_adapter":"src/AlTamam.NativeDesktop/Scheduling/NativeDurableBackupScheduler.cs",
+ "backup_tests":"tests/AlTamam.Tests/Bridge/Phase12BackupDiskRecoveryTests.cs",
+ "backup_test_project":"tests/AlTamam.Tests/AlTamam.Tests.csproj",
  "attendance":"src/AlTamam.Application/Scheduling/AutoAttendanceService.cs",
  "host":"src/AlTamam.NativeDesktop/MainWindow.xaml.cs",
  "backend":"src/AlTamam.NativeDesktop/Auth/NativeSqlCipherAuthenticationBackend.cs",
@@ -52,6 +56,33 @@ def problems(contents):
     for token in ("RunPendingAsync(ct)", "GetDueTimeAsync(ct)",
                   "await _attendance.RunPendingAsync(ct)", "public async ValueTask DisposeAsync()"):
         need("canonical",token)
+    need("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs"')
+    need("backup_test_project",'Compile Include="../../src/AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs"')
+    for token in ("_service.RunIfDueAsync(ct)", "_service.RecordFailureAsync", "await _loop.ConfigureAwait(false)"):
+        need("backup_canonical", token)
+    for token in ("new AutomaticBackupSchedulerService(", "new AutomaticBackupService(database)",
+                  "_original.Start()", "_original.DisposeAsync()"):
+        need("backup_adapter", token)
+    for token in ("new NativeDurableBackupScheduler(database)", "_autoBackup.StartOnce()",
+                  "Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
+                  "await backupDrain.ConfigureAwait(false);"):
+        need("backend", token)
+    shutdown = contents["backend"].split("private async Task ShutdownCoreAsync()", 1)
+    if len(shutdown) != 2:
+        errors.append("Missing native shutdown core")
+    else:
+        stop = shutdown[1]
+        tokens = ("Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
+                  "await _autoAttendance.DisposeAsync()", "await backupDrain.ConfigureAwait(false);",
+                  "_database.Dispose();")
+        indices = [stop.find(token) for token in tokens]
+        if min(indices) < 0 or indices != sorted(indices):
+            errors.append("Both scheduler drains must complete before SQLCipher disposal")
+    need("host", "_backend.StartAutomaticBackupScheduler();")
+    need("gate", "_stopTask ??= StopCoreAsync()")
+    need("gate_tests", "Concurrent_shutdown_callers_share_the_same_drain")
+    need("gate_tests", "Failed_drain_never_reports_success_to_a_later_disposal")
+    need("backup_tests", "OriginalHostScheduler_StartsDueBackupAndDrainsBeforeDatabaseDisposal")
     need("attendance", "IsCatchUpRun")
     for token in ("new EightPmSchedulerService(",
                   "new AutoAttendanceService(database)",
@@ -183,6 +214,11 @@ if __name__=="__main__":
     for key,token in (
         ("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"'),
         ("backend","await _autoAttendance.DisposeAsync()"),
+        ("backend","await backupDrain.ConfigureAwait(false);"),
+        ("host","_backend.StartAutomaticBackupScheduler();"),
+        ("gate","_stopTask ??= StopCoreAsync()"),
+        ("backup_adapter","new AutomaticBackupService(database)"),
+        ("backup_tests","OriginalHostScheduler_StartsDueBackupAndDrainsBeforeDatabaseDisposal"),
         ("host","_backend.StartAutomaticAttendanceScheduler();"),
         ("review_backend","principal.SessionRevocation"),
         ("review_backend",'"operationId"'),

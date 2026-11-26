@@ -374,7 +374,7 @@
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="#BE123C" TextWrapping="Wrap"/>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
-                        <TextBlock Text="هذه قراءة للإعدادات المحفوظة فقط. لا تثبت تشغيل مجدول النسخ الاحتياطي في الواجهة التجريبية ولا تغير أي إعداد." TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,0"/>
+                        <TextBlock Text="هذه قراءة للإعدادات المحفوظة وآخر النتائج المسجلة. يعمل المجدول الأصلي أثناء تشغيل البرنامج؛ تفعيل الإعداد وحده لا يعني نجاح النسخ. حدّث الإعدادات لعرض آخر نتيجة." TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,0"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -411,7 +411,7 @@
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Schedule.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
                     <TextBlock Text="{Binding Schedule.Error}" TextWrapping="Wrap" Foreground="#BE123C"/>
                     <TextBlock Text="{Binding Schedule.CompletionMessage}" TextWrapping="Wrap" Foreground="#0D9488"/>
-                    <TextBlock Text="حفظ الإعداد لا يثبت تشغيل المجدول في النسخة التجريبية. تشغيل المجدول نفسه ضمن الجزء التالي." TextWrapping="Wrap" Margin="0,6"/>
+                    <TextBlock Text="يقرأ المجدول الأصلي الإعدادات أثناء تشغيل البرنامج ويتحقق من الموعد كل دقيقة. حفظ الإعداد لا يعني إنشاء نسخة ناجحة." TextWrapping="Wrap" Margin="0,6"/>
                     <Button Content="إغلاق مراجعة الجدولة" Command="{Binding CloseScheduleCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
