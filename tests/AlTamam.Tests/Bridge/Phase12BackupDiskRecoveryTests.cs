@@ -147,6 +147,56 @@ public sealed class Phase12BackupDiskRecoveryTests : IAsyncLifetime, IDisposable
         Assert.Single(Directory.EnumerateFiles(_folder,"*.dbbackup"));
     }
 
+    [Fact]
+    public async Task ScheduleReceiptReplaysAfterDiskRemovalButNewEnableIsRejected()
+    {
+        var settings=new OutputDirectorySettings(_db);
+        Assert.True((await settings.SaveAsync(_folder,Admin,default)).Success);
+        var scheduler=new AutomaticBackupService(_db,_clock);
+        var intent=new JsonObject
+        {
+            ["enabled"]=true,["backupTime"]="17:30",["retentionCount"]=3,
+            ["operationId"]="phase12-schedule-original"
+        };
+        var first=await scheduler.ConfigureAsync(intent,Admin,default);
+        Assert.True(first.Success,first.UserMessage);
+        string disconnected=_folder+"-disconnected";
+        Directory.Move(_folder,disconnected);
+        try
+        {
+            var replay=await scheduler.ConfigureAsync(intent,Admin,default);
+            Assert.True(replay.Success,replay.UserMessage);
+            Assert.Equal(first.Data!.ToJsonString(),replay.Data!.ToJsonString());
+
+            var changed=(JsonObject)intent.DeepClone();
+            changed["backupTime"]="18:30";
+            var conflict=await scheduler.ConfigureAsync(changed,Admin,default);
+            Assert.False(conflict.Success);
+            Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ConflictStale,conflict.Code);
+            changed["operationId"]="phase12-schedule-new-intent";
+            var blocked=await scheduler.ConfigureAsync(changed,Admin,default);
+            Assert.False(blocked.Success);
+            Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ScheduleUnavailable,blocked.Code);
+            Assert.Equal((true,"17:30"),await scheduler.ReadSettingsAsync());
+
+            var pause=new JsonObject
+            {
+                ["enabled"]=false,["backupTime"]="17:30",["retentionCount"]=3,
+                ["operationId"]="phase12-schedule-pause"
+            };
+            Assert.True((await scheduler.ConfigureAsync(pause,Admin,default)).Success);
+            Assert.Equal((false,"17:30"),await scheduler.ReadSettingsAsync());
+            // An old receipt is historical evidence, not the current schedule.
+            Assert.True((await scheduler.ConfigureAsync(intent,Admin,default)).Success);
+            Assert.Equal((false,"17:30"),await scheduler.ReadSettingsAsync());
+            using var connection=_db.CreateOpenConnection();
+            using var command=connection.CreateCommand();
+            command.CommandText="SELECT COUNT(*) FROM MutationReceipts WHERE ActionName='UpdateBackupSchedule';";
+            Assert.Equal(2L,Convert.ToInt64(await command.ExecuteScalarAsync()));
+        }
+        finally { Directory.Move(disconnected,_folder); }
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
