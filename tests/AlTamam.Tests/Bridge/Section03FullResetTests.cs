@@ -190,4 +190,58 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         Assert.Equal(1,Count("AuditEvents"));
         Assert.Equal(1,Count("FailedLoginEvents"));
     }
+    [Fact]
+    public async Task NativeResetPreview_RejectsForgedAndRevokedSession()
+    {
+        var svc=new FullDataResetService(_db);
+        Assert.False((await svc.PreviewNativeAsync(_admin,default)).Success);
+        var (actor,error)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(error);
+        var live=Assert.IsType<BridgePrincipal>(actor);
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
+        await _auth.RevokeSessionAsync(live.SessionNonce);
+        Assert.False((await svc.CommitNativeAsync(CommitArgs(preview),live,_auth,default)).Success);
+        Assert.Equal(1,Count("Users"));
+    }
+
+    [Fact]
+    public async Task NativeResetPreview_CannotBeConsumedByAnotherSessionOrLegacyEntry()
+    {
+        var svc=new FullDataResetService(_db);
+        var (actor,error)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(error);
+        var live=Assert.IsType<BridgePrincipal>(actor);
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
+        await Task.Delay(TimeSpan.FromMilliseconds(5150));
+        Assert.False((await svc.CommitAsync(CommitArgs(preview),live,default)).Success);
+        await _auth.RevokeSessionAsync(live.SessionNonce);
+        var (other,otherError)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(otherError);
+        var next=Assert.IsType<BridgePrincipal>(other);
+        Assert.NotEqual(live.SessionNonce,next.SessionNonce);
+        Assert.False((await svc.CommitNativeAsync(CommitArgs(preview),next,_auth,default)).Success);
+        Assert.Equal(1,Count("Users"));
+    }
+
+    [Fact]
+    public async Task NativeReset_ValidSessionAndFreshPasswordPreserveVerifiedRescueAndClearSessions()
+    {
+        var svc=new FullDataResetService(_db);
+        var (actor,error)=await _auth.AuthenticateAsync("resetOwner","test-password-123",default);
+        Assert.Null(error);
+        var live=Assert.IsType<BridgePrincipal>(actor);
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewNativeAsync(live,default)).Data);
+        await Task.Delay(TimeSpan.FromMilliseconds(5150));
+        var response=await svc.CommitNativeAsync(CommitArgs(preview),live,_auth,default);
+        Assert.True(response.Success,response.UserMessage);
+        var rescue=Assert.IsType<JsonObject>(response.Data)["rescuePath"]!.GetValue<string>();
+        Assert.True(File.Exists(rescue));
+        Assert.Equal(1L,(await _db.InspectEncryptedBackupAsync(rescue)).UserCount);
+        Assert.Equal(0,Count("Users"));
+        Assert.Equal(0,Count("UserSessions"));
+        Assert.Null(await _auth.ResolveSessionAsync(live.SessionNonce));
+        Assert.True(_db.HasValidIntegrity());
+        Assert.False(await _auth.IsProvisionedAsync());
+    }
+
 }
