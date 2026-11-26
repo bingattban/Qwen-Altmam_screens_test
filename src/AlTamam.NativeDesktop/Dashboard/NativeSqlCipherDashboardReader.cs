@@ -14,7 +14,8 @@ namespace AlTamam.NativeDesktop.Dashboard;
 /// fake UI counts, background login, custom-field omissions or write operations.
 /// </summary>
 public sealed class NativeSqlCipherDashboardReader(
-    BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database)
+    BridgeSharedServices services, AlTamam.Infrastructure.Persistence.AlTamamDbContext database,
+    NativeOperationDrainGate operations)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend, INativeClosedDayPolicyBackend,
       INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
@@ -27,6 +28,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
         CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter is null || !filter.IsValid)
             throw new InvalidDataException("Invalid native audit filter.");
         if (!filter.IsAuthorized(actor.Role))
@@ -76,6 +78,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAuditDetail> ReadAuditDetailAsync(NativeIdentity actor,NativeAuditRow row,
         CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if (row is null || !row.IsValid)
             throw new InvalidDataException("Invalid audit selection.");
         if (row.IsTombstoned && !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
@@ -136,11 +139,13 @@ public sealed class NativeSqlCipherDashboardReader(
     // Canonical append-only overlay mutation; no independent SQL or audit writer.
     public Task<NativeAuditEditReceipt> EditAuditDescriptionAsync(NativeIdentity actor,
         NativeAuditEditRequest request,CancellationToken ct=default)
-        =>ApplyAuditOverlayAsync(actor,request,hide:false,ct);
+        =>
+        operations.RunAsync(() => ApplyAuditOverlayAsync(actor,request,hide:false,ct));
 
     public Task<NativeAuditEditReceipt> HideAuditEntryAsync(NativeIdentity actor,
         NativeAuditEditRequest request,CancellationToken ct=default)
-        =>ApplyAuditOverlayAsync(actor,request,hide:true,ct);
+        =>
+        operations.RunAsync(() => ApplyAuditOverlayAsync(actor,request,hide:true,ct));
 
     private async Task<NativeAuditEditReceipt> ApplyAuditOverlayAsync(NativeIdentity actor,
         NativeAuditEditRequest request,bool hide,CancellationToken ct)
@@ -198,6 +203,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAuditHistoryPage> ReadAuditHistoryAsync(NativeIdentity actor,
         NativeAuditHistoryRequest request,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role))
             throw new UnauthorizedAccessException("Audit history denied.");
         if(request is null || !request.IsValid)
@@ -251,6 +257,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAccountPage> ReadAccountsAsync(NativeIdentity actor,
         NativeAccountRequest request,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
             throw new UnauthorizedAccessException("Account management denied.");
         if(request is null || !request.IsValid)
@@ -296,6 +303,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAccountPersonSearch> SearchAccountPeopleAsync(NativeIdentity actor,
         string term,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
             throw new UnauthorizedAccessException("Account roster search denied.");
         if(!NativeAccountPersonSearch.ValidTerm(term))
@@ -323,6 +331,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAccountCreateReceipt> CreateAccountAsync(NativeIdentity actor,
         NativeAccountCreateIntent intent,string password,string confirmation,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(intent is null || !intent.IsValid(actor.Role) ||
             !NativeAccountCreateIntent.ValidPassword(password,confirmation))
             throw new UnauthorizedAccessException("Invalid account creation intent.");
@@ -365,6 +374,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAccountLifecycleReceipt> ApplyAccountActionAsync(NativeIdentity actor,
         NativeAccountLifecycleIntent intent,string password,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(intent is null || !intent.IsValid(actor) ||
             (intent.Action==NativeAccountAction.ChangePassword
                 ? !PasswordPolicyValidator.Validate(password).IsValid : password!=""))
@@ -420,6 +430,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,
         CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role))
             throw new UnauthorizedAccessException("Settings overview denied.");
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
@@ -459,6 +470,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeManualBackupReceipt> CreateManualBackupAsync(NativeIdentity actor,string directory,
         CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!NativeManualBackupReceipt.ValidDirectory(directory)) throw new NativeBackupRejectedException();
         var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
         var response=await new SettingsReadBackupService(database).BackupAsync(principal,ct,directory).ConfigureAwait(false);
@@ -484,6 +496,7 @@ public sealed class NativeSqlCipherDashboardReader(
 
     public async Task<string> SaveBackupDirectoryAsync(NativeIdentity actor,string directory,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!NativeManualBackupReceipt.ValidDirectory(directory)) throw new NativeBackupRejectedException();
         var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
         var settings=new OutputDirectorySettings(database);
@@ -503,6 +516,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeBackupScheduleReceipt> SaveBackupScheduleAsync(NativeIdentity actor,
         NativeBackupScheduleIntent intent,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(intent is null || !intent.IsValid(actor))
             throw new UnauthorizedAccessException("Invalid backup schedule intent.");
         var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
@@ -538,6 +552,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeBackupInspection> InspectBackupAsync(NativeIdentity actor,string path,
         CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(!NativeBackupInspection.ValidPath(path))
             throw new InvalidDataException("Invalid backup path.");
         await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
@@ -559,6 +574,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeRestoreComparison> PreviewBackupRestoreAsync(NativeIdentity actor,
         NativeBackupInspection evidence,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if(evidence is null || !evidence.Matches(evidence.Path) || !evidence.Compatible ||
             !RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
             throw new UnauthorizedAccessException("Backup restore preview denied.");
@@ -614,6 +630,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeIndividualExcelRequest request,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         var generation = _individualExcelApproval.Begin();
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var service = new PersonnelIndividualExcelExportService(database);
@@ -642,6 +659,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeIndividualExcelRequest request, string approvalToken,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         // Consume before awaiting: even a failed or cancelled attempt needs a fresh preview.
         string fingerprint = _individualExcelApproval.Consume(actor, request, approvalToken);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
@@ -694,6 +712,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelGroupReportRequest request,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         JsonObject payload = GroupExcelPayload(request);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await new PersonnelGroupExcelExportService(database)
@@ -728,6 +747,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelGroupReportRequest request,
         string fingerprint, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         JsonObject payload = GroupExcelPayload(request);
         if (fingerprint is not { Length: 64 } ||
             fingerprint.Any(ch => !char.IsAsciiHexDigit(ch)))
@@ -781,6 +801,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelGroupReportRequest request,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         static bool IsIsoDate(string date) => date.Length == 0 ||
             DateOnly.TryParseExact(date, "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
@@ -948,6 +969,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<IReadOnlyList<NativeHistoricalPersonCandidate>> SearchHistoricalPeopleAsync(
         NativeIdentity actor,string term,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if (!NativeHistoricalPersonCandidate.IsValidTerm(term))
             throw new InvalidDataException("Invalid historical person search.");
         if (!RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role))
@@ -975,6 +997,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeHistoricalPeriodEvidence> ReadHistoricalPeriodAsync(
         NativeIdentity actor,NativeHistoricalPeriodRequest request,CancellationToken ct=default)
     {
+        using var nativeOperation = operations.Enter();
         if (!request.IsValid(DateOnly.FromDateTime(DateTime.Now)))
             throw new InvalidDataException("Invalid historical period.");
         if (!RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role))
@@ -989,6 +1012,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeIndividualReportPages pages,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         static bool IsCanonicalDate(string value) =>
             value.Length == 0 || DateOnly.TryParseExact(
                 value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
@@ -1197,6 +1221,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<IReadOnlyList<NativeImportBatchRow>> ReadRecentAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await new ExcelImportOutcomeService(database)
             .QueryAsync(null, actor.UserId, ct).ConfigureAwait(false);
@@ -1216,6 +1241,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeImportBatchDetail> ReadBatchAsync(
         NativeIdentity actor, string batchId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (batchId is not { Length: >= 5 and <= 128 } ||
             !batchId.StartsWith("IMP-", StringComparison.Ordinal) ||
             batchId.Any(char.IsControl))
@@ -1256,6 +1282,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeImportIssuesExportReceipt> ExportIssuesAsync(
         NativeIdentity actor, string batchId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (batchId is not { Length: >= 5 and <= 128 } ||
             !batchId.StartsWith("IMP-", StringComparison.Ordinal) ||
             batchId.Any(char.IsControl))
@@ -1315,12 +1342,13 @@ public sealed class NativeSqlCipherDashboardReader(
     public Task<NativeExcelImportReview> StageAndPreviewAsync(
         NativeIdentity actor, string fileName, byte[] workbook,
         CancellationToken ct = default) =>
-        StageAndPreviewAsync(actor, fileName, workbook, false, ct);
+        operations.RunAsync(() => StageAndPreviewAsync(actor, fileName, workbook, false, ct));
 
     public async Task<NativeExcelImportReview> StageAndPreviewAsync(
         NativeIdentity actor, string fileName, byte[] workbook,
         bool allSheets, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (fileName is not { Length: >= 6 and <= 180 } ||
             !fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
             fileName.Any(char.IsControl) ||
@@ -1479,6 +1507,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeExcelImportReview reviewed,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (reviewed is null || reviewed.CustomUpdateCount != 0 ||
             reviewed.NewCount is < 1 or > 500 ||
             reviewed.TotalRows is < 1 or > 500 ||
@@ -1525,6 +1554,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await services.ListActiveStatusesAsync(ct)
             .ConfigureAwait(false);
@@ -1556,6 +1586,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string name, string symbol, string color,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateStatusEdit(name, symbol, color, operationId);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
@@ -1583,6 +1614,7 @@ public sealed class NativeSqlCipherDashboardReader(
         string name, string symbol, string color, string operationId,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateStatusEdit(name, symbol, color, operationId);
         ValidateStatusIdentity(statusId, revision);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
@@ -1609,6 +1641,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string statusId, long revision,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateStatusIdentity(statusId, revision);
         if (!Guid.TryParseExact(operationId, "N", out _))
             throw new InvalidDataException("Invalid status deactivation idempotency.");
@@ -1697,6 +1730,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string siteId, long revision,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateSiteRetirementIdentity(siteId, revision);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgePrincipal principal = await ResolveSitesPrincipalAsync(actor, ct)
@@ -1736,6 +1770,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeSiteRetirementPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null) throw new InvalidDataException("Missing impact review.");
         ValidateSiteRetirementIdentity(preview.SiteId, preview.Revision);
         if (!preview.Eligible || preview.BlockReason != "" ||
@@ -1792,6 +1827,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<IReadOnlyList<NativeSiteRow>> ReadSitesAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await services.ListSitesAsync(
             includeInactive: true, ct).ConfigureAwait(false);
@@ -1821,6 +1857,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string name, string operationId,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateSiteEdit(name, operationId);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await ResolveSitesPrincipalAsync(actor, ct).ConfigureAwait(false);
@@ -1846,6 +1883,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string siteId, long revision,
         string name, string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateSiteEdit(name, operationId);
         if (siteId is not { Length: >= 1 and <= 128 } ||
             siteId == "SITE-UNSPECIFIED" ||
@@ -1897,6 +1935,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeArchivedReturnDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateArchivedReturnDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
@@ -1967,6 +2006,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeArchivedReturnPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
             preview.BusinessDate != LocalPersonDay() ||
             preview.PreviewToken is not { Length: 64 } ||
@@ -2037,6 +2077,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeSeparationArchiveFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter is null || filter.Page is < 1 or > 100000 ||
             filter.PageSize != 50 || filter.SearchTerm is null ||
             filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl) ||
@@ -2084,6 +2125,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string movementId,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (movementId is null || movementId.Length is < 3 or > 128 ||
             movementId.Any(char.IsControl))
             throw new InvalidDataException("Invalid separation movement id.");
@@ -2113,6 +2155,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelSeparationDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateSeparationDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
@@ -2153,6 +2196,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelSeparationPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
             preview.BusinessDate != LocalPersonDay() ||
             preview.PreviewToken.Length != 64 ||
@@ -2244,6 +2288,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeBulkExternalTransferDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateBulkExternalDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await ResolveSitesPrincipalAsync(actor, ct)
@@ -2296,6 +2341,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeBulkExternalTransferPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || !preview.IsExternal ||
             !Guid.TryParseExact(operationId, "N", out _) ||
             preview.BusinessDate != LocalPersonDay() ||
@@ -2385,6 +2431,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeBulkInternalTransferDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateBulkInternalDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await ResolveSitesPrincipalAsync(actor, ct)
@@ -2438,6 +2485,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeBulkInternalTransferPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
             preview.BusinessDate != LocalPersonDay() ||
             preview.PreviewToken is not { Length: 64 } ||
@@ -2524,6 +2572,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelMovementDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidateMovementDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         var principal = await services.ResolveSessionAsync(actor.SessionNonce, ct)
@@ -2583,6 +2632,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelMovementPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || !Guid.TryParseExact(operationId, "N", out _) ||
             preview.BusinessDate != LocalPersonDay() ||
             preview.PreviewToken.Length != 64 ||
@@ -2665,6 +2715,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelMutationDraft draft,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         ValidatePersonDraft(draft);
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         string number = CanonicalNumber(draft.Number);
@@ -2732,6 +2783,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelMutationPreview preview,
         string operationId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (preview is null || preview.RequiresIdentityResolution ||
             preview.CandidateCount != 0 ||
             preview.EffectiveLocalDate != LocalPersonDay() ||
@@ -2793,6 +2845,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyPersonnelManagerAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await services.ListSitesAsync(
             includeInactive: true, ct).ConfigureAwait(false);
@@ -2811,6 +2864,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativePersonnelFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter.SiteId is null || filter.SiteId.Length > 128 ||
             filter.SiteId.Any(char.IsControl) ||
             filter.SearchTerm is null || filter.SearchTerm.Length > 100 ||
@@ -2868,6 +2922,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativePersonnelProfile> ReadProfileAsync(
         NativeIdentity actor, string personId, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (string.IsNullOrWhiteSpace(personId) || personId.Length > 128 ||
             personId.Any(char.IsControl))
             throw new InvalidDataException("Invalid stable person identifier.");
@@ -2909,6 +2964,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeMovementArchiveFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter is null || filter.Page is < 1 or > 100000 ||
             filter.PageSize != 50 || filter.SearchTerm is null ||
             filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl) ||
@@ -2956,6 +3012,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, string movementId,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (movementId is null || movementId.Length is < 3 or > 128 ||
             movementId.Any(char.IsControl))
             throw new InvalidDataException("Invalid movement id.");
@@ -2995,6 +3052,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeMonthlyCatalogue> ReadCatalogueAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
         var canonical = new DailyMonthlyReadService(database);
         BridgeResponse periodsResponse = await canonical.ArchivePeriodsAsync(ct)
@@ -3028,6 +3086,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeMonthlyFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter.Period is not { Length: 7 } ||
             !DateOnly.TryParseExact(filter.Period + "-01", "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly monthStart) ||
@@ -3122,40 +3181,41 @@ public sealed class NativeSqlCipherDashboardReader(
     /// </summary>
     Task<IReadOnlyList<NativeAttendanceStatusChoice>> INativeClosedDayCorrectionBackend.ReadCorrectionChoicesAsync(
         NativeIdentity actor, CancellationToken ct) =>
-        ((INativeClosedDayCorrectionBackend)_review).ReadCorrectionChoicesAsync(actor, ct);
+        operations.RunAsync(() => ((INativeClosedDayCorrectionBackend)_review).ReadCorrectionChoicesAsync(actor, ct));
 
     Task<NativeClosedDayCorrectionPreview> INativeClosedDayCorrectionBackend.PreviewAsync(
         NativeIdentity actor, NativeClosedDayCorrectionRequest request, CancellationToken ct) =>
-        ((INativeClosedDayCorrectionBackend)_review).PreviewAsync(actor, request, ct);
+        operations.RunAsync(() => ((INativeClosedDayCorrectionBackend)_review).PreviewAsync(actor, request, ct));
 
     Task<NativeClosedDayCorrectionReceipt> INativeClosedDayCorrectionBackend.CommitAsync(
         NativeIdentity actor, string token, string operationId, CancellationToken ct) =>
-        ((INativeClosedDayCorrectionBackend)_review).CommitAsync(actor, token, operationId, ct);
+        operations.RunAsync(() => ((INativeClosedDayCorrectionBackend)_review).CommitAsync(actor, token, operationId, ct));
 
     Task<NativeHistoricalRangePreview> INativeHistoricalRangeBackend.PreviewRangeAsync(
         NativeIdentity actor, NativeHistoricalRangeRequest request, CancellationToken ct) =>
-        _review.PreviewRangeAsync(actor, request, ct);
+        operations.RunAsync(() => _review.PreviewRangeAsync(actor, request, ct));
 
     Task<NativeHistoricalRangeReceipt> INativeHistoricalRangeBackend.CommitRangeAsync(
         NativeIdentity actor, NativeHistoricalRangePreview approved, string operationId, CancellationToken ct) =>
-        _review.CommitRangeAsync(actor, approved, operationId, ct);
+        operations.RunAsync(() => _review.CommitRangeAsync(actor, approved, operationId, ct));
 
     Task<NativeAdministrativeCatchUpPreview> INativeAdministrativeCatchUpBackend.PreviewCatchUpAsync(
         NativeIdentity actor, NativeAdministrativeCatchUpRequest request, CancellationToken ct) =>
-        _review.PreviewCatchUpAsync(actor,request,ct);
+        operations.RunAsync(() => _review.PreviewCatchUpAsync(actor,request,ct));
 
     Task<NativeAdministrativeCatchUpReceipt> INativeAdministrativeCatchUpBackend.CommitCatchUpAsync(
         NativeIdentity actor, NativeAdministrativeCatchUpPreview approved, string operationId, CancellationToken ct) =>
-        _review.CommitCatchUpAsync(actor,approved,operationId,ct);
+        operations.RunAsync(() => _review.CommitCatchUpAsync(actor,approved,operationId,ct));
 
     Task<NativeClosedDayPolicyReceipt> INativeClosedDayPolicyBackend.SetClosedDayPolicyAsync(
         NativeIdentity actor, NativeClosedDayPolicyRequest approved, string operationId, CancellationToken ct) =>
-        _review.SetClosedDayPolicyAsync(actor,approved,operationId,ct);
+        operations.RunAsync(() => _review.SetClosedDayPolicyAsync(actor,approved,operationId,ct));
 
     public async Task<NativeMonthlyCellDetails> ReadCellDetailsAsync(
         NativeIdentity actor, NativeMonthlyCellRequest request,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (string.IsNullOrWhiteSpace(request.PersonId) ||
             request.PersonId.Length > 128 || request.SiteId is null ||
             request.BusinessDate.Year is < 1900 or > 2200 ||
@@ -3260,6 +3320,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeMonthlyExcelFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         var (year, month) = ValidateMonthlyExcelFilter(filter);
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await new MonthlyExcelExportService(database)
@@ -3290,6 +3351,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor, NativeMonthlyExcelFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         var (year, month) = ValidateMonthlyExcelFilter(filter);
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
         BridgeResponse response = await new MonthlyExcelExportService(database)
@@ -3321,31 +3383,32 @@ public sealed class NativeSqlCipherDashboardReader(
 
     public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(
         NativeIdentity actor, CancellationToken ct = default) =>
-        _review.ReadChoicesAsync(actor, ct);
+        operations.RunAsync(() => _review.ReadChoicesAsync(actor, ct));
 
     public Task<NativeAttendanceRevisionPreview> PreviewAsync(
         NativeIdentity actor, DateOnly date, string site,
         IReadOnlyList<string> people, string statusId, CancellationToken ct = default,
         NativeAttendanceDateRange? range = null) =>
-        _review.PreviewAsync(actor, date, site, people, statusId, ct, range);
+        operations.RunAsync(() => _review.PreviewAsync(actor, date, site, people, statusId, ct, range));
 
     public Task<NativeAttendanceCommitReceipt> CommitAsync(
         NativeIdentity actor, string previewToken, string operationId,
         CancellationToken ct = default) =>
-        _review.CommitAsync(actor, previewToken, operationId, ct);
+        operations.RunAsync(() => _review.CommitAsync(actor, previewToken, operationId, ct));
 
     public Task<NativeAttendanceRevisionPreview> PreviewInitialAsync(
         NativeIdentity actor, DateOnly date, string site, IReadOnlyList<string> people,
         string statusId, CancellationToken ct = default, NativeAttendanceDateRange? range = null) =>
-        _review.PreviewInitialAsync(actor, date, site, people, statusId, ct, range);
+        operations.RunAsync(() => _review.PreviewInitialAsync(actor, date, site, people, statusId, ct, range));
 
     public Task<NativeAttendanceCommitReceipt> CommitInitialAsync(
         NativeIdentity actor, string previewToken, string operationId, CancellationToken ct = default) =>
-        _review.CommitInitialAsync(actor, previewToken, operationId, ct);
+        operations.RunAsync(() => _review.CommitInitialAsync(actor, previewToken, operationId, ct));
 
     public async Task<NativeDashboardSnapshot> ReadAsync(
         NativeIdentity identity, NativeDashboardFilter filters, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filters.Page < 1 || filters.PageSize != 100 ||
             filters.SearchTerm.Length > 100 || filters.SearchTerm.Any(char.IsControl))
             throw new InvalidDataException("Invalid read-only dashboard request.");
@@ -3457,6 +3520,7 @@ public sealed class NativeSqlCipherDashboardReader(
     public async Task<NativeAutoAttendancePolicy> ReadPolicyAsync(
         NativeIdentity identity, CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         await VerifyContinuationIdentityAsync(identity, ct).ConfigureAwait(false);
         BridgeResponse response = await new AutoAttendancePolicyService(database)
             .GetAsync(ct).ConfigureAwait(false);
@@ -3477,6 +3541,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity identity, NativeAutoRegisterFilter filter,
         CancellationToken ct = default)
     {
+        using var nativeOperation = operations.Enter();
         if (filter.Page < 1 || filter.PageSize != 100 ||
             filter.SearchTerm.Length > 100 || filter.SearchTerm.Any(char.IsControl))
             throw new InvalidDataException("Invalid auto-prepared register filter.");

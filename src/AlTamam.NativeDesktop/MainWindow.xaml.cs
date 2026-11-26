@@ -61,7 +61,7 @@ public partial class MainWindow : Window
 
     private async void OnSessionTimerTick(object? sender, EventArgs e)
     {
-        if (_sessionCheckRunning || !_viewModel.IsAuthenticated) return;
+        if (_closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
         _sessionCheckRunning = true;
         try { await _viewModel.VerifyCurrentSessionAsync(); }
         finally { _sessionCheckRunning = false; }
@@ -69,19 +69,19 @@ public partial class MainWindow : Window
 
     private void OnNativePointerInput(object sender, MouseButtonEventArgs e)
     {
-        if (_viewModel.IsAuthenticated)
+        if (!_closeInProgress && _viewModel.IsAuthenticated)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private void OnNativeKeyboardInput(object sender, KeyEventArgs e)
     {
-        if (_viewModel.IsAuthenticated && !e.IsRepeat)
+        if (!_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private async void OnLogoutClick(object sender, RoutedEventArgs e)
     {
-        if (!_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
+        if (_closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
         await _viewModel.LogoutAsync();
         if (_viewModel.IsAuthenticated)
             MessageBox.Show("لم يكتمل إلغاء جلسة المستخدم. حاول تسجيل الخروج مجددا.",
@@ -96,6 +96,8 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_closeInProgress) return;
         _closeInProgress = true;
+        IsEnabled = false;
+        bool drainStarted = false;
         try
         {
             if (_openingTask is not null)
@@ -119,6 +121,7 @@ public partial class MainWindow : Window
             {
                 try
                 {
+                    drainStarted = true;
                     await _backend.DisposeAsync();
                     _backend = null;
                 }
@@ -135,7 +138,12 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (!_mayClose) _closeInProgress = false;
+            if (!_mayClose && !drainStarted)
+            {
+                _closeInProgress = false;
+                IsEnabled = true;
+            }
+            // Once admission is closed, do not resume the old UI even on drain failure.
         }
     }
 
