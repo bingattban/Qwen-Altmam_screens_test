@@ -51,6 +51,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         CatchUp.PropertyChanged += (_, _) => NotifySessionChanged();
         Policy.PropertyChanged += (_, _) => NotifySessionChanged();
     }
+    public NativeSettingsOverviewViewModel Overview { get; }=new();
     public NativeAdministrativeCatchUpReview CatchUp { get; }
     public System.Windows.Input.ICommand OpenCatchUpCommand { get; }
     public NativeClosedDayPolicyReview Policy { get; }
@@ -78,7 +79,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         !CatchUp.IsOpen && !Policy.IsOpen && !HistoricalRange.IsOpen && !HistoricalSingle.IsOpen;
     public bool CanOpenHistoricalSingle => CanOpenHistoricalRange && Historical.Evidence is { } evidence &&
         NativeClosedDayCorrectionReview.CanUsePeriod(evidence);
-    public override bool IsDataConnected => HasCatchUpAccess || HasPolicyAccess || HasHistoricalAccess;
+    public override bool IsDataConnected => Overview.HasSnapshot || HasCatchUpAccess || HasPolicyAccess || HasHistoricalAccess;
     public override string StatusMessage
     {
         get
@@ -176,6 +177,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     public void NotifySessionChanged()
     {
+        Overview.Notify();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenCatchUp)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(StatusMessage)));
@@ -195,6 +197,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     }
     public void Clear()
     {
+        Overview.Clear();
         CatchUp.ForceClear();
         Policy.ForceClear();
         HistoricalRange.ForceClear();
