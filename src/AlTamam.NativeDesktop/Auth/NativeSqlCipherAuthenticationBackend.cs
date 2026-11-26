@@ -147,6 +147,36 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     public Task RevokeSessionAsync(string nonce, CancellationToken ct = default)
         => _operations.RunAsync(() => _services.RevokeSessionAsync(nonce, ct));
 
+    // Only the physical WPF host calls this entrypoint; it must keep the
+    // window disabled and forbid ordinary close until this attempt finishes.
+    // No lease spans the coordinator: its shutdown callback drains leases.
+    internal async Task<NativeRestoreActivationCoordinator.Result?> TryRestoreAsync(
+        NativeRestoreIntent intent,string password,
+        Func<StagedRestorePreparation,CancellationToken,Task<bool>> finalApproval,
+        Func<Task> enteringShutdown,Func<Task> drainCompleted)
+    {
+        if(_disposed || intent is null || !intent.IsValid) return null;
+        var actor=intent.Actor;
+        var principal=await _operations.RunAsync(() =>
+            _services.ResolveSessionAsync(actor.SessionNonce,CancellationToken.None)).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return null;
+        string key=new WindowsDatabaseKeyStore(Path.Combine(AppDataLayout.DataRoot,"db.key.protected"))
+            .LoadOrCreate(_database.DatabasePath);
+        var coordinator=new NativeRestoreActivationCoordinator(_database,_services);
+        return await coordinator.TryActivateAsync(principal,password,intent.Evidence.Path,
+            intent.Evidence.Sha256,key,finalApproval,async ct=>
+            {
+                await enteringShutdown().ConfigureAwait(false);
+                // Close admission before revoking the durable session. No
+                // foreground request can reopen the old database thereafter.
+                await _operations.StopAndDrainAsync().ConfigureAwait(false);
+                await _services.RevokeSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+                await DisposeAsync().ConfigureAwait(false);
+                await drainCompleted().ConfigureAwait(false);
+            }).ConfigureAwait(false);
+    }
+
     public ValueTask DisposeAsync()
     {
         lock (_lifecycleSync)

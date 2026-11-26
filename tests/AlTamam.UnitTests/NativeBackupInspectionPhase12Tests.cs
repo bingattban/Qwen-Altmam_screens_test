@@ -88,6 +88,56 @@ public sealed class NativeBackupInspectionPhase12Tests
         Assert.Null(review.Evidence);
     }
 
+    [Fact]
+    public async Task Restore_intent_requires_live_general_admin_and_exact_completed_comparison()
+    {
+        var backend=new Probe();
+        NativeIdentity? actor=Admin;
+        var review=new NativeBackupInspectionReview();
+        Assert.True(review.Open(backend,Admin,()=>actor,FilePath));
+        Assert.False(review.CanRequestRestore);
+        await review.InspectAsync();
+        Assert.False(review.CanRequestRestore);
+        await review.PreviewAsync();
+        Assert.True(review.CanRequestRestore);
+        var intent=Assert.IsType<NativeRestoreIntent>(review.GetRestoreIntent());
+        Assert.Equal(Admin,intent.Actor);
+        Assert.True(intent.IsValid);
+        Assert.True(review.MatchesRestoreIntent(intent));
+        Assert.False(review.MatchesRestoreIntent(intent with { Comparison=intent.Comparison with { } }));
+        Assert.False((intent with { Actor=Admin with { Role=UserRole.OrdinaryAdministration } }).IsValid);
+        actor=Admin with { SessionNonce="NONCE-B" };
+        Assert.False(review.CanRequestRestore);
+        Assert.Null(review.GetRestoreIntent());
+        Assert.False(review.MatchesRestoreIntent(intent));
+    }
+
+    [Fact]
+    public async Task Ordinary_admin_can_preview_but_cannot_request_native_activation()
+    {
+        var actor=Admin with { Role=UserRole.OrdinaryAdministration };
+        var review=new NativeBackupInspectionReview();
+        Assert.True(review.Open(new Probe(),actor,()=>actor,FilePath));
+        await review.InspectAsync();
+        await review.PreviewAsync();
+        Assert.NotNull(review.Comparison);
+        Assert.False(review.CanRequestRestore);
+        Assert.Null(review.GetRestoreIntent());
+    }
+
+    [Fact]
+    public async Task Reinspection_invalidates_previous_restore_intent()
+    {
+        var review=new NativeBackupInspectionReview();
+        Assert.True(review.Open(new Probe(),Admin,()=>Admin,FilePath));
+        await review.InspectAsync();
+        await review.PreviewAsync();
+        var intent=Assert.IsType<NativeRestoreIntent>(review.GetRestoreIntent());
+        await review.InspectAsync();
+        Assert.False(review.MatchesRestoreIntent(intent));
+        Assert.Null(review.GetRestoreIntent());
+    }
+
     private sealed class Probe:INativeBackupInspectionBackend
     {
         public int Inspections,Previews;

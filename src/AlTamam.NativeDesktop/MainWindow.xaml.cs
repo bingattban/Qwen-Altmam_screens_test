@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using AlTamam.NativeDesktop.Auth;
+using AlTamam.DesktopHost.Bridge;
 using AlTamam.NativePresentation;
 
 namespace AlTamam.NativeDesktop;
@@ -21,6 +22,9 @@ public partial class MainWindow : Window
     private bool _sessionCheckRunning;
     private bool _closeInProgress;
     private bool _mayClose;
+    private bool _restoreInProgress;
+    private volatile bool _restoreQuiescing;
+    private bool _restoreDrainCompleted;
 
     public MainWindow()
     {
@@ -61,7 +65,7 @@ public partial class MainWindow : Window
 
     private async void OnSessionTimerTick(object? sender, EventArgs e)
     {
-        if (_closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
+        if (_restoreInProgress || _restoreQuiescing || _closeInProgress || _sessionCheckRunning || !_viewModel.IsAuthenticated) return;
         _sessionCheckRunning = true;
         try { await _viewModel.VerifyCurrentSessionAsync(); }
         finally { _sessionCheckRunning = false; }
@@ -69,28 +73,121 @@ public partial class MainWindow : Window
 
     private void OnNativePointerInput(object sender, MouseButtonEventArgs e)
     {
-        if (!_closeInProgress && _viewModel.IsAuthenticated)
+        if (!_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private void OnNativeKeyboardInput(object sender, KeyEventArgs e)
     {
-        if (!_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
+        if (!_restoreInProgress && !_restoreQuiescing && !_closeInProgress && _viewModel.IsAuthenticated && !e.IsRepeat)
             _ = _viewModel.RecordGenuineUserActivityAsync();
     }
 
     private async void OnLogoutClick(object sender, RoutedEventArgs e)
     {
-        if (_closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
+        if (_restoreInProgress || _restoreQuiescing || _closeInProgress || !_viewModel.IsAuthenticated || _viewModel.IsBusy) return;
         await _viewModel.LogoutAsync();
         if (_viewModel.IsAuthenticated)
             MessageBox.Show("لم يكتمل إلغاء جلسة المستخدم. حاول تسجيل الخروج مجددا.",
                 "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
+    // Physical native button only: the review captures the exact live session,
+    // selected file and completed comparison. No XAML password binding.
+    internal async Task RequestRestoreAsync(SettingsPageViewModel settings)
+    {
+        if(_restoreInProgress || _restoreQuiescing || _closeInProgress || _mayClose ||
+            _viewModel.IsBusy || _backend is not { } backend ||
+            !ReferenceEquals(settings,_viewModel.Settings) ||
+            !ReferenceEquals(_viewModel.CurrentPage,settings) ||
+            settings.Inspection.GetRestoreIntent() is not { } intent) return;
+
+        _restoreInProgress=true;
+        try
+        {
+            string? password=NativeRestoreConfirmationDialog.RequestFreshPassword(
+                this,System.IO.Path.GetFileName(intent.Evidence.Path),intent.Evidence.Sha256,
+                intent.Comparison.Incoming.People,intent.Comparison.Current.People);
+            if(password is null || !settings.Inspection.MatchesRestoreIntent(intent)) return;
+            IsEnabled=false;
+            Task<AlTamam.Application.Bridge.NativeRestoreActivationCoordinator.Result?> activation;
+            try
+            {
+                activation=backend.TryRestoreAsync(intent,password,
+                    (prepared,ct)=>Dispatcher.InvokeAsync(()=>
+                        !ct.IsCancellationRequested && settings.Inspection.MatchesRestoreIntent(intent) &&
+                        NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)).Task,
+                    ()=>
+                    {
+                        // Publish the boundary before dispatching to STA so a
+                        // timed-out callback cannot accidentally reopen input.
+                        _restoreQuiescing=true;
+                        return Dispatcher.InvokeAsync(()=>
+                        {
+                            _sessionTimer.Stop();
+                            DataContext=null;
+                        }).Task;
+                    },
+                    ()=>Dispatcher.InvokeAsync(()=>
+                    {
+                        _restoreDrainCompleted=true;
+                        _backend=null;
+                    }).Task);
+            }
+            finally { password=null; }
+
+            var result=await activation;
+            if(result is null)
+            {
+                MessageBox.Show(this,"لم تنفذ الاستعادة. ألغيت الموافقة أو تعذر التحقق من الحساب أو النسخة أو المفتاح. لم تستبدل قاعدة البيانات.",
+                    "الاستعادة الآمنة",MessageBoxButton.OK,MessageBoxImage.Information);
+                return;
+            }
+            if(!_restoreDrainCompleted)
+                throw new InvalidOperationException("Restore returned without a completed native drain.");
+            MessageBox.Show(this,"اكتملت الاستعادة مع الاحتفاظ بنسخ الإنقاذ المشفرة. افتح البرنامج مجددا لتسجيل الدخول ببيانات النسخة المستعادة.",
+                "اكتملت الاستعادة",MessageBoxButton.OK,MessageBoxImage.Information);
+            _mayClose=true;
+            Close();
+        }
+        catch
+        {
+            MessageBox.Show(this,_restoreQuiescing
+                ? "تعذر استكمال الاستعادة بعد بدء الإغلاق. لن تستأنف الجلسة القديمة. احتفظ بنسخ الإنقاذ؛ يتحقق البرنامج من سجل التعافي عند التشغيل التالي."
+                : "تعذر فحص أو تجهيز النسخة قبل التبديل. تحقق من الملف والمفتاح وأعد الفحص.",
+                "تعذر الاستعادة",MessageBoxButton.OK,MessageBoxImage.Error);
+            if(_restoreQuiescing && _restoreDrainCompleted)
+            {
+                _mayClose=true;
+                Close();
+            }
+        }
+        finally
+        {
+            _restoreInProgress=false;
+            if(!_restoreQuiescing && !_mayClose)
+            {
+                // A rejected or cancelled attempt requires a fresh review.
+                settings.Inspection.ForceClear();
+                IsEnabled=true;
+            }
+            // On an incomplete drain retain the mutex and keep old UI disabled.
+        }
+    }
+
     private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_mayClose) return;
+        if (_restoreInProgress || _restoreQuiescing)
+        {
+            if (!_restoreInProgress && _restoreDrainCompleted)
+            {
+                _mayClose=true;
+                return;
+            }
+            e.Cancel=true;
+            return;
+        }
         // Prevent release of the mutex and DB disposal until any real session
         // has been revoked, and until a pending initialization has completed.
         e.Cancel = true;

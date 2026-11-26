@@ -25,6 +25,11 @@ FILES={
  "gate_tests":"tests/AlTamam.UnitTests/NativeAutomaticSchedulerPhase4Tests.cs",
  "operation_gate":"src/AlTamam.NativePresentation/NativeOperationDrainGate.cs",
  "operation_tests":"tests/AlTamam.UnitTests/NativeOperationDrainPhase12Tests.cs",
+ "restore_review":"src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs",
+ "restore_view":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml",
+ "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
+ "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
+ "restore_integration":"tests/AlTamam.Tests/Bridge/NativeRestoreActivationCoordinatorTests.cs",
  "contracts":"src/AlTamam.NativePresentation/NativeAttendanceRevisionContracts.cs",
  "review_vm":"src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
  "review_backend":"src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherAttendanceReviewBackend.cs",
@@ -116,6 +121,39 @@ def problems(contents):
         errors.append("Every native task forwarder requires an operation lease")
     need("host", "IsEnabled = false;")
     need("host", "if (!_mayClose && !drainStarted)")
+    need("project",'Compile Include="../AlTamam.DesktopHost/Bridge/NativeRestoreConfirmationDialog.cs"')
+    for token in ("_actor?.Role==UserRole.GeneralAdministration", "comparison.Matches(evidence)",
+                  "ReferenceEquals(Evidence,intent.Evidence)", "ReferenceEquals(Comparison,intent.Comparison)"):
+        need("restore_review",token)
+    need("restore_view",'Click="OnRestoreClick"')
+    need("restore_view","Binding Inspection.CanRequestRestore")
+    need("restore_code","await host.RequestRestoreAsync(settings)")
+    for token in ("NativeRestoreConfirmationDialog.RequestFreshPassword(", "NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)",
+                  "settings.Inspection.MatchesRestoreIntent(intent)", "private volatile bool _restoreQuiescing;",
+                  "_restoreQuiescing=true;", "DataContext=null;", "_restoreDrainCompleted=true;",
+                  "if(!_restoreQuiescing && !_mayClose)", "if(_restoreQuiescing && _restoreDrainCompleted)"):
+        need("host",token)
+    for token in ("new NativeRestoreActivationCoordinator(_database,_services)",
+                  "intent.Evidence.Sha256,key,finalApproval", "principal.SessionNonce!=actor.SessionNonce",
+                  "await enteringShutdown().ConfigureAwait(false);",
+                  "await _operations.StopAndDrainAsync().ConfigureAwait(false);",
+                  "await _services.RevokeSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);",
+                  "await DisposeAsync().ConfigureAwait(false);", "await drainCompleted().ConfigureAwait(false);"):
+        need("backend",token)
+    restore=contents["backend"].split("internal async Task<NativeRestoreActivationCoordinator.Result?> TryRestoreAsync(",1)
+    if len(restore)!=2:
+        errors.append("Missing physical restore adapter")
+    else:
+        adapter=restore[1].split("public ValueTask DisposeAsync()",1)[0]
+        tokens=("await enteringShutdown()", "await _operations.StopAndDrainAsync()", "await _services.RevokeSessionAsync(actor.SessionNonce,ct)", "await DisposeAsync()", "await drainCompleted()")
+        indices=[adapter.find(token) for token in tokens]
+        if min(indices)<0 or indices!=sorted(indices) or "using var nativeOperation" in adapter:
+            errors.append("Restore must drain outside its own operation lease and revoke before disposal")
+    for token in ("Restore_intent_requires_live_general_admin_and_exact_completed_comparison",
+                  "Ordinary_admin_can_preview_but_cannot_request_native_activation",
+                  "Reinspection_invalidates_previous_restore_intent"):
+        need("restore_tests",token)
+    need("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions")
     need("gate", "_stopTask ??= StopCoreAsync()")
     need("gate_tests", "Concurrent_shutdown_callers_share_the_same_drain")
     need("gate_tests", "Failed_drain_never_reports_success_to_a_later_disposal")
@@ -255,6 +293,11 @@ if __name__=="__main__":
         ("backend","await nativeDrain.ConfigureAwait(false);"),
         ("reader","using var nativeOperation = operations.Enter();"),
         ("operation_gate","ObjectDisposedException.ThrowIf(_stopping,this)"),
+        ("restore_review","ReferenceEquals(Comparison,intent.Comparison)"),
+        ("host","NativeRestoreConfirmationDialog.ConfirmFinal(this,prepared)"),
+        ("backend","await _services.RevokeSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);"),
+        ("restore_view",'Click="OnRestoreClick"'),
+        ("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions"),
         ("host","_backend.StartAutomaticBackupScheduler();"),
         ("gate","_stopTask ??= StopCoreAsync()"),
         ("backup_adapter","new AutomaticBackupService(database)"),
