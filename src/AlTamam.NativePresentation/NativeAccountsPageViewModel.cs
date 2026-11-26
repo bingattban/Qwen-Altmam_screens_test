@@ -115,7 +115,8 @@ public sealed class NativeAccountsPageViewModel : NativePageViewModel,INotifyPro
 
     private async Task ReadAsync(NativeAccountRequest request,CancellationToken ct)
     {
-        if(Create.IsOpen || Lifecycle.IsOpen) return;
+        if(Create.IsOpen) return;
+        if(Lifecycle.IsOpen) return;
         Invalidate();
         if(_reader is null || AuthorizedActor is not { } actor || !request.IsValid)
         {
