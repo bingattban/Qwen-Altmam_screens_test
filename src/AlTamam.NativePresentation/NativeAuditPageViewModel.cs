@@ -33,10 +33,13 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         ClearFiltersCommand=new NativeCommand(_=>_ = ClearFiltersAsync(),_=>CanQuery);
         OpenDetailCommand=new NativeCommand(row=>{if(row is NativeAuditRow item) _=OpenDetailAsync(item);},
             row=>row is NativeAuditRow item && CanOpenDetail(item));
-        CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen && !Edit.IsOpen);
+        CloseDetailCommand=new NativeCommand(_=>CloseDetail(),_=>IsDetailOpen && !Edit.IsOpen && !History.IsOpen);
         OpenEditCommand=new NativeCommand(_=>OpenEdit(),_=>CanOpenEdit);
         OpenHideCommand=new NativeCommand(_=>OpenHide(),_=>CanOpenHide);
         CloseEditCommand=new NativeCommand(_=>_ = CloseEditAsync(),_=>Edit.CanClose);
+        OpenHistoryCommand=new NativeCommand(_=>_ = OpenHistoryAsync(),_=>CanOpenHistory);
+        OpenEntryHistoryCommand=new NativeCommand(_=>_ = OpenEntryHistoryAsync(),_=>CanOpenEntryHistory);
+        History.PropertyChanged+=(_,_)=>Notify();
         Edit.PropertyChanged+=(_,_)=>Notify();
     }
 
@@ -45,8 +48,8 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public bool CanRead => _reader is not null && AuthorizedActor is not null;
     public bool CanIncludeTombstoned => AuthorizedActor is { } actor &&
         RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(actor.Role);
-    public bool CanQuery => CanRead && !Edit.IsOpen;
-    private bool CanPage => !_loading && IsDataConnected && !Edit.IsOpen;
+    public bool CanQuery => CanRead && !Edit.IsOpen && !History.IsOpen;
+    private bool CanPage => !_loading && IsDataConnected && !Edit.IsOpen && !History.IsOpen;
     public override bool IsDataConnected => _snapshot is not null && _boundActor is not null &&
         _boundActor==AuthorizedActor && _snapshot.Filter.IsAuthorized(_boundActor.Role);
     public override string StatusMessage => "سجل العمليات — تعديل الوصف أو إخفاء القيد من العرض بصلاحية الإدارة فقط، والدليل الأصلي محفوظ.";
@@ -66,12 +69,21 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public NativeCommand OpenDetailCommand { get; }
     public NativeCommand CloseDetailCommand { get; }
     private bool CanOpenDetail(NativeAuditRow row)=>_reader is INativeAuditDetailReader &&
-        !_loading && IsCurrentRow(row) && !IsDetailLoading && !Edit.IsOpen;
+        !_loading && IsCurrentRow(row) && !IsDetailLoading && !Edit.IsOpen && !History.IsOpen;
+    public NativeAuditHistoryViewModel History { get; }=new();
+    public NativeCommand OpenHistoryCommand { get; }
+    public NativeCommand OpenEntryHistoryCommand { get; }
+    public bool CanOpenHistory=>History.CanOpen && !History.IsOpen && !Edit.IsOpen && !_loading && !_detailLoading;
+    public bool CanOpenEntryHistory=>CanOpenHistory && DetailRow is not null && Detail is not null;
+    public Task OpenHistoryAsync(CancellationToken ct=default)=>CanOpenHistory
+        ? History.OpenAsync("",ct):Task.CompletedTask;
+    public Task OpenEntryHistoryAsync(CancellationToken ct=default)=>CanOpenEntryHistory && DetailRow is { } row
+        ? History.OpenAsync(row.AuditEventId,ct):Task.CompletedTask;
     public NativeAuditEditReview Edit { get; }=new();
     public NativeCommand OpenEditCommand { get; }
     public NativeCommand OpenHideCommand { get; }
     public NativeCommand CloseEditCommand { get; }
-    public bool CanOpenEdit=>!Edit.IsOpen && _reader is INativeAuditEditBackend &&
+    public bool CanOpenEdit=>!Edit.IsOpen && !History.IsOpen && _reader is INativeAuditEditBackend &&
         AuthorizedActor is { } actor && DetailRow is { } row && Detail is { } detail &&
         NativeAuditEditRequest.CanUse(row,detail,actor.Role);
     public void OpenEdit()
@@ -116,12 +128,13 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         if (_reader is not null) throw new InvalidOperationException("Native audit reader already attached.");
         _reader=reader??throw new ArgumentNullException(nameof(reader));
         _liveActor=liveActor??throw new ArgumentNullException(nameof(liveActor));
+        if(reader is INativeAuditHistoryReader historyReader) History.Attach(historyReader,liveActor);
         Notify();
     }
 
     private void SetDraft(NativeAuditFilter next,[CallerMemberName] string? property=null)
     {
-        if (Edit.IsOpen || _draft==next) return;
+        if (Edit.IsOpen || History.IsOpen || _draft==next) return;
         _draft=next with { Page=1 };
         Invalidate();
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(property));
@@ -147,6 +160,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     private async Task ReadAsync(NativeAuditFilter filter,CancellationToken ct)
     {
         if(Edit.IsOpen) return;
+        if(History.IsOpen) return;
         Invalidate();
         if (_reader is null || AuthorizedActor is not { } actor ||
             !filter.IsAuthorized(actor.Role) || !filter.IsValid)
@@ -239,6 +253,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     public void CloseDetail()
     {
         if(Edit.IsOpen) return;
+        if(History.IsOpen) return;
         ResetDetail();
         Notify();
     }
@@ -256,6 +271,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
     }
     public void Clear()
     {
+        History.Close();
         Edit.ForceClear();
         Invalidate();
         _draft=new();
@@ -274,5 +290,7 @@ public sealed class NativeAuditPageViewModel : NativePageViewModel, INotifyPrope
         OpenEditCommand.NotifyAvailabilityChanged();
         OpenHideCommand.NotifyAvailabilityChanged();
         CloseEditCommand.NotifyAvailabilityChanged();
+        OpenHistoryCommand.NotifyAvailabilityChanged();
+        OpenEntryHistoryCommand.NotifyAvailabilityChanged();
     }
 }
