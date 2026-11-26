@@ -16,6 +16,7 @@ public sealed class NativeAutomaticSchedulerGate : IAsyncDisposable
     private readonly INativeAutomaticScheduler _scheduler;
     private readonly object _sync = new();
     private bool _started, _closed;
+    private Task? _stopTask;
 
     public NativeAutomaticSchedulerGate(INativeAutomaticScheduler scheduler)
         => _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
@@ -36,15 +37,19 @@ public sealed class NativeAutomaticSchedulerGate : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         lock (_sync)
         {
-            if (_closed) return;
             _closed = true;
+            return new ValueTask(_stopTask ??= StopCoreAsync());
         }
-        // Stop must be awaited before SQLCipher disposal. Cancellation is
-        // implemented in the same durable engine used by DesktopHost.
+    }
+
+    private async Task StopCoreAsync()
+    {
+        // Every caller observes the same completion or failure. No caller may
+        // proceed with database disposal merely because stop was requested.
         await _scheduler.StopAsync().ConfigureAwait(false);
     }
 }
