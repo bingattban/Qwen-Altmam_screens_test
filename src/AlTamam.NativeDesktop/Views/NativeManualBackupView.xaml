@@ -12,6 +12,9 @@
             <WrapPanel>
                 <Button Content="اختيار مجلد الحفظ" Click="OnChooseFolder" IsEnabled="{Binding CanOpenBackup}" Padding="12,6" Margin="4"/>
                 <Button Content="إنشاء نسخة احتياطية" Command="{Binding OpenManualBackupCommand}" Padding="12,6" Margin="4"/>
+                <Button Content="تصدير مفتاح الاسترداد المشفر" Click="OnRecoveryExportClick"
+                        Visibility="{Binding CanExportRecovery, Converter={StaticResource ShowIfTrue}}"
+                        IsEnabled="{Binding CanExportRecovery}" Padding="12,6" Margin="4"/>
             </WrapPanel>
             <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F1F5F9" Padding="12" Margin="0,8,0,0"
                     Visibility="{Binding Backup.IsOpen, Converter={StaticResource ShowIfTrue}}">
