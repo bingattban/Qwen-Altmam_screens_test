@@ -295,6 +295,16 @@ public sealed class AlTamamDbContext : IDisposable
         string expectedSha256,CancellationToken ct=default)
         => EncryptedBackupForwardUpgrade.PrepareAsync(sourcePath,_databasePath,_databaseKey,expectedSha256,ct);
 
+    /// <summary>Trusted native caller's final authorization check before publication.</summary>
+    public Task<ForwardUpgradedBackup> PrepareForwardUpgradedBackupAsync(string sourcePath,
+        string expectedSha256,Func<CancellationToken,Task<bool>> authorizePublication,
+        CancellationToken ct=default)
+    {
+        ArgumentNullException.ThrowIfNull(authorizePublication);
+        return EncryptedBackupForwardUpgrade.PrepareAsync(sourcePath,_databasePath,_databaseKey,
+            expectedSha256,ct,authorizePublication);
+    }
+
     public bool HasValidIntegrity()
     {
         using var connection = CreateOpenConnection();
