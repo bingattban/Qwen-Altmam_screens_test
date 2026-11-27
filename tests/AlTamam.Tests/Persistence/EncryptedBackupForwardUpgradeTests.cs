@@ -94,7 +94,8 @@ public sealed class EncryptedBackupForwardUpgradeTests : IDisposable
         await CreateSourceAsync(Current-1,true);
         using var live=new AlTamamDbContext(_path,Key,false);
         string original=Digest(Source);
-        await Assert.ThrowsAsync<InvalidOperationException>(()=>live.PrepareForwardUpgradedBackupAsync(Source,original));
+        var error=await Assert.ThrowsAsync<InvalidOperationException>(()=>live.PrepareForwardUpgradedBackupAsync(Source,original));
+        Assert.Contains("hash mismatch",error.Message,StringComparison.OrdinalIgnoreCase);
         Assert.Equal(original,Digest(Source));
         Assert.False(File.Exists(_path));
         NoOutput();
@@ -130,6 +131,24 @@ public sealed class EncryptedBackupForwardUpgradeTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>live.PrepareForwardUpgradedBackupAsync(Source,original,cancellation.Token));
         Assert.Equal(original,Digest(Source));
         NoOutput();
+    }
+
+    [Fact]
+    public async Task NestedWindowsPath_UsesShortRescueAndLeavesNoScratch()
+    {
+        await CreateSourceAsync(Current-1);
+        // Model a nested Windows profile without requiring long-path support.
+        string nested=Path.Combine(Folder,new string('n',Math.Max(12,130-Folder.Length-1)));
+        Directory.CreateDirectory(nested);
+        string active=Path.Combine(nested,"live.db");
+        using var live=new AlTamamDbContext(active,Key,false);
+        string original=Digest(Source);
+        var result=await live.PrepareForwardUpgradedBackupAsync(Source,original);
+        Assert.Equal(Current,result.Upgraded.SchemaVersion);
+        Assert.Equal(original,Digest(Source));
+        Assert.False(File.Exists(active));
+        Assert.Empty(Directory.GetDirectories(nested,".bu-*"));
+        Assert.Single(Directory.GetFiles(Path.Combine(nested,"backup-forward-upgrades"),"*.dbbackup"));
     }
 
     public void Dispose()=>SyntheticFixtures.DeleteTempDatabase(_path);
