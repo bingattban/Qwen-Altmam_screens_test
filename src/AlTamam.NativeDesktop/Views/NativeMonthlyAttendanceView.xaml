@@ -330,11 +330,17 @@
                                        Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
                             <TextBlock Text="{Binding Excel.Preview.PersonCount}" Foreground="{DynamicResource NativeText}"
                                        FontWeight="SemiBold"/>
-                            <TextBlock Text="اسم الملف المقترح" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"
-                                       Margin="0,8,0,3"/>
-                            <TextBlock Text="{Binding Excel.Preview.SuggestedFileName}"
-                                       Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
-                            <TextBlock Text="يعتمد الحفظ على مجلد التقارير المحلي المحدد في إعدادات البرنامج. عند اختيار جميع المواقع ينشئ النظام كشفا موحدا وكشوفا لكل موقع، ولا يستبدل ملفات سابقة."
+                            <StackPanel Visibility="{Binding Excel.HasDestinationReview, Converter={StaticResource VisibilityIfTrue}}"
+                                        IsEnabled="{Binding Excel.CanEditDestination}">
+                                <TextBlock Text="اسم ملف Excel" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
+                                <TextBox Text="{Binding Excel.OutputFileName, UpdateSourceTrigger=PropertyChanged}"
+                                         MaxLength="124" AutomationProperties.Name="اسم ملف Excel"/>
+                                <TextBlock Text="مجلد الحفظ المحلي" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
+                                <TextBlock Text="{Binding Excel.OutputDirectory}" TextWrapping="Wrap" FlowDirection="LeftToRight"/>
+                                <Button Content="اختيار مجلد لهذا التصدير" Click="OnChooseExportFolder"
+                                        Style="{StaticResource MonthlyButton}"/>
+                            </StackPanel>
+                            <TextBlock Text="اختر مجلدا محليا صالحا واسما آمنا بصيغة xlsx. اختيار المجلد هنا يخص هذا التصدير فقط. عند اختيار جميع المواقع ينشئ النظام كشفا موحدا وكشوفا لكل موقع، ولا يستبدل ملفات سابقة."
                                        Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap" Margin="0,12,0,8"/>
                             <Button Content="تأكيد تصدير Excel"
                                     Style="{StaticResource MonthlyButton}"
