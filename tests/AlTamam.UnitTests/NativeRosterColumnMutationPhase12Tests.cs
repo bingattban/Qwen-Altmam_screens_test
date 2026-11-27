@@ -32,6 +32,17 @@ public sealed class NativeRosterColumnMutationPhase12Tests
         Assert.False(Edit().CanApply([..rows.Take(4),Existing with {StoredValueCount=8}]));
     }
     [Fact]
+    public void Native_caption_review_matches_canonical_arabic_normalization()
+    {
+        var create=new NativeRosterColumnChange(NativeRosterColumnOperation.Create,null,"ملاحظة",1,0,true);
+        Assert.False(create.CanApply(Rows()));
+        Assert.False((create with {Caption="مُلاحظة"}).CanApply(Rows()));
+        Assert.False((create with {Caption="ــ"}).CanApply(Rows()));
+        Assert.True((create with {Caption="المؤهل العلمي"}).CanApply(Rows()));
+        Assert.True((Edit() with {Caption="مُلاحظة"}).CanApply(Rows()));
+    }
+
+    [Fact]
     public void Create_and_retire_have_distinct_rules_and_cannot_change_saved_values()
     {
         var create=new NativeRosterColumnChange(NativeRosterColumnOperation.Create,null,"رقم جديد",2,0,true);

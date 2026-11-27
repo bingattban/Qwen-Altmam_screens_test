@@ -8,12 +8,15 @@ public sealed record NativeRosterColumnChange(NativeRosterColumnOperation Operat
     NativeRosterColumn? Previous,string Caption,int FieldType,int DisplayOrder,bool Visible)
 {
     private bool ValidFields=>Caption is {Length:>=2 and <=80} && Caption==Caption.Trim() &&
-        !string.IsNullOrWhiteSpace(Caption) && !Caption.Any(char.IsControl) && FieldType is >=1 and <=4;
+        !string.IsNullOrWhiteSpace(Caption) && !Caption.Any(char.IsControl) &&
+        ArabicTextNormalizer.NormalizeForSearch(Caption).Length>0 && FieldType is >=1 and <=4;
 
     public bool CanApply(IReadOnlyList<NativeRosterColumn> rows)
     {
         if(!ValidFields || !NativeRosterColumn.ValidCatalogue(rows))return false;
-        if(rows.Any(r=>r.Active && r.ColumnId!=Previous?.ColumnId && r.Caption==Caption))return false;
+        string normalized=ArabicTextNormalizer.NormalizeForSearch(Caption);
+        if(rows.Any(r=>r.Active && r.ColumnId!=Previous?.ColumnId &&
+            ArabicTextNormalizer.NormalizeForSearch(r.Caption)==normalized))return false;
         if(Operation==NativeRosterColumnOperation.Create)
             return Previous is null && DisplayOrder==0 && Visible &&
                 rows.Count<512 && rows.Count(r=>r.Active && !r.IsSystemProtected)<64;

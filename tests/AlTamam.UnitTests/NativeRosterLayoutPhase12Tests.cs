@@ -29,6 +29,15 @@ public sealed class NativeRosterLayoutPhase12Tests
         Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(4),Column() with {StoredValueCount=-1}]));
     }
     [Fact]
+    public void Active_order_must_be_contiguous_even_when_retired_rows_reuse_positions()
+    {
+        var rows=Rows();
+        Assert.False(NativeRosterColumn.ValidCatalogue([..rows.Take(4),Column(order:6)]));
+        Assert.False(NativeRosterColumn.ValidCatalogue([..rows,Column("FLD-2",order:7)]));
+        Assert.True(NativeRosterColumn.ValidCatalogue([..rows,Column("FLD-2",order:6)]));
+        Assert.True(NativeRosterColumn.ValidCatalogue([..rows,Column("FLD-OLD",order:9) with {Active=false,Visible=false}]));
+    }
+    [Fact]
     public async Task Catalogue_is_read_only_and_denies_supervisor_or_missing_session()
     {
         NativeIdentity? actor=null;
