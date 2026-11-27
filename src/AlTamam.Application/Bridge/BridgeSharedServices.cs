@@ -537,16 +537,26 @@ public sealed class BridgeSharedServices
         return Ok(new JsonObject { ["items"] = rows, ["count"] = rows.Count });
     }
 
-    public async Task<BridgeResponse> ListDraftsAsync(string userId, CancellationToken ct)
+    public Task<BridgeResponse> ListDraftsAsync(string userId,CancellationToken ct)
+        =>ListDraftsCoreAsync(userId,false,ct);
+
+    // Trusted native host only; legacy action response retains its six keys.
+    public Task<BridgeResponse> ListNativeDraftsAsync(string userId,CancellationToken ct)
+        =>ListDraftsCoreAsync(userId,true,ct);
+
+    private async Task<BridgeResponse> ListDraftsCoreAsync(string userId,bool native,CancellationToken ct)
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u AND RangeIsInitial IS NULL ORDER BY UpdatedAtUtc DESC;";
+        cmd.CommandText = native
+            ? "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson, RangeStartDate, RangeEndDate, RangeIsInitial FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;"
+            : "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u AND RangeIsInitial IS NULL ORDER BY UpdatedAtUtc DESC;";
         cmd.Parameters.AddWithValue("$u", userId);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
-            rows.Add(new JsonObject
+        {
+            var row=new JsonObject
             {
                 ["draftId"] = reader.GetString(0),
                 ["businessDate"] = reader.GetString(1),
@@ -554,7 +564,15 @@ public sealed class BridgeSharedServices
                 ["targetStatusId"] = reader.GetString(3),
                 ["updatedAtUtc"] = reader.GetString(4),
                 ["selectedPersonIds"] = JsonNode.Parse(reader.GetString(5))
-            });
+            };
+            if(native)
+            {
+                row["rangeStartDate"]=reader.IsDBNull(6)?null:JsonValue.Create(reader.GetString(6));
+                row["rangeEndDate"]=reader.IsDBNull(7)?null:JsonValue.Create(reader.GetString(7));
+                row["rangeIsInitial"]=reader.IsDBNull(8)?null:JsonValue.Create(reader.GetInt64(8)==1);
+            }
+            rows.Add(row);
+        }
         return Ok(rows);
     }
 
@@ -596,6 +614,62 @@ public sealed class BridgeSharedServices
         }, ct).ConfigureAwait(false);
     }
 
+    // A native save is INSERT-only, even for an ordinary status. Existing
+    // draft identities cannot be overwritten, including another owner's.
+    public async Task<BridgeResponse> SaveNativeDraftAsync(string userId,JsonObject payload,CancellationToken ct)
+    {
+        string id=GetRequired(payload,"draftId");
+        string date=GetRequired(payload,"businessDate");
+        string status=GetRequired(payload,"targetStatusId");
+        string today=_time.GetLocalNow().ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);
+        var selected=payload["selectedPersonIds"] as JsonArray;
+        static bool ValidId(string? value)=>value is {Length:>=1 and <=128} &&
+            !string.IsNullOrWhiteSpace(value) && !value.Any(char.IsControl);
+        if(id.Length!=36 || !id.StartsWith("DRF-",StringComparison.Ordinal) ||
+            !Guid.TryParseExact(id[4..],"N",out _) || date!=today || !ValidId(status) ||
+            (payload["siteId"] is { } site && (site.GetValueKind()!=System.Text.Json.JsonValueKind.String || !ValidId(site.GetValue<string>()))) ||
+            selected is null || selected.Count is <1 or >100 || selected.Any(p=>p is null ||
+                p.GetValueKind()!=System.Text.Json.JsonValueKind.String || !ValidId(p.GetValue<string>())) ||
+            selected.Select(p=>p!.GetValue<string>()).Distinct(StringComparer.Ordinal).Count()!=selected.Count)
+            return Error(BridgeErrorCodes.ValidationError,"بيانات المسودة غير صالحة.");
+        if(!AlTamam.Application.Attendance.AttendanceDateRangePolicy.TryParse(payload,status,date,out var from,out var to,out var error))
+            return Error(BridgeErrorCodes.ValidationError,error);
+        bool ranged=Attendance.AttendanceDateRangePolicy.RequiresRange(status);
+        var mode=payload["rangeIsInitial"];
+        if(ranged ? (mode is null || mode.GetValueKind() is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) ||
+                     payload["rangeStartDate"]?.GetValue<string>()!=from || payload["rangeEndDate"]?.GetValue<string>()!=to)
+                  : mode is not null)
+            return Error(BridgeErrorCodes.ValidationError,"تاريخ المدة أو نوع التحضير غير صالح.");
+        return await _db.ExecuteInWriteTransactionAsync(async (connection,tx)=>
+        {
+            ct.ThrowIfCancellationRequested();
+            if(date!=_time.GetLocalNow().ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture))
+                return Error(BridgeErrorCodes.ConflictStale,"تغير تاريخ التمام.");
+            string now=_time.GetUtcNow().ToString("O");
+            using var cmd=connection.CreateCommand();cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO AttendanceDrafts(DraftId,BusinessDate,SiteId,TargetStatusId,
+                    SelectedPersonIdsJson,CreatedByUserId,UpdatedAtUtc,RangeStartDate,RangeEndDate,RangeIsInitial)
+                SELECT $id,$date,$site,$status,$json,$user,$now,$from,$to,$mode
+                WHERE (SELECT COUNT(*) FROM AttendanceDrafts WHERE CreatedByUserId=$user)<10000
+                ON CONFLICT(DraftId) DO NOTHING;
+                """;
+            cmd.Parameters.AddWithValue("$id",id);
+            cmd.Parameters.AddWithValue("$date",date);
+            cmd.Parameters.AddWithValue("$site",payload["siteId"]?.GetValue<string>()??(object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$status",status);
+            cmd.Parameters.AddWithValue("$json",selected.ToJsonString());
+            cmd.Parameters.AddWithValue("$user",userId);
+            cmd.Parameters.AddWithValue("$now",now);
+            cmd.Parameters.AddWithValue("$from",ranged?(object)from:DBNull.Value);
+            cmd.Parameters.AddWithValue("$to",ranged?(object)to:DBNull.Value);
+            cmd.Parameters.AddWithValue("$mode",ranged?(object)(mode!.GetValue<bool>()?1:0):DBNull.Value);
+            return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false)==1
+                ?Ok(new JsonObject{["draftId"]=id,["savedAtUtc"]=now})
+                :Error(BridgeErrorCodes.ConflictStale,"معرف المسودة مستخدم أو القائمة ممتلئة.");
+        },ct).ConfigureAwait(false);
+    }
+
     public async Task<BridgeResponse> DeleteDraftAsync(string userId, JsonObject payload, CancellationToken ct)
     {
         string draftId = GetRequired(payload, "draftId");
@@ -615,7 +689,13 @@ public sealed class BridgeSharedServices
 
     // Native reviewed deletion compares the exact saved evidence within the same
     // write transaction. Keep the legacy DeleteDraftAsync contract unchanged.
-    public async Task<BridgeResponse> DeleteReviewedDraftAsync(string userId, JsonObject expected, CancellationToken ct)
+    public Task<BridgeResponse> DeleteReviewedDraftAsync(string userId,JsonObject expected,CancellationToken ct)
+        =>DeleteReviewedDraftCoreAsync(userId,expected,false,ct);
+
+    public Task<BridgeResponse> DeleteNativeReviewedDraftAsync(string userId,JsonObject expected,CancellationToken ct)
+        =>DeleteReviewedDraftCoreAsync(userId,expected,true,ct);
+
+    private async Task<BridgeResponse> DeleteReviewedDraftCoreAsync(string userId,JsonObject expected,bool native,CancellationToken ct)
     {
         string draftId = GetRequired(expected, "draftId");
         string businessDate = GetRequired(expected, "businessDate");
@@ -637,7 +717,19 @@ public sealed class BridgeSharedServices
                                 WHERE DraftId = $id AND CreatedByUserId = $user
                                 AND BusinessDate = $date AND SiteId IS $site
                                 AND TargetStatusId = $status AND UpdatedAtUtc = $updated
-                                AND SelectedPersonIdsJson = $json AND RangeIsInitial IS NULL;";
+                                AND SelectedPersonIdsJson = $json";
+            cmd.CommandText+=native
+                ? " AND RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode;"
+                : " AND RangeIsInitial IS NULL;";
+            if(native)
+            {
+                var mode=expected["rangeIsInitial"];
+                if(mode is not null && mode.GetValueKind() is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False))
+                    return Error(BridgeErrorCodes.ValidationError,"نوع تحضير المسودة غير صالح.");
+                cmd.Parameters.AddWithValue("$from",expected["rangeStartDate"]?.GetValue<string>()??(object)DBNull.Value);
+                cmd.Parameters.AddWithValue("$to",expected["rangeEndDate"]?.GetValue<string>()??(object)DBNull.Value);
+                cmd.Parameters.AddWithValue("$mode",mode is null?DBNull.Value:(object)(mode.GetValue<bool>()?1:0));
+            }
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$user", userId);
             cmd.Parameters.AddWithValue("$date", businessDate);
