@@ -328,7 +328,10 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
                 SiteCatalog.AttachRetirementBackend(retirementBackend);
         }
         if (reader is INativeRosterLayoutReader layoutReader)
+        {
             ColumnLayout.Attach(layoutReader,()=>_liveActor?.Invoke());
+            ColumnLayout.CommittedAndClosed+=()=>_ = RefreshAsync();
+        }
         if (reader is INativeStatusCatalogBackend statusBackend)
         {
             StatusCatalog.AttachBackend(statusBackend, () => _liveActor?.Invoke());

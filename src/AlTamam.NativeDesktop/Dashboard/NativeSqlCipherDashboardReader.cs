@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -1620,10 +1620,17 @@ public sealed class NativeSqlCipherDashboardReader(
         await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
         var principal=await ResolveSitesPrincipalAsync(actor,ct).ConfigureAwait(false);
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        return await ReadRosterLayoutCoreAsync(actor,lifetime.Token).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutCoreAsync(
+        NativeIdentity actor,CancellationToken ct)
+    {
+        // The caller owns the admission lease and session-linked cancellation.
         var response=await new RosterColumnStructureService(database)
-            .ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token).ConfigureAwait(false);
-        await VerifyPersonnelManagerAsync(actor,lifetime.Token).ConfigureAwait(false);
-        lifetime.Token.ThrowIfCancellationRequested();
+            .ListAsync(new JsonObject{["includeInactive"]=true},ct).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
         var data=RequiredObject(response,"GetCustomFieldDefinitions(native)");
         var rows=RequiredArray(data,"items").Select(node=>
         {
@@ -1637,6 +1644,67 @@ public sealed class NativeSqlCipherDashboardReader(
         if(RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows))
             throw new InvalidDataException("Invalid canonical roster layout catalogue.");
         return Array.AsReadOnly(rows);
+    }
+
+    public async Task<NativeRosterColumn> CommitRosterColumnAsync(
+        NativeRosterColumnCommit operation,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(operation is null || operation.Change is null ||
+            !Guid.TryParseExact(operation.OperationId,"N",out _))
+            throw new InvalidDataException("Missing reviewed column operation.");
+        var actor=operation.Actor;
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var principal=await ResolveSitesPrincipalAsync(actor,ct).ConfigureAwait(false);
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token).ConfigureAwait(false);
+        var change=operation.Change;
+        if(!change.CanApply(before))
+            throw new InvalidDataException("Column metadata changed or protected.");
+        var payload=new JsonObject{["operationId"]=operation.OperationId};
+        if(change.Previous is { } previous)
+        {
+            payload["columnId"]=previous.ColumnId;
+            payload["expectedSnapshot"]=previous.Snapshot;
+        }
+        if(change.Operation!=NativeRosterColumnOperation.Deactivate)
+        {
+            payload["caption"]=change.Caption;
+            payload["fieldType"]=change.FieldType;
+            if(change.Operation==NativeRosterColumnOperation.Update)
+            {
+                payload["displayOrder"]=change.DisplayOrder;
+                payload["visible"]=change.Visible;
+            }
+        }
+        else payload["confirmed"]=true;
+        await VerifyPersonnelManagerAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var service=new RosterColumnStructureService(database);
+        BridgeResponse response=change.Operation switch
+        {
+            NativeRosterColumnOperation.Create=>await service.CreateAsync(payload,principal,lifetime.Token).ConfigureAwait(false),
+            NativeRosterColumnOperation.Update=>await service.UpdateAsync(payload,principal,lifetime.Token).ConfigureAwait(false),
+            NativeRosterColumnOperation.Deactivate=>await service.DeactivateAsync(payload,principal,lifetime.Token).ConfigureAwait(false),
+            _=>throw new InvalidDataException("Unknown column operation.")
+        };
+        var data=RequiredObject(response,"RosterColumnMutation(native)");
+        string id=RequiredText(data,"columnId");
+        string snapshot=RequiredText(data,"snapshot");
+        var after=await ReadRosterLayoutCoreAsync(actor,lifetime.Token).ConfigureAwait(false);
+        var result=after.SingleOrDefault(row=>row.ColumnId==id);
+        if(result is null || result.Snapshot!=snapshot ||
+            result.TechnicalKey!=RequiredText(data,"technicalKey") ||
+            result.Caption!=RequiredText(data,"caption") ||
+            result.FieldType!=RequiredNumber(data,"fieldType") ||
+            result.DisplayOrder!=RequiredNumber(data,"displayOrder") ||
+            result.Active!=RequiredBoolean(data,"active") ||
+            result.Visible!=RequiredBoolean(data,"visible") ||
+            RequiredBoolean(data,"isSystemProtected") ||
+            !change.MatchesReceipt(result) ||
+            (change.Operation==NativeRosterColumnOperation.Create && before.Any(row=>row.ColumnId==id || row.TechnicalKey==result.TechnicalKey)))
+            throw new InvalidDataException("Canonical column receipt/read-back mismatch.");
+        return result;
     }
 
     public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(

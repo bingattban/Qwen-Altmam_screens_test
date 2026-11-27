@@ -37,6 +37,8 @@ FILES={
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
  "navigation_tests":"tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
  "layout_vm":"src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+ "layout_mutation":"src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+ "layout_mutation_tests":"tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs",
  "layout_tests":"tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
  "layout_admin":"src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
  "layout_view":"src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
@@ -103,7 +105,7 @@ def problems(contents):
                   "if(!CanRead){Clear();return;}", "_pending?.Cancel()"):
         need("layout_vm",token)
     for token in ("ReadRosterLayoutAsync(", "new RosterColumnStructureService(database)",
-                  '.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)',
+                  '.ListAsync(new JsonObject{["includeInactive"]=true},ct)',
                   'RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows)'):
         need("reader",token)
     for token in ("CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen",
@@ -116,6 +118,52 @@ def problems(contents):
                   "Catalogue_is_read_only_and_denies_supervisor_or_missing_session",
                   "Late_catalogue_is_discarded_after_close_or_session_change"):
         need("layout_tests",token)
+    for token in ("!change.CanApply(before)", 'payload["expectedSnapshot"]=previous.Snapshot',
+                  'payload["confirmed"]=true', "service.CreateAsync(payload,principal,lifetime.Token)",
+                  "service.UpdateAsync(payload,principal,lifetime.Token)",
+                  "service.DeactivateAsync(payload,principal,lifetime.Token)",
+                  "ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.MatchesReceipt(result)",
+                  "result.Snapshot!=snapshot"):
+        need("reader",token)
+    # Check the scoped call chain as well as the private catalogue helper:
+    # moving the read into a helper must not bypass the caller's session or lease.
+    reader_source=contents["reader"]
+    read_start=reader_source.find("public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(")
+    core_start=reader_source.find("private async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutCoreAsync(")
+    write_start=reader_source.find("public async Task<NativeRosterColumn> CommitRosterColumnAsync(")
+    write_end=reader_source.find("public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(",write_start)
+    if not (0<=read_start<core_start<write_start<write_end):
+        errors.append("Missing or reordered native roster catalogue/read/write entry points")
+    else:
+        read=reader_source[read_start:core_start]
+        core=reader_source[core_start:write_start]
+        write=reader_source[write_start:write_end]
+        for entry in (read,write):
+            if entry.count("using var nativeOperation = operations.Enter();")!=1 or "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)" not in entry or "ResolveSitesPrincipalAsync(actor,ct)" not in entry:
+                errors.append("Roster layout entry must own one admission lease and an exact session-linked lifetime")
+        if "operations.Enter()" in core or '.ListAsync(new JsonObject{["includeInactive"]=true},ct)' not in core or "VerifyPersonnelManagerAsync(actor,ct)" not in core:
+            errors.append("Roster layout helper must preserve the caller lifetime and revalidate the session without nested admission")
+        ordered=("var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.CanApply(before)", "BridgeResponse response=change.Operation switch", "var after=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.MatchesReceipt(result)")
+        offsets=[write.find(token) for token in ordered]
+        if min(offsets)<0 or offsets!=sorted(offsets):
+            errors.append("Roster write must validate fresh evidence before mutation and verify read-back afterwards")
+    for token in ("_issued is null", "ReferenceEquals(reviewed,_draft)", "Guid.NewGuid().ToString(\"N\")",
+                  "result.StoredValueCount!=old.StoredValueCount", "IsSystemProtected:false",
+                  "FieldType==old.FieldType || old.StoredValueCount==0"):
+        need("layout_mutation",token)
+    for token in ("_mutation.Take(_liveActor?.Invoke(),_rows)", "_mutation.Accept(operation,receipt)",
+                  "_uncertainActor=operation.Actor", "if(_busy && _mutation.HasUnverifiedCommit)return;",
+                  "InvalidateReview()", "_uncertainActor!=_actor"):
+        need("layout_vm",token)
+    for token in ("Binding CreateCommand","Binding EditCommand","Binding DeactivateCommand",
+                  "Binding ReviewCommand","Binding ConfirmCommand","Binding CanEditType"):
+        need("layout_view",token)
+    for token in ("Exact_current_metadata_and_protected_columns_are_required",
+                  "Create_and_retire_have_distinct_rules_and_cannot_change_saved_values",
+                  "Commit_requires_review_and_does_not_automatically_retry_uncertain_result",
+                  "ViewModel_requires_fresh_review_and_clears_saved_metadata_on_close",
+                  "Lost_commit_reply_blocks_repeat_mutation_for_same_session"):
+        need("layout_mutation_tests",token)
     for key in ("register_xaml","review_xaml","project","layout_view"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
@@ -559,9 +607,17 @@ if __name__=="__main__":
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_shell","if (CurrentPage.Screen == screen) return;"),
         ("layout_vm","Snapshot.All(Uri.IsHexDigit)"),
+        ("layout_mutation","result.StoredValueCount!=old.StoredValueCount"),
+        ("layout_mutation","ReferenceEquals(reviewed,_draft)"),
+        ("reader",'payload["expectedSnapshot"]=previous.Snapshot'),
+        ("layout_vm","_mutation.Take(_liveActor?.Invoke(),_rows)"),
+        ("layout_view","Binding ConfirmCommand"),
         ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
-        ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)'),
+        ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},ct)'),
         ("layout_view","Binding StoredValueCount"),
+        ("reader","var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)"),
+        ("reader","var after=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)"),
+        ("reader","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)"),
         ("settings_shell","!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)"),
         ("settings_vm","_personnelAvailable && _canNavigate(NativeScreen.Administration)"),
         ("settings_templates","Binding OpenMonthlyReportsCommand"),
@@ -604,8 +660,13 @@ if __name__=="__main__":
         ("review_xaml","ConfirmCommand"),
         ("release","dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj")
     ):
+        # A stale mutation target is a broken test, not a security regression.
+        if token not in TEXT[key]:
+            raise SystemExit(f"Stale negative-test target in {key}: {token}")
         mutated=TEXT.copy()
         mutated[key]=mutated[key].replace(token,"REMOVED_BY_NEGATIVE_TEST")
+        if mutated[key]==TEXT[key]:
+            raise SystemExit(f"Negative test did not change source in {key}: {token}")
         if not problems(mutated):
             raise SystemExit(f"Unsafe mutation incorrectly passed for {key}:{token}")
     # Theme resources are checked in both mandatory Windows CI workflows.
