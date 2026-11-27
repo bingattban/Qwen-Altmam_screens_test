@@ -189,5 +189,24 @@ public sealed class EncryptedBackupForwardUpgradeTests : IDisposable
         Assert.True(live.HasValidIntegrity());
     }
 
+    [Fact]
+    public async Task FinalPublicationAuthorizationDenied_DoesNotPublishOrLeaveScratch()
+    {
+        await CreateSourceAsync(Current-1);
+        using var live=new AlTamamDbContext(_path,Key,false);
+        string original=Digest(Source);
+        int checks=0;
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(()=>
+            live.PrepareForwardUpgradedBackupAsync(Source,original,_=>
+            {
+                checks++;
+                return Task.FromResult(false);
+            }));
+        Assert.Equal(1,checks);
+        Assert.Equal(original,Digest(Source));
+        Assert.False(File.Exists(_path));
+        NoOutput();
+    }
+
     public void Dispose()=>SyntheticFixtures.DeleteTempDatabase(_path);
 }
