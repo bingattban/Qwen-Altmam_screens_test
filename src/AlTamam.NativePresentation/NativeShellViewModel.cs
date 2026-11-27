@@ -35,13 +35,14 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Settings = new SettingsPageViewModel();
         Audit = new NativeAuditPageViewModel();
         Accounts = new NativeAccountsPageViewModel();
+        Reports = new ReportsPageViewModel(CanOpenReportDestination,OpenReportDestination);
         Pages = new NativePageViewModel[]
         {
             Dashboard,
             DailyAttendance,
             MonthlyAttendance,
             Administration,
-            new ReportsPageViewModel(),
+            Reports,
             Audit,
             Accounts,
             Settings
@@ -111,7 +112,11 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         _openAdministrativeHistoricalCommand = new NativeCommand(
             _ => OpenAdministrativeHistorical(), _ => CanOpenAdministrativeHistorical());
-        _navigateCommand.CanExecuteChanged += (_, _) => _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+        _navigateCommand.CanExecuteChanged += (_, _) =>
+        {
+            _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+            Reports.NotifyAvailability();
+        };
         Administration.PropertyChanged += (_, _) =>
         {
             _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
@@ -135,6 +140,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public SettingsPageViewModel Settings { get; }
     public NativeAuditPageViewModel Audit { get; }
     public NativeAccountsPageViewModel Accounts { get; }
+    public ReportsPageViewModel Reports { get; }
     public IReadOnlyList<NativePageViewModel> Pages { get; }
 
     // Called once by the real desktop host after SQLCipher initialization.
@@ -142,6 +148,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public void AttachDashboardReader(INativeDashboardReader reader)
     {
         Dashboard.AttachReader(reader, () => _active);
+        Reports.AttachReader(reader);
         DailyAttendance.AttachReader(reader, () => _active);
         if (reader is INativeAccountReader accountReader)
             Accounts.AttachReader(accountReader, () => _active);
@@ -185,6 +192,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             if (ReferenceEquals(_currentPage, value)) return;
             _currentPage = value;
             Changed(nameof(CurrentPage));
+            Reports.NotifyAvailability();
             _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
         }
     }
@@ -199,6 +207,14 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     public string RoleLabel => _active?.Role.ToArabicLabel() ?? "لم يتم تسجيل الدخول";
     public bool CanManageAccounts => _active is { } person &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(person.Role);
+
+    private bool CanOpenReportDestination(NativeScreen destination) =>
+        !IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination);
+    private void OpenReportDestination(NativeScreen destination)
+    {
+        if(CanOpenReportDestination(destination))
+            _navigateCommand.Execute(destination);
+    }
 
     private bool CanOpenAdministrativeHistorical() =>
         !IsBusy && ReferenceEquals(CurrentPage,Administration) &&
@@ -415,6 +431,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         _isBusy = value;
         Changed(nameof(IsBusy));
+        Reports.NotifyAvailability();
         _logoutCommand.NotifyAvailabilityChanged();
         _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
     }
