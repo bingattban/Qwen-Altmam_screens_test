@@ -91,9 +91,12 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
                 _rows=[];_error="تغيرت المسودة أو لم تعد متاحة. حدث القائمة قبل المحاولة.";return;
             }
             bool restored=await restore(actor,row,initial,linked.Token);
-            if(version!=_generation || linked.IsCancellationRequested)return;
+            if(version!=_generation)return;
             if(!CanRead){Clear();return;}
+            // Once a live, verified preview was handed off, close the catalogue
+            // even if cancellation arrived just after the successful callback.
             if(restored){Clear();return;}
+            if(linked.IsCancellationRequested)return;
             _error="تعذرت المعاينة الجديدة. تحقق من نوع التحضير والحالة والموقع والأفراد. لم يعتمد أي حضور.";
         }
         catch(OperationCanceledException) when(linked.IsCancellationRequested){}
