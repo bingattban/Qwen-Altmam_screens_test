@@ -53,6 +53,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             {
                 if (parameter is NativeScreen screen && CanNavigate(screen))
                 {
+                    // Clicking the selected section is not a refresh or cancellation.
+                    if (CurrentPage.Screen == screen) return;
                     if (screen != NativeScreen.Dashboard)
                         Dashboard.AutoRegister.Close();
                     if (screen != NativeScreen.DailyAttendance)
@@ -221,6 +223,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             (!ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview)) &&
            (screen != NativeScreen.Administration ||
             RoleAuthorizationPolicy.CanAccessUsersManagement(identity.Role)) &&
+           (screen == NativeScreen.Administration ||
+            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&
            // Never hide a live or ambiguous audited commit by leaving its page.
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
