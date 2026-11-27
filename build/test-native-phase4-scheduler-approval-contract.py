@@ -554,4 +554,7 @@ if __name__=="__main__":
         mutated[key]=mutated[key].replace(token,"REMOVED_BY_NEGATIVE_TEST")
         if not problems(mutated):
             raise SystemExit(f"Unsafe mutation incorrectly passed for {key}:{token}")
+    # Theme resources are checked in both mandatory Windows CI workflows.
+    import subprocess, sys
+    subprocess.run([sys.executable, str(ROOT / "build/test-native-theme-palette-contract.py")], check=True)
     print("NATIVE PHASE 4 PASS: exact durable engine, one-owner scheduler, audited human-preview/confirm/replay and four old customer packages intact")
