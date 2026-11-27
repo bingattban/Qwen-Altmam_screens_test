@@ -4,9 +4,9 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="GroupVisible"/>
-        <Style x:Key="GroupAction" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Style x:Key="GroupAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeOnStrong}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,7"/>
             <Setter Property="Margin" Value="4"/>
@@ -16,13 +16,13 @@
         <Style x:Key="GroupTitle" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Foreground" Value="#0F2942"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeText}"/>
             <Setter Property="Margin" Value="0,12,0,5"/>
         </Style>
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource GroupVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="14" Margin="12" MaxWidth="1120"
                 HorizontalAlignment="Center" VerticalAlignment="Stretch">
             <Grid>
@@ -36,13 +36,13 @@
                             Command="{Binding CloseCommand}"
                             Style="{StaticResource GroupAction}"/>
                     <TextBlock Text="التقرير التاريخي الموحد — تقرير جماعي (قراءة فقط)"
-                               FontWeight="Bold" FontSize="19" Foreground="#0F2942"
+                               FontWeight="Bold" FontSize="19" Foreground="{DynamicResource NativeText}"
                                VerticalAlignment="Center" TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
                     <TextBlock Text="اختر الأفراد من الكشف المعتمد ثم أضفهم إلى المجموعة (حتى 100 إجمالا). يحتفظ التقرير بالمعرف الداخلي لكل فرد ولا يعتمد على الاسم أو الرقم (ع) كمعرف."
-                               TextWrapping="Wrap" Foreground="#475569"/>
-                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource NativeDangerText}"
                                TextWrapping="Wrap" FontWeight="SemiBold"
                                AutomationProperties.LiveSetting="Polite"/>
                     <ProgressBar Height="4" IsIndeterminate="True"
@@ -77,7 +77,7 @@
                                 <Button Content="الصفحة التالية" Command="{Binding NextRosterPageCommand}" Style="{StaticResource GroupAction}"/>
                                 <Button Content="إضافة المحددين" Command="{Binding AddPageSelectionCommand}" Style="{StaticResource GroupAction}"/>
                             </WrapPanel>
-                            <TextBlock Text="المجموعة المعتمدة — لا يكفي تظليل الصف لإضافته." TextWrapping="Wrap" Foreground="#475569"/>
+                            <TextBlock Text="المجموعة المعتمدة — لا يكفي تظليل الصف لإضافته." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                             <ListBox ItemsSource="{Binding SelectedPeople}" MaxHeight="130" AutomationProperties.Name="الأفراد المعتمدون في مجموعة التقرير">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
@@ -91,10 +91,10 @@
                             </ListBox>
                         </StackPanel>
                         <TextBlock Text="{Binding SelectedCountLabel}"
-                                   Margin="0,5,0,5" Foreground="#0F2942"
+                                   Margin="0,5,0,5" Foreground="{DynamicResource NativeText}"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text="اعرض التقرير أولا لتحميل المواقع والحالات التاريخية للمجموعة. اختر المرشحات ثم اعرض التقرير مجددا. الموقع يقيّد التحضير والحركات، والحالة تقيّد التحضير فقط."
-                                   TextWrapping="Wrap" Foreground="#64748B" Margin="0,6,0,3"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}" Margin="0,6,0,3"/>
                         <WrapPanel Orientation="Horizontal" Margin="0,2,0,5">
                             <TextBlock Text="من" VerticalAlignment="Center" Margin="7,0,3,0"/>
                             <TextBox Width="126" Height="32" MaxLength="10" Padding="6,4"
@@ -134,9 +134,9 @@
                                     AutomationProperties.Name="معاينة تصدير تاريخ المجموعة إلى ملف Excel قبل تأكيد الإنشاء"/>
                         </WrapPanel>
                         <TextBlock Text="{Binding AppliedFiltersLabel}"
-                                   TextWrapping="Wrap" Foreground="#0F2942"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeText}"
                                    FontWeight="SemiBold"/>
-                        <Border Background="#F1F5F9" BorderBrush="#CBD5E1"
+                        <Border Background="{DynamicResource NativeCanvas}" BorderBrush="{DynamicResource NativeBorder}"
                                 BorderThickness="1" CornerRadius="6"
                                 Padding="9" Margin="0,7">
                             <WrapPanel>
@@ -151,7 +151,7 @@
                         <TextBlock Text="الأفراد وبياناتهم الحالية مع أعداد التحضير والحركات التاريخية المحفوظة"
                                    Style="{StaticResource GroupTitle}"/>
                         <TextBlock Text="حدد صف الفرد لعرض تفاصيل حالاته التاريخية المعتمدة ضمن الفترة المحددة."
-                                   Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap" Margin="0,0,0,5"/>
                         <DataGrid ItemsSource="{Binding Report.Persons}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                   Height="320" AlternatingRowBackground="#F8FAFC"
@@ -160,9 +160,9 @@
                                   AutomationProperties.Name="المجموعة المختارة بمعرفات الأفراد ومجاميع أصلية">
                             <DataGrid.RowDetailsTemplate>
                                 <DataTemplate>
-                                    <StackPanel Background="#F1F5F9" Margin="4">
+                                    <StackPanel Background="{DynamicResource NativeCanvas}" Margin="4">
                                         <TextBlock Text="الحقول المخصصة الحالية (وليست قيما تاريخية)" FontWeight="SemiBold"
-                                                   Foreground="#0F2942" Margin="8,6"/>
+                                                   Foreground="{DynamicResource NativeText}" Margin="8,6"/>
                                         <DataGrid ItemsSource="{Binding CustomFields}" AutoGenerateColumns="False"
                                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                                   MaxHeight="125" Margin="8,0,8,8"
@@ -173,7 +173,7 @@
                                             </DataGrid.Columns>
                                         </DataGrid>
                                         <TextBlock Text="تفاصيل حالات الفرد المحدد" FontWeight="SemiBold"
-                                                   Foreground="#0F2942" Margin="8,6"/>
+                                                   Foreground="{DynamicResource NativeText}" Margin="8,6"/>
                                         <DataGrid ItemsSource="{Binding StatusTotals}" AutoGenerateColumns="False"
                                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                                   MaxHeight="155" Margin="8,0,8,8"
@@ -216,7 +216,7 @@
                                        Style="{StaticResource GroupTitle}"/>
                         </DockPanel>
                         <TextBlock Text="الملخص اليومي من السجلات المعتمدة فقط؛ الصفحات 100 سجل، والإجماليات مستقلة عن الصفحة."
-                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.DailyStatuses}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                   Height="195" AlternatingRowBackground="#F8FAFC"
@@ -229,7 +229,7 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <TextBlock Text="هذا التقرير للقراءة فقط من SQLCipher. اختيار المجموعة مقصور على الصفحة الحالية؛ اختيار المجموعة عبر صفحات متعددة ضمن مراحل لاحقة."
-                                   Foreground="#64748B" Margin="0,12,0,0" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" Margin="0,12,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </ScrollViewer>
                 <!-- Separate operator approval: no export on preview, no retry
@@ -237,7 +237,7 @@
                 <Border Grid.RowSpan="3" Background="#D10F172A" Panel.ZIndex="50"
                         DataContext="{Binding Excel}"
                         Visibility="{Binding IsOpen, Converter={StaticResource GroupVisible}}">
-                    <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+                    <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                             CornerRadius="10" Padding="18" MaxWidth="620"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                         <StackPanel>
@@ -247,16 +247,16 @@
                                         Style="{StaticResource GroupAction}"/>
                                 <TextBlock Text="معاينة تصدير Excel — التقرير التاريخي الجماعي"
                                            FontSize="17" FontWeight="Bold"
-                                           Foreground="#0F2942"/>
+                                           Foreground="{DynamicResource NativeText}"/>
                             </DockPanel>
                             <TextBlock Text="سيتم تصدير السجلات الأصلية المعتمدة للفترة المختارة في 4 أوراق Excel بترتيب المجموعة، بما فيها صفحات الملخص اليومي كاملة ضمن الحد الآمن. تتضمن ورقة الأفراد الحقول المخصصة الحالية، وليست قيما تاريخية. لا يتغير التحضير أو قاعدة البيانات."
-                                       TextWrapping="Wrap" Foreground="#475569"/>
+                                       TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                             <ProgressBar Height="4" IsIndeterminate="True" Margin="0,7,0,0"
                                          Visibility="{Binding IsBusy, Converter={StaticResource GroupVisible}}"/>
                             <TextBlock Text="{Binding Error}" TextWrapping="Wrap"
-                                       Foreground="#BE123C" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource NativeDangerText}" FontWeight="SemiBold"
                                        AutomationProperties.LiveSetting="Polite"/>
-                            <Border Background="#F1F5F9" Padding="10" CornerRadius="7"
+                            <Border Background="{DynamicResource NativeCanvas}" Padding="10" CornerRadius="7"
                                     Margin="0,8,0,8">
                                 <StackPanel>
                                     <TextBlock Text="المعاينة الأصلية قبل التأكيد" FontWeight="SemiBold"/>
@@ -272,15 +272,15 @@
                                 </StackPanel>
                             </Border>
                             <TextBlock Text="حفظ محلي داخل مجلد التقارير المعتمد مسبقا؛ لا توجد إمكانية لمسار خارجي أو ملف باسم مكرر. قد تستغرق قراءة جميع الصفحات وقتا على البيانات الكبيرة."
-                                       TextWrapping="Wrap" Foreground="#64748B"/>
+                                       TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}"/>
                             <Button Content="تأكيد إنشاء ملف Excel"
                                     Command="{Binding ConfirmCommand}"
                                     Style="{StaticResource GroupAction}"
                                     AutomationProperties.Name="تأكيد تصدير التقرير الجماعي بعد معاينة الأفراد والمجاميع"/>
-                            <TextBlock Text="{Binding CompletionMessage}" Foreground="#047857"
+                            <TextBlock Text="{Binding CompletionMessage}" Foreground="{DynamicResource NativeSuccessText}"
                                        FontWeight="SemiBold" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding Receipt.FilePath}" TextWrapping="Wrap"
-                                       Foreground="#0F2942"/>
+                                       Foreground="{DynamicResource NativeText}"/>
                         </StackPanel>
                     </Border>
                 </Border>
