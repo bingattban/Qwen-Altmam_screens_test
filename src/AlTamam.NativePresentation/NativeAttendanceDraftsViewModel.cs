@@ -10,6 +10,12 @@ public interface INativeAttendanceDraftReader
     Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(NativeIdentity actor,CancellationToken ct=default);
 }
 
+public interface INativeAttendanceDraftDeleter
+{
+    Task<IReadOnlyList<NativeAttendanceDraft>> DeleteAttendanceDraftAsync(NativeIdentity actor,
+        NativeAttendanceDraft expected,CancellationToken ct=default);
+}
+
 public sealed record NativeAttendanceDraft(string DraftId,DateOnly BusinessDate,string SiteId,
     string TargetStatusId,DateTimeOffset UpdatedAtUtc,IReadOnlyList<string> PersonIds)
 {
@@ -38,21 +44,32 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     private NativeIdentity? _actor;
     private CancellationTokenSource? _pending;
     private int _generation;
-    private bool _open,_busy,_restoring;
+    private bool _open,_busy,_restoring,_deleting;
+    private NativeAttendanceDraft? _deleteSelection;
+    private string _deleteNotice="";
     private Func<NativeIdentity,NativeAttendanceDraft,bool,CancellationToken,Task<bool>>? _restore;
     private IReadOnlyList<NativeAttendanceDraft> _rows=[];
     private string _error="";
     public NativeAttendanceDraftsViewModel()
     {
-        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !_busy);
-        CloseCommand=new NativeCommand(_=>{if(!_restoring)Clear();},_=>_open && !_restoring);
+        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !_busy && !IsDeleteReviewOpen);
+        CloseCommand=new NativeCommand(_=>{if(!_restoring && !_deleting && !IsDeleteReviewOpen)Clear();},_=>_open && !_restoring && !_deleting && !IsDeleteReviewOpen);
         RestoreInitialCommand=new NativeCommand(x=>_ = RestoreAsync(x as NativeAttendanceDraft,true),x=>CanRestore(x as NativeAttendanceDraft));
         RestoreRevisionCommand=new NativeCommand(x=>_ = RestoreAsync(x as NativeAttendanceDraft,false),x=>CanRestore(x as NativeAttendanceDraft));
+        BeginDeleteCommand=new NativeCommand(x=>BeginDelete(x as NativeAttendanceDraft),x=>CanBeginDelete(x as NativeAttendanceDraft));
+        ConfirmDeleteCommand=new NativeCommand(_=>_ = ConfirmDeleteAsync(),_=>CanConfirmDelete);
+        CancelDeleteCommand=new NativeCommand(_=>CancelDelete(),_=>IsDeleteReviewOpen && !_busy);
     }
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool IsOpen=>_open;
     public bool IsBusy=>_busy;
     public bool IsRestoring=>_restoring;
+    public bool IsDeleting=>_deleting;
+    public bool IsDeleteReviewOpen=>_deleteSelection is not null;
+    public string DeleteNotice=>_deleteNotice;
+    public string DeleteReviewLabel=>_deleteSelection is { } row
+        ? $"حذف المسودة فقط؟ {row.DraftId} | {row.DateLabel} | {row.PersonCount} فرد | {row.TargetStatusId} | {row.ScopeLabel} | {row.UpdatedLabel}. لن يتغير الحضور المعتمد."
+        : "";
     public IReadOnlyList<NativeAttendanceDraft> Rows=>CanRead?_rows:[];
     public string Error=>_error;
     public string CountLabel=>$"عدد المسودات: {Rows.Count}";
@@ -62,12 +79,64 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     public NativeCommand CloseCommand {get;}
     public NativeCommand RestoreInitialCommand {get;}
     public NativeCommand RestoreRevisionCommand {get;}
+    public NativeCommand BeginDeleteCommand {get;}
+    public NativeCommand ConfirmDeleteCommand {get;}
+    public NativeCommand CancelDeleteCommand {get;}
+    private bool CanBeginDelete(NativeAttendanceDraft? row)=>CanRead && !_busy && !IsDeleteReviewOpen &&
+        _reader is INativeAttendanceDraftDeleter && row is not null && row.IsValid && _rows.Any(r=>ReferenceEquals(r,row));
+    private bool CanConfirmDelete=>CanRead && !_busy && _reader is INativeAttendanceDraftDeleter &&
+        _deleteSelection is { } row && _rows.Any(r=>ReferenceEquals(r,row));
+    public void BeginDelete(NativeAttendanceDraft? row)
+    {
+        if(!CanBeginDelete(row))return;
+        _deleteSelection=row;_deleteNotice="";_error="";Notify();
+    }
+    public void CancelDelete()
+    {
+        if(_busy || !IsDeleteReviewOpen)return;
+        _deleteSelection=null;Notify();
+    }
+    public async Task ConfirmDeleteAsync(CancellationToken ct=default)
+    {
+        if(!CanConfirmDelete || _deleteSelection is not { } row || _actor is not { } actor ||
+            _reader is not INativeAttendanceDraftDeleter deleter)return;
+        int version=++_generation;
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _pending=linked;_busy=true;_deleting=true;_deleteNotice="";_error="";Notify();
+        try
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            var remaining=await deleter.DeleteAttendanceDraftAsync(actor,row,linked.Token);
+            if(version!=_generation)return;
+            if(!CanRead){Clear();return;}
+            linked.Token.ThrowIfCancellationRequested();
+            if(!NativeAttendanceDraft.ValidCatalogue(remaining) || remaining.Any(r=>r.DraftId==row.DraftId))
+                throw new InvalidDataException("Invalid canonical deletion read-back.");
+            _rows=Array.AsReadOnly(remaining.Select(r=>r with {PersonIds=Array.AsReadOnly(r.PersonIds.ToArray())}).ToArray());
+            _deleteNotice="تم التحقق من حذف المسودة فقط.";
+        }
+        catch
+        {
+            if(version==_generation && CanRead)
+            {
+                _rows=[];_deleteNotice="";_error="تعذر التحقق من نتيجة حذف المسودة. حدث القائمة قبل أي محاولة جديدة.";
+            }
+        }
+        finally
+        {
+            if(version==_generation)
+            {
+                _pending=null;_busy=false;_deleting=false;_deleteSelection=null;
+                if(!CanRead)Clear();else Notify();
+            }
+        }
+    }
     public void AttachRestore(Func<NativeIdentity,NativeAttendanceDraft,bool,CancellationToken,Task<bool>> restore)
     {
         if(_restore is not null)throw new InvalidOperationException("Draft restore already attached.");
         _restore=restore??throw new ArgumentNullException(nameof(restore));
     }
-    private bool CanRestore(NativeAttendanceDraft? row)=>CanRead && !_busy && _restore is not null &&
+    private bool CanRestore(NativeAttendanceDraft? row)=>CanRead && !_busy && !IsDeleteReviewOpen && _restore is not null &&
         row is not null && row.IsValid && row.BusinessDate==DateOnly.FromDateTime(DateTime.Now) &&
         !NativeAttendanceDateRange.RequiresRange(row.TargetStatusId) && _rows.Any(r=>ReferenceEquals(r,row));
     private static bool SameEvidence(NativeAttendanceDraft a,NativeAttendanceDraft b)=>
@@ -127,10 +196,10 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     }
     public async Task RefreshAsync(CancellationToken ct=default)
     {
-        if(!CanRead || _busy || _reader is not { } reader || _actor is not { } actor)return;
+        if(!CanRead || _busy || IsDeleteReviewOpen || _reader is not { } reader || _actor is not { } actor)return;
         int version=++_generation;
         using var linked=CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _pending=linked;_busy=true;_rows=[];_error="";Notify();
+        _pending=linked;_busy=true;_rows=[];_error="";_deleteNotice="";Notify();
         try
         {
             var rows=await reader.ReadAttendanceDraftsAsync(actor,linked.Token);
@@ -156,12 +225,13 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     public void Clear()
     {
         ++_generation;_pending?.Cancel();_pending=null;_actor=null;
-        _open=false;_busy=false;_restoring=false;_rows=[];_error="";Notify();
+        _open=false;_busy=false;_restoring=false;_deleting=false;_deleteSelection=null;_deleteNotice="";_rows=[];_error="";Notify();
     }
     private void Notify()
     {
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(string.Empty));
         RefreshCommand.NotifyAvailabilityChanged();CloseCommand.NotifyAvailabilityChanged();
         RestoreInitialCommand.NotifyAvailabilityChanged();RestoreRevisionCommand.NotifyAvailabilityChanged();
+        BeginDeleteCommand.NotifyAvailabilityChanged();ConfirmDeleteCommand.NotifyAvailabilityChanged();CancelDeleteCommand.NotifyAvailabilityChanged();
     }
 }
