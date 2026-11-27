@@ -41,6 +41,7 @@ public sealed class EncryptedBackupForwardUpgradeTests : IDisposable
     {
         if(Directory.Exists(OutputFolder))
             Assert.Empty(Directory.EnumerateFileSystemEntries(OutputFolder));
+        Assert.Empty(Directory.GetDirectories(Folder,".bu-*"));
     }
 
     [Fact]
