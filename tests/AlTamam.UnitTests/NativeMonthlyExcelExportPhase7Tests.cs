@@ -199,6 +199,11 @@ public sealed class NativeMonthlyExcelExportPhase7Tests
         public NativeMonthlyExcelReceipt MakeReceipt(NativeMonthlyExcelFilter filter) =>
             new(ForgeReceipt ? "1900-01" : filter.Period, filter.SiteId,
                 filter.SearchTerm, "C:\\Reports\\monthly.xlsx",
-                filter.SiteId == "" ? 2 : 1, 6);
+                filter.SiteId == "" ? 2 : 1, 6)
+            {
+                Files=filter.SiteId==""?
+                    [new("","جميع المواقع",@"C:\Reports\monthly.xlsx",6),new("SITE-A","المركز",@"C:\Reports\site.xlsx",6)]:
+                    [new(filter.SiteId,"المركز",@"C:\Reports\monthly.xlsx",6)]
+            };
     }
 }
