@@ -30,6 +30,10 @@ FILES={
  "recovery_intent":"src/AlTamam.NativePresentation/NativeRecoveryExportIntent.cs",
  "recovery_tests":"tests/AlTamam.UnitTests/NativeRecoveryExportPhase12Tests.cs",
  "settings_vm":"src/AlTamam.NativePresentation/NativePageViewModels.cs",
+ "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
+ "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
+ "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+ "settings_templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
  "restore_integration":"tests/AlTamam.Tests/Bridge/NativeRestoreActivationCoordinatorTests.cs",
@@ -196,6 +200,48 @@ def problems(contents):
                   "Reinspection_invalidates_previous_restore_intent"):
         need("restore_tests",token)
     need("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions")
+    for token in ("RuntimeInformation.ProcessArchitecture.ToString()",
+                  "GetCustomAttribute<AssemblyInformationalVersionAttribute>()",
+                  "AlTamamDbContext.CurrentSchemaVersion",
+                  "new SettingsReadBackupService(database).Integrity()",
+                  "response.Code==BridgeErrorCodes.BackupIntegrityFailed",
+                  'RequiredText(data,"integrity")!="ok"',
+                  'RequiredBoolean(data,"encrypted")'):
+        need("reader",token)
+    for method in ("ReadProgramInformationAsync","CheckDatabaseIntegrityAsync"):
+        match=re.search(r"public async Task[^\n]* "+method+r"\([\s\S]*?(?=\n    (?:public|private) |\Z)",reader)
+        if not match:
+            errors.append("Missing native diagnostics adapter: "+method)
+        else:
+            body=match.group(0)
+            for token in ("using var nativeOperation = operations.Enter();",
+                          "await ResolveBackupPrincipalAsync(actor,ct)",
+                          "await VerifyContinuationIdentityAsync(actor,ct)",
+                          "ct.ThrowIfCancellationRequested();"):
+                if token not in body:
+                    errors.append("Diagnostics identity/drain invariant missing: "+token)
+    for token in ("RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role)",
+                  "generation!=_generation || pending.IsCancellationRequested || Authorized!=actor",
+                  "Information is not null?_integrity:null",
+                  "if(!CanRun || (check && Information is null)",
+                  "_pending?.Cancel()", "NotifyAvailability()"):
+        need("diagnostics_vm",token)
+    for token in ("Diagnostics.IsBusy || Inspection.IsOpen",
+                  "Diagnostics.Clear();","Diagnostics.NotifyAvailability();"):
+        need("settings_vm",token)
+    for token in ("Settings.Diagnostics.Clear();","Settings.Diagnostics.Attach(diagnosticsBackend, () => _active,",
+                  "ReferenceEquals(CurrentPage,Settings)"):
+        need("settings_shell",token)
+    for token in ("Binding Diagnostics.RefreshCommand","Binding Diagnostics.CheckCommand",
+                  "Binding Diagnostics.Information.Version","Binding Diagnostics.IntegrityLabel"):
+        need("settings_templates",token)
+    for token in ("Authorized_roles_read_info_but_integrity_requires_explicit_action",
+                  "Failed_integrity_and_unavailable_service_are_distinct",
+                  "Revoked_or_replaced_session_cannot_receive_late_result",
+                  "Invalid_metadata_and_blocked_review_do_not_allow_check",
+                  "Diagnostics_busy_blocks_settings_reviews_and_clear_releases_guard"):
+        need("diagnostics_tests",token)
+
     need("reset_tests","NativeReset_ChangedDataFromAdmittedWorkDuringDrainRejectsPreviewWithoutRescue")
     need("restore_view",'Click="OnFullResetClick"')
     need("restore_code","await host.RequestFullResetAsync(settings)")
@@ -429,6 +475,10 @@ if __name__=="__main__":
         ("host","NativeRecoveryKeyExportDialog.RequestCredentials(this,intent.Destination)"),
         ("restore_integration","NativeAdmissionDrain_PrecedesReplacement_AndRestartRevokesRestoredSessions"),
         ("reset_service","IsNativeSessionLiveAsync(c,t,actor,ct)"),
+        ("reader","new SettingsReadBackupService(database).Integrity()"),
+        ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
+        ("settings_shell","Settings.Diagnostics.Clear();"),
+        ("settings_templates","Binding Diagnostics.CheckCommand"),
         ("reset_preview","consent.Phrase==RequiredPhrase"),
         ("reset_dialog","password.Clear();"),
         ("restore_view",'Click="OnFullResetClick"'),

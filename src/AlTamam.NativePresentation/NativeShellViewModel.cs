@@ -85,7 +85,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     if (screen != NativeScreen.Accounts)
                         Accounts.Clear();
                     if (screen != NativeScreen.Settings)
+                    {
+                        Settings.Diagnostics.Clear();
                         Settings.Overview.Clear();
+                    }
                     CurrentPage = _pages[screen];
                     if (screen == NativeScreen.Dashboard)
                         _ = Dashboard.RefreshAsync();
@@ -148,6 +151,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeSettingsOverviewReader overviewReader)
             Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen && !Settings.Schedule.IsOpen && !Settings.Inspection.IsOpen);
+        if (reader is INativeProgramDiagnosticsBackend diagnosticsBackend)
+            Settings.Diagnostics.Attach(diagnosticsBackend, () => _active,
+                () => !Settings.IsReviewOpen && !Settings.Overview.IsLoading &&
+                    ReferenceEquals(CurrentPage,Settings));
         if (reader is INativeBackupInspectionBackend inspectionBackend)
             Settings.AttachBackupInspection(inspectionBackend, () => _active);
         if (reader is INativeBackupScheduleBackend scheduleBackend)
