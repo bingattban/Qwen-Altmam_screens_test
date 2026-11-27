@@ -190,7 +190,8 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         IReadOnlyList<string> personIds, bool initial, CancellationToken ct)
     {
         // Never replace an approved intent after a possibly lost commit reply.
-        if (_committing || _unverifiedCommit || _savingDraft) { Cancel(); return; }
+        if (_committing || _unverifiedCommit) { Cancel(); return; }
+        if (_savingDraft) return;
         Cancel();
         var actor = _liveActor?.Invoke();
         if (actor is null || _backend is null || personIds is null ||
