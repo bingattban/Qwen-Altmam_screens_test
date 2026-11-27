@@ -16,14 +16,22 @@ public sealed class BackupInspectionService
     private readonly AlTamamDbContext _db;
     public BackupInspectionService(AlTamamDbContext db)=>_db=db;
 
-    public async Task<BridgeResponse> VerifyAsync(string? path,CancellationToken ct)
+    public Task<BridgeResponse> VerifyAsync(string? path,CancellationToken ct)
+        =>VerifyCoreAsync(path,ct,false);
+
+    public Task<BridgeResponse> VerifyNativeAsync(string? path,CancellationToken ct)
+        =>VerifyCoreAsync(path,ct,true);
+
+    private async Task<BridgeResponse> VerifyCoreAsync(string? path,CancellationToken ct,bool standalone)
     {
         if(string.IsNullOrWhiteSpace(path)||path.Length>1024)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "اختر ملف نسخة احتياطية مشفرة من جهازك أولاً.");
         try
         {
-            var result=await _db.InspectEncryptedBackupAsync(path,ct).ConfigureAwait(false);
+            var result=standalone
+                ?await _db.InspectStandaloneEncryptedBackupAsync(path,ct).ConfigureAwait(false)
+                :await _db.InspectEncryptedBackupAsync(path,ct).ConfigureAwait(false);
             string? expected=null;
             using(var connection=_db.CreateOpenConnection())
             using(var q=connection.CreateCommand())
