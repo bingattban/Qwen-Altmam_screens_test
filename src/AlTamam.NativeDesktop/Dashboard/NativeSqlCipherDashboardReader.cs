@@ -20,7 +20,7 @@ public sealed class NativeSqlCipherDashboardReader(
     NativeOperationDrainGate operations)
     : INativeDashboardReader, INativeDashboardContinuationReader, INativeAttendanceReviewBackend,
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend, INativeClosedDayPolicyBackend,
-      INativeMonthlyExcelExportBackend, INativePersonnelDirectoryReader,
+      INativeMonthlyExcelExportBackend, INativeMonthlyExcelProgressBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
@@ -3648,12 +3648,37 @@ public sealed class NativeSqlCipherDashboardReader(
         CancellationToken ct = default)
     {
         using var nativeOperation = operations.Enter();
+        return await ExportMonthlyExcelCoreAsync(actor,filter,(_,_)=>{},ct).ConfigureAwait(false);
+    }
+
+    public async Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(
+        NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,
+        CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        return await ExportMonthlyExcelCoreAsync(actor,filter,progress,ct).ConfigureAwait(false);
+    }
+
+    // Both public entrypoints admit exactly one operation and keep that
+    // lease across the entire private shared export, including receipt checks.
+    private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync(
+        NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,
+        CancellationToken ct)
+    {
         var (year, month) = ValidateMonthlyExcelFilter(filter);
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce)
+            throw new UnauthorizedAccessException("Monthly export session changed.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
         BridgeResponse response = await new MonthlyExcelExportService(database)
-            .ExportAsync(MonthlyExcelPayload(filter, year, month), ct)
+            .ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)
             .ConfigureAwait(false);
-        await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
+        // An explicit stop may race a completed atomic publication. Only the
+        // live session, not the stop token, determines whether its receipt
+        // can be returned. The service itself owns actual cancellation.
+        await VerifyContinuationIdentityAsync(actor, principal.SessionRevocation).ConfigureAwait(false);
         JsonObject data = RequiredObject(response, "ExportMonthlyExcel");
         // The existing service exports combined + per-site workbooks when
         // siteId is empty; otherwise exactly one workbook. Its FileCount

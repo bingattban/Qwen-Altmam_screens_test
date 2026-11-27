@@ -32,6 +32,7 @@ FILES = {
     "catchup_service": "src/AlTamam.Application/Bridge/AdministrativeAttendanceCatchUpService.cs",
     "catchup_sql_tests": "tests/AlTamam.Tests/Bridge/AdministrativeAttendanceCatchUpTests.cs",
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
+    "progress_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportProgressPhase12Tests.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
@@ -374,6 +375,48 @@ def problems(content):
         require("excel_tests", token)
     if content["excel_tests"].count("[Fact]") < 5:
         errors.append("Missing monthly Excel preview/confirm negative-path tests.")
+    require("contracts","interface INativeMonthlyExcelProgressBackend")
+    for token in ("progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)",
+                  "context.Post(_ => Apply(), null)", "Math.Min(99, (int)((long)processed * 100 / total))",
+                  "version != _generation || !_exporting", "_progressPercent = 100;",
+                  "if (!_exporting || _cancelRequested) return;", "_pending?.Cancel();",
+                  "IsOpen && !IsExporting"):
+        require("excel_vm",token)
+    # Each public export entrypoint must admit its own operation exactly once.
+    # The private core is shared but must not acquire a second lease during drain.
+    source = content["backend"]
+    export_start = source.find("public async Task<NativeMonthlyExcelReceipt> ExportExcelAsync(")
+    progress_start = source.find("public async Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(")
+    core_start = source.find("private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync(")
+    core_end = source.find("public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(",core_start)
+    if not (0 <= export_start < progress_start < core_start < core_end):
+        errors.append("Native monthly export entrypoint boundaries missing")
+    else:
+        for entry in (source[export_start:progress_start],source[progress_start:core_start]):
+            if (entry.count("using var nativeOperation = operations.Enter();") != 1 or
+                entry.count("return await ExportMonthlyExcelCoreAsync(") != 1 or
+                entry.find("using var nativeOperation = operations.Enter();") >
+                entry.find("return await ExportMonthlyExcelCoreAsync(")):
+                errors.append("Monthly export must hold exactly one lease before calling the shared core")
+        core = source[core_start:core_end]
+        if ("operations.Enter(" in core or "operations.RunAsync(" in core or
+            "new MonthlyExcelExportService(database)" not in core):
+            errors.append("Monthly export core must reuse the writer without nested operation admission")
+    require("backend","ExportWithProgressAsync(")
+    require("backend","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)")
+    require("backend",".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)")
+    require("backend","VerifyContinuationIdentityAsync(actor, principal.SessionRevocation)")
+    require("vm","CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting")
+    require("shell","!MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting")
+    for token in ("Excel.ProgressPercent", "Excel.IsProgressIndeterminate", "Excel.CancelExportCommand",
+                  "Excel.ProgressMessage", "Excel.IsExporting"):
+        require("xaml",token)
+    for token in ("Progress_never_claims_completion_before_receipt",
+                  "Cancellation_requests_stop_and_never_retries_unverified_result",
+                  "Cancellation_after_publication_does_not_hide_verified_receipt",
+                  "Revoked_session_ignores_late_progress_and_receipt",
+                  "Monthly_scope_is_frozen_until_canonical_export_finishes"):
+        require("progress_tests",token)
     for k in ("core", "release"):
         require(k, "python build/test-native-phase7-monthly-roster-contract.py")
     for token in ("RunPendingAsync(", "ExecuteInWriteTransactionAsync(",
@@ -425,6 +468,17 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,(_,_)=>{},ct)"),
+        ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,progress,ct)"),
+        ("backend", "private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync("),
+        ("excel_vm", "progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)"),
+        ("excel_vm", "Math.Min(99, (int)((long)processed * 100 / total))"),
+        ("excel_vm", "_progressPercent = 100;"),
+        ("excel_vm", "version != _generation || !_exporting"),
+        ("backend", ".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)"),
+        ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting"),
+        ("shell", "!MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting"),
+        ("xaml", "Excel.CancelExportCommand"),
         ("excel_vm", "ExportExcelAsync(actor, filter, linked.Token)"),
         ("excel_vm", "_currentFilter?.Invoke() != filter"),
         ("backend", "new MonthlyExcelExportService(database)"),

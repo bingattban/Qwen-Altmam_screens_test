@@ -142,6 +142,14 @@ public interface INativeMonthlyExcelExportBackend
         CancellationToken ct = default);
 }
 
+/// <summary>Actual canonical workbook row progress, not a timer or simulated percentage.</summary>
+public interface INativeMonthlyExcelProgressBackend
+{
+    Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(
+        NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,
+        CancellationToken ct=default);
+}
+
 public sealed record NativeMonthlyExcelFilter(
     string Period, string SiteId, string SearchTerm);
 
