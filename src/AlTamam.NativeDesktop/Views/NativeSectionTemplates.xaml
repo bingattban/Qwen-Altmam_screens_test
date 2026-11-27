@@ -336,11 +336,32 @@
         <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
             <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <StackPanel IsEnabled="False">
-                <TextBlock Text="بحث التقارير" Margin="0,0,0,8" />
-                <TextBox Height="35" Margin="0,0,0,18" />
-                <Button Content="تصدير Excel" HorizontalAlignment="Left" Width="150" Padding="10" />
-            </StackPanel>
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}"
+                    BorderThickness="1" CornerRadius="6" Padding="16" Margin="6">
+                <StackPanel>
+                    <TextBlock Text="تقارير الأفراد والمجموعات" FontSize="18" FontWeight="Bold"
+                               Foreground="{DynamicResource NativeHeading}"/>
+                    <TextBlock Text="للإدارة العامة والإدارة: افتح سجل الأفراد، ثم اختر الفرد للتقرير التاريخي أو اختر التقرير الجماعي. تتاح معاينة Excel داخل التقرير وفق الصلاحيات المعتمدة."
+                               TextWrapping="Wrap" Margin="0,8"/>
+                    <Button Content="فتح تقارير الأفراد والمجموعات"
+                            Command="{Binding OpenPersonnelReportsCommand}" Padding="12,8"
+                            HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}"
+                    BorderThickness="1" CornerRadius="6" Padding="16" Margin="6">
+                <StackPanel>
+                    <TextBlock Text="التمام الشهري وتصدير Excel" FontSize="18" FontWeight="Bold"
+                               Foreground="{DynamicResource NativeHeading}"/>
+                    <TextBlock Text="افتح التمام الشهري، وحدد الشهر والموقع والبحث، ثم اطلب معاينة تصدير Excel. لا يبدأ التصدير قبل التأكيد."
+                               TextWrapping="Wrap" Margin="0,8"/>
+                    <Button Content="فتح التقارير الشهرية"
+                            Command="{Binding OpenMonthlyReportsCommand}" Padding="12,8"
+                            HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Border>
+            <TextBlock Text="الخيارات غير المتاحة تظهر معطلة؛ لا يمنح هذا القسم صلاحيات جديدة."
+                       Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap" Margin="6"/>
         </StackPanel>
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:SettingsPageViewModel}">

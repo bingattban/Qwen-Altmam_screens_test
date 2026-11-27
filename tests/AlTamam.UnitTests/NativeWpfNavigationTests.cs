@@ -168,10 +168,93 @@ public sealed class NativeWpfNavigationTests
         Assert.Equal(2,reader.SettingsReads);
     }
 
-    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader,
-        INativePersonnelDirectoryReader, INativeSettingsOverviewReader
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration,true)]
+    [InlineData(UserRole.OrdinaryAdministration,true)]
+    [InlineData(UserRole.Supervisor,false)]
+    public async Task Report_entries_reuse_existing_routes_and_never_elevate_roles(UserRole role,bool manager)
     {
-        public int PersonnelReads,SettingsReads;
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        Assert.False(vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
+        Assert.False(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend(role));
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        Assert.False(vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
+        vm.NavigateCommand.Execute(NativeScreen.Reports);
+        Assert.Same(vm.Reports,vm.CurrentPage);
+        Assert.Equal(manager,vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
+        Assert.True(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
+        vm.Reports.OpenPersonnelReportsCommand.Execute(null);
+        if(manager)
+        {
+            Assert.Same(vm.Administration,vm.CurrentPage);
+            Assert.Equal(1,reader.PersonnelReads);
+            Assert.False(vm.Administration.GroupReport.IsOpen);
+            Assert.False(vm.Administration.ReportHistory.IsOpen);
+            vm.NavigateCommand.Execute(NativeScreen.Reports);
+        }
+        else
+        {
+            Assert.Same(vm.Reports,vm.CurrentPage);
+            Assert.Equal(0,reader.PersonnelReads);
+        }
+        vm.Reports.OpenMonthlyReportsCommand.Execute(null);
+        Assert.Same(vm.MonthlyAttendance,vm.CurrentPage);
+        Assert.False(vm.MonthlyAttendance.Excel.IsOpen);
+        Assert.Equal(0,reader.ReportReads);
+        Assert.Equal(0,reader.Exports);
+        await vm.LogoutAsync();
+        Assert.False(vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
+        Assert.False(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Reports_without_backend_never_advertise_working_actions()
+    {
+        var vm=new NativeShellViewModel();
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend());
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        vm.NavigateCommand.Execute(NativeScreen.Reports);
+        Assert.False(vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
+        Assert.False(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
+        vm.Reports.OpenMonthlyReportsCommand.Execute(null);
+        Assert.Same(vm.Reports,vm.CurrentPage);
+    }
+
+    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader,
+        INativePersonnelDirectoryReader, INativeSettingsOverviewReader, INativePersonnelReportReader,
+        INativePersonnelGroupReportReader, INativeMonthlyAttendanceReader, INativeMonthlyExcelExportBackend
+    {
+        public int PersonnelReads,SettingsReads,ReportReads,Exports;
+        public Task<NativePersonnelReportSnapshot> ReadIndividualAsync(NativeIdentity actor,NativeIndividualReportPages pages,CancellationToken ct=default)
+        {
+            ReportReads++;
+            throw new InvalidOperationException("Landing must not query an unselected person.");
+        }
+        public Task<NativePersonnelGroupReportSnapshot> ReadGroupAsync(NativeIdentity actor,NativePersonnelGroupReportRequest request,CancellationToken ct=default)
+        {
+            ReportReads++;
+            throw new InvalidOperationException("Landing must not query an unselected group.");
+        }
+        public Task<NativeMonthlyCatalogue> ReadCatalogueAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Task.FromResult(new NativeMonthlyCatalogue([DateTime.Now.ToString("yyyy-MM",System.Globalization.CultureInfo.InvariantCulture)],[]));
+        public Task<NativeMonthlySnapshot> ReadMonthAsync(NativeIdentity actor,NativeMonthlyFilter filter,CancellationToken ct=default)
+        {
+            int days=DateTime.DaysInMonth(int.Parse(filter.Period[..4]),int.Parse(filter.Period[5..]));
+            return Task.FromResult(new NativeMonthlySnapshot(filter.Period,filter.SiteId,filter.Page,days,0,false,[],[]));
+        }
+        public Task<NativeMonthlyExcelPreview> PreviewExcelAsync(NativeIdentity actor,NativeMonthlyExcelFilter filter,CancellationToken ct=default)
+        {
+            Exports++;
+            throw new InvalidOperationException("Landing must not preview without explicit intent.");
+        }
+        public Task<NativeMonthlyExcelReceipt> ExportExcelAsync(NativeIdentity actor,NativeMonthlyExcelFilter filter,CancellationToken ct=default)
+        {
+            Exports++;
+            throw new InvalidOperationException("Landing must never export.");
+        }
         public Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default)
         {
             SettingsReads++;
