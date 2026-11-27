@@ -19,6 +19,11 @@ public interface INativeAttendanceDraftDeleter
 public sealed record NativeAttendanceDraft(string DraftId,DateOnly BusinessDate,string SiteId,
     string TargetStatusId,DateTimeOffset UpdatedAtUtc,IReadOnlyList<string> PersonIds)
 {
+    public NativeAttendanceDraftRangeEvidence? RangeEvidence {get;init;}
+    public bool HasCompleteRangeEvidence=>RangeEvidence is { } evidence && evidence.IsValid(TargetStatusId,BusinessDate);
+    public string RangeLabel=>HasCompleteRangeEvidence && RangeEvidence is { } evidence
+        ? $"{evidence.StartDate} — {evidence.EndDate} ({(evidence.IsInitial?"تحضير أولي":"تعديل")})"
+        : NativeAttendanceDateRange.RequiresRange(TargetStatusId)?"المدة ونوع التحضير غير محفوظين":"لا توجد مدة";
     private static bool ValidId(string? value)=>value is {Length:>=1 and <=128} &&
         !string.IsNullOrWhiteSpace(value) && !value.Any(char.IsControl);
     public bool IsValid=>DraftId is {Length:36} && DraftId.StartsWith("DRF-",StringComparison.Ordinal) &&
@@ -26,7 +31,16 @@ public sealed record NativeAttendanceDraft(string DraftId,DateOnly BusinessDate,
         (SiteId=="" || ValidId(SiteId)) && ValidId(TargetStatusId) &&
         UpdatedAtUtc!=default && UpdatedAtUtc.Offset==TimeSpan.Zero &&
         PersonIds is {Count:>=1 and <=100} && PersonIds.All(ValidId) &&
-        PersonIds.Distinct(StringComparer.Ordinal).Count()==PersonIds.Count;
+        PersonIds.Distinct(StringComparer.Ordinal).Count()==PersonIds.Count &&
+        (RangeEvidence is null || HasCompleteRangeEvidence);
+    public bool SameSavedEvidence(NativeAttendanceDraft b)
+    {
+        var a=this;
+        return a.DraftId==b.DraftId && a.BusinessDate==b.BusinessDate && a.SiteId==b.SiteId &&
+            a.TargetStatusId==b.TargetStatusId && a.UpdatedAtUtc==b.UpdatedAtUtc &&
+            (a.RangeEvidence is null?b.RangeEvidence is null:a.RangeEvidence.Matches(b.RangeEvidence)) &&
+            a.PersonIds.Order(StringComparer.Ordinal).SequenceEqual(b.PersonIds.Order(StringComparer.Ordinal),StringComparer.Ordinal);
+    }
     public int PersonCount=>PersonIds.Count;
     public string DateLabel=>BusinessDate.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
     public string UpdatedLabel=>UpdatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm",CultureInfo.InvariantCulture);
@@ -83,9 +97,9 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     public NativeCommand ConfirmDeleteCommand {get;}
     public NativeCommand CancelDeleteCommand {get;}
     private bool CanBeginDelete(NativeAttendanceDraft? row)=>CanRead && !_busy && !IsDeleteReviewOpen &&
-        _reader is INativeAttendanceDraftDeleter && row is not null && row.IsValid && _rows.Any(r=>ReferenceEquals(r,row));
+        _reader is INativeAttendanceDraftDeleter && row is not null && row.IsValid && row.RangeEvidence is null && _rows.Any(r=>ReferenceEquals(r,row));
     private bool CanConfirmDelete=>CanRead && !_busy && _reader is INativeAttendanceDraftDeleter &&
-        _deleteSelection is { } row && _rows.Any(r=>ReferenceEquals(r,row));
+        _deleteSelection is { } row && row.RangeEvidence is null && _rows.Any(r=>ReferenceEquals(r,row));
     public void BeginDelete(NativeAttendanceDraft? row)
     {
         if(!CanBeginDelete(row))return;
@@ -139,10 +153,7 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     private bool CanRestore(NativeAttendanceDraft? row)=>CanRead && !_busy && !IsDeleteReviewOpen && _restore is not null &&
         row is not null && row.IsValid && row.BusinessDate==DateOnly.FromDateTime(DateTime.Now) &&
         !NativeAttendanceDateRange.RequiresRange(row.TargetStatusId) && _rows.Any(r=>ReferenceEquals(r,row));
-    private static bool SameEvidence(NativeAttendanceDraft a,NativeAttendanceDraft b)=>
-        a.DraftId==b.DraftId && a.BusinessDate==b.BusinessDate && a.SiteId==b.SiteId &&
-        a.TargetStatusId==b.TargetStatusId && a.UpdatedAtUtc==b.UpdatedAtUtc &&
-        a.PersonIds.Order(StringComparer.Ordinal).SequenceEqual(b.PersonIds.Order(StringComparer.Ordinal),StringComparer.Ordinal);
+    private static bool SameEvidence(NativeAttendanceDraft a,NativeAttendanceDraft b)=>a.SameSavedEvidence(b);
     public async Task RestoreAsync(NativeAttendanceDraft? row,bool initial,CancellationToken ct=default)
     {
         if(!CanRestore(row) || row is null || _reader is not { } reader || _actor is not { } actor || _restore is not { } restore)return;
