@@ -68,6 +68,16 @@ class NativeRestoreHostContract(unittest.TestCase):
             self.assertIn(needle,method)
         self.assertNotIn("TryRestoreAsync",method)
         self.assertNotIn("ActivateOfflineAsync",method)
+        # The destructive restore must never hold a lease it needs to drain.
+        # The separate non-destructive upgrade must hold its own lease.
+        upgrade = backend.split("internal async Task<ForwardUpgradedBackup?> PrepareBackupUpgradeAsync(",1)[1].split("internal async Task<NativeRestoreActivationCoordinator.Result?> TryRestoreAsync(",1)[0]
+        restore = backend.split("internal async Task<NativeRestoreActivationCoordinator.Result?> TryRestoreAsync(",1)[1].split("internal async Task<bool> ExportRecoveryKeyAsync(",1)[0]
+        self.assertIn("_operations.Enter()",upgrade)
+        self.assertIn("NativeBackupForwardUpgradeService",upgrade)
+        self.assertNotIn("StopAndDrainAsync",upgrade)
+        self.assertNotIn("_operations.Enter()",restore)
+        self.assertNotIn("PrepareBackupUpgradeAsync",restore)
+        self.assertIn("await _operations.StopAndDrainAsync()",restore)
         self.assertIn("NativeBackupForwardUpgradeService",backend)
         self.assertNotIn("NativeBackupForwardUpgradeService",(APP / "BridgeHandlerCatalog.cs").read_text(encoding="utf-8"))
 
