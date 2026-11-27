@@ -147,7 +147,7 @@ def check(content):
                   "_liveActor?.Invoke()==actor", "version!=_generation || linked.IsCancellationRequested",
                   "if(!CanRead){Clear();return;}", "Array.AsReadOnly(row.PersonIds.ToArray())"):
         needs("drafts", token)
-    for token in ("services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+    for token in ("services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)",
                   "Draft session changed.", "NativeAttendanceDraft.ValidCatalogue(rows)"):
         needs("reader", token)
     source=content["reader"]
@@ -162,7 +162,7 @@ def check(content):
             "services.ResolveSessionAsync(actor.SessionNonce,ct)",
             "principal.UserId!=actor.UserId",
             "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
-            "services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+            "services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)",
             "VerifyContinuationIdentityAsync(actor,lifetime.Token)",
             "NativeAttendanceDraft.ValidCatalogue(rows)")]
         if min(order)<0 or order!=sorted(order) or any(t in method for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
@@ -179,7 +179,7 @@ def check(content):
                   "Malformed_catalogue_is_hidden_and_refresh_recovers"):
         needs("draft_tests",token)
     needs("navigation_tests","Draft_catalogue_freezes_daily_scope_and_navigation_and_logout_scrubs_rows")
-    for token in ("BusinessDate==today", "!NativeAttendanceDateRange.RequiresRange(TargetStatusId)",
+    for token in ("BusinessDate==today", "NativeAttendanceDateRange.RequiresRange(TargetStatusId)==(RangeEvidence is not null)",
                   "receipt.DraftId==DraftId", "receipt.PersonIds.Order"):
         needs("draft_intent",token)
     for token in ("_draftAttempted=true", "if(_savingDraft) return;",
@@ -206,10 +206,10 @@ def check(content):
             "services.ResolveSessionAsync(actor.SessionNonce,ct)",
             "principal.UserId!=actor.UserId",
             "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
-            "var before=RequiredArray(await services.ListDraftsAsync",
-            "services.SaveDraftAsync(principal.UserId,new JsonObject",
-            "var after=RequiredArray(await services.ListDraftsAsync",
-            "if(!intent.Matches(result) || updated>saved)")]
+            "var before=RequiredArray(await services.ListNativeDraftsAsync",
+            "services.SaveNativeDraftAsync(principal.UserId,new JsonObject",
+            "var after=RequiredArray(await services.ListNativeDraftsAsync",
+            "if(!intent.Matches(result) || result.UpdatedAtUtc!=saved)")]
         if min(order)<0 or order!=sorted(order) or any(t in save for t in ("DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Draft save must use exact owner, one lease, fresh ID and canonical read-back without attendance write")
     for token in ("_rows.Any(r=>ReferenceEquals(r,row))",
@@ -274,14 +274,14 @@ def check(content):
             "principal.UserId!=actor.UserId",
             "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
             "VerifyContinuationIdentityAsync(actor,lifetime.Token)",
-            "services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject",
+            "services.DeleteNativeReviewedDraftAsync(principal.UserId,new JsonObject",
             'RequiredText(receipt,"draftId")!=expected.DraftId',
-            "services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+            "services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)",
             "remaining.Any(row=>row.DraftId==expected.DraftId)")]
         if min(order)<0 or order!=sorted(order) or any(t in deletion for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Reviewed delete must use live owner, conditional canonical delete and exact read-back")
     shared=content["shared"]
-    method=shared[shared.find("public async Task<BridgeResponse> DeleteReviewedDraftAsync("):]
+    method=shared[shared.find("private async Task<BridgeResponse> DeleteReviewedDraftCoreAsync("):]
     for token in ("ExecuteInWriteTransactionAsync(", "ct.ThrowIfCancellationRequested();",
                   "DELETE FROM AttendanceDrafts", "DraftId = $id AND CreatedByUserId = $user",
                   "BusinessDate = $date AND SiteId IS $site",
@@ -296,12 +296,25 @@ def check(content):
         needs("draft_range",token)
     for token in ("RangeEvidence is null || HasCompleteRangeEvidence",
                   "a.RangeEvidence.Matches(b.RangeEvidence)",
-                  "row.RangeEvidence is null",
+                  "row.HasCompleteRangeEvidence && row.RangeEvidence!.IsInitial==initial",
                   "a.SameSavedEvidence(b)",
                   "!NativeAttendanceDateRange.RequiresRange(row.TargetStatusId)"):
         needs("drafts",token)
-    needs("reader","!expected.IsValid || expected.RangeEvidence is not null")
-    needs("draft_intent","!NativeAttendanceDateRange.RequiresRange(TargetStatusId)")
+    needs("reader","!expected.IsValid")
+    needs("draft_intent","NativeAttendanceDateRange.RequiresRange(TargetStatusId)==(RangeEvidence is not null)")
+    for token in ("RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode",
+                  "ON CONFLICT(DraftId) DO NOTHING",
+                  "ListDraftsCoreAsync(userId,false,ct)",
+                  "ListDraftsCoreAsync(userId,true,ct)"):
+        needs("shared",token)
+    needs("reader","RangeEvidence=ParseNativeDraftRange(row)")
+    needs("review","RangeEvidence=evidence")
+    needs("vm","draft.RangeEvidence!.IsInitial!=initial")
+    needs("vm","Review.RangeStartDate=DateOnly.ParseExact(evidence.StartDate")
+    needs("vm","Review.RangeEndDate=DateOnly.ParseExact(evidence.EndDate")
+    needs("draft_save_tests","Save_complete_range_preserves_exact_dates_and_mode")
+    needs("draft_restore_tests","Complete_range_restores_only_saved_mode_and_exact_dates")
+    needs("draft_delete_tests","Complete_range_delete_review_includes_dates_and_mode")
     needs("xaml","Binding RangeLabel")
     for token in ("Complete_range_preserves_exact_dates_and_explicit_mode",
                   "Invalid_or_noncanonical_range_is_rejected",
@@ -323,17 +336,24 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("shared", "RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode"),
+        ("shared", "ON CONFLICT(DraftId) DO NOTHING"),
+        ("reader", "RangeEvidence=ParseNativeDraftRange(row)"),
+        ("review", "RangeEvidence=evidence"),
+        ("vm", "draft.RangeEvidence!.IsInitial!=initial"),
+        ("vm", "Review.RangeStartDate=DateOnly.ParseExact(evidence.StartDate"),
+        ("vm", "Review.RangeEndDate=DateOnly.ParseExact(evidence.EndDate"),
         ("draft_range", "range.StartDate==StartDate && range.EndDate==EndDate"),
         ("draft_range", "IsInitial==other.IsInitial"),
         ("drafts", "RangeEvidence is null || HasCompleteRangeEvidence"),
         ("drafts", "a.RangeEvidence.Matches(b.RangeEvidence)"),
-        ("reader", "!expected.IsValid || expected.RangeEvidence is not null"),
+        ("reader", "!expected.IsValid"),
         ("xaml", "Binding RangeLabel"),
         ("drafts", "deleter.DeleteAttendanceDraftAsync(actor,row,linked.Token)"),
         ("drafts", "remaining.Any(r=>r.DraftId==row.DraftId)"),
         ("xaml", "Binding ConfirmDeleteCommand"),
         ("xaml", "Binding CancelDeleteCommand"),
-        ("reader", "services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject"),
+        ("reader", "services.DeleteNativeReviewedDraftAsync(principal.UserId,new JsonObject"),
         ("reader", "remaining.Any(row=>row.DraftId==expected.DraftId)"),
         ("shared", "TargetStatusId = $status AND UpdatedAtUtc = $updated"),
         ("shared", "SelectedPersonIdsJson = $json"),
@@ -344,16 +364,16 @@ if __name__ == "__main__":
         ("vm", "Drafts.IsRestoring && Review.IsOpen && Review.HasPreview"),
         ("xaml", "Binding RestoreInitialCommand"),
         ("xaml", "Binding RestoreRevisionCommand"),
-        ("draft_intent", "!NativeAttendanceDateRange.RequiresRange(TargetStatusId)"),
+        ("draft_intent", "NativeAttendanceDateRange.RequiresRange(TargetStatusId)==(RangeEvidence is not null)"),
         ("review", "_draftAttempted=true"),
         ("review", "!intent.Matches(receipt)"),
-        ("reader", "services.SaveDraftAsync(principal.UserId,new JsonObject"),
-        ("reader", "if(!intent.Matches(result) || updated>saved)"),
+        ("reader", "services.SaveNativeDraftAsync(principal.UserId,new JsonObject"),
+        ("reader", "if(!intent.Matches(result) || result.UpdatedAtUtc!=saved)"),
         ("shell", "(screen == NativeScreen.DailyAttendance || !DailyAttendance.Review.IsSavingDraft) &&"),
         ("review_xaml", "Binding SaveDraftCommand"),
         ("drafts", "Guid.TryParseExact(DraftId[4..]"),
         ("drafts", "if(!CanRead){Clear();return;}"),
-        ("reader", "services.ListDraftsAsync(principal.UserId,lifetime.Token)"),
+        ("reader", "services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)"),
         ("vm", "Drafts.Clear();"),
         ("shell", "(screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&"),
         ("xaml", "Binding OpenDraftsCommand"),
