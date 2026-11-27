@@ -5,10 +5,14 @@ This is a structural guard in addition to actual .NET xUnit/Windows XAML builds.
 It must not label the 69 operational WebUI routes as migrated.
 """
 from pathlib import Path
+from native_theme_contract import check_visual_resources
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
+    "theme_light":"src/AlTamam.NativeDesktop/Themes/Light.xaml",
+    "theme_dark":"src/AlTamam.NativeDesktop/Themes/Dark.xaml",
+    "theme_app":"src/AlTamam.NativeDesktop/App.xaml",
     "host": "src/AlTamam.NativeDesktop/MainWindow.xaml",
     "login": "src/AlTamam.NativeDesktop/Views/NativeLoginView.xaml",
     "login_csharp": "src/AlTamam.NativeDesktop/Views/NativeLoginView.xaml.cs",
@@ -33,8 +37,12 @@ def check(files: dict[str, str]) -> list[str]:
         except ET.ParseError as exc:
             problems.append("Invalid WPF XAML "+file+": "+str(exc))
     require("login", 'FlowDirection="RightToLeft"', "Arabic RTL login required")
-    for color in ("#0F2942", "#0D9488", "#F1F5F9", "#CBD5E1"):
-        require("login", color, "Original navy/teal/gray login palette missing: "+color)
+    problems.extend(check_visual_resources(files["login"],files["theme_light"],files["theme_dark"],files["theme_app"],(
+        ("Background","NativeHeader","#0F2942"),
+        ("Background","NativeAccentFill","#0F766E"),
+        ("Background","NativeCanvas","#F1F5F9"),
+        ("BorderBrush","NativeBorder","#CBD5E1"),
+    )))
     for label in ("اسم المستخدم", "كلمة المرور", "تأكيد كلمة المرور",
                   "إنشاء الإدارة العامة والدخول"):
         require("login", label, "Native login has dropped an existing Arabic field: "+label)
@@ -76,6 +84,10 @@ if __name__ == "__main__":
     issues=check(files)
     if issues: raise SystemExit("NATIVE AUTH PHASE1 CONTRACT FAIL:\n"+"\n".join(issues))
     for key,term in (
+        ("login","{DynamicResource NativeAccentFill}"),
+        ("theme_light",'x:Key="NativeAccentFill" Color="#0F766E"'),
+        ("theme_dark",'x:Key="NativeAccentFill"'),
+        ("theme_app",'Source="Themes/Light.xaml"'),
         ("vm", "ResolveSessionAsync(answer.Identity.SessionNonce"),
         ("vm", "IsAuthenticated && _pages.ContainsKey"),
         ("backend", "ProvisionFirstAdministratorAsync("),
