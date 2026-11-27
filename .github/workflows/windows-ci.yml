@@ -43,6 +43,11 @@ jobs:
         run: |
           pwsh -NoProfile -NonInteractive -File ./build/test-verified-build-font-fetch.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Arabic offline font retry and pinned checksum regression failed' }
+      - name: Verify offline WebView2 ResponseEnded retry and signature rejection (offline mock)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-offline-webview2-fetch.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Offline WebView2 download regression failed' }
       - name: Package process watchdog native regression before expensive tests
         shell: pwsh
         run: |
