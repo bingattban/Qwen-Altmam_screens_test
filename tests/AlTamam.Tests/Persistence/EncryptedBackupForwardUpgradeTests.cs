@@ -152,5 +152,42 @@ public sealed class EncryptedBackupForwardUpgradeTests : IDisposable
         Assert.Single(Directory.GetFiles(Path.Combine(nested,"backup-forward-upgrades"),"*.dbbackup"));
     }
 
+    [Fact]
+    public async Task PublishedBackup_RemainsStandaloneAfterRepeatedReadOnlyVerification()
+    {
+        await CreateSourceAsync(Current-1);
+        using var live=new AlTamamDbContext(_path,Key,false);
+        await live.InitializeAsync();
+        string original=Digest(Source);
+        var result=await live.PrepareForwardUpgradedBackupAsync(Source,original);
+        string output=result.Upgraded.FullPath;
+        using(var snapshot=new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder{
+                DataSource=output,Mode=Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                Password=Key,Pooling=false,ForeignKeys=true}.ConnectionString))
+        {
+            await snapshot.OpenAsync();
+            using var q=snapshot.CreateCommand();
+            q.CommandText="PRAGMA journal_mode;";
+            Assert.Equal("delete",q.ExecuteScalar()?.ToString(),ignoreCase:true);
+        }
+        for(int i=0;i<2;i++)
+        {
+            var inspected=await live.InspectEncryptedBackupAsync(output);
+            Assert.Equal(result.Upgraded.Sha256,inspected.Sha256);
+            Assert.Equal(Current,inspected.SchemaVersion);
+            Assert.Equal(result.Upgraded.Sha256,Digest(output));
+            foreach(string suffix in new[]{"-wal","-shm","-journal"})
+            {
+                Assert.False(File.Exists(output+suffix));
+                Assert.False(File.Exists(Source+suffix));
+            }
+        }
+        Assert.Equal(original,Digest(Source));
+        Assert.Empty(Directory.GetDirectories(Folder,".bu-*"));
+        Assert.Single(Directory.EnumerateFileSystemEntries(OutputFolder));
+        Assert.True(live.HasValidIntegrity());
+    }
+
     public void Dispose()=>SyntheticFixtures.DeleteTempDatabase(_path);
 }
