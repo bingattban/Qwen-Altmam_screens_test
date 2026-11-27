@@ -76,6 +76,23 @@ def problems(contents):
     need("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&")
     need("navigation_tests","Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload")
     need("navigation_tests","Repeated_click_on_current_settings_does_not_start_second_read")
+    for token in ("OpenPersonnelReportsCommand","OpenMonthlyReportsCommand",
+                  "reader is INativePersonnelDirectoryReader &&",
+                  "reader is INativePersonnelReportReader && reader is INativePersonnelGroupReportReader",
+                  "reader is INativeMonthlyAttendanceReader && reader is INativeMonthlyExcelExportBackend",
+                  "_personnelAvailable && _canNavigate(NativeScreen.Administration)",
+                  "_monthlyAvailable && _canNavigate(NativeScreen.MonthlyAttendance)"):
+        need("settings_vm",token)
+    for token in ("!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)",
+                  "if(CanOpenReportDestination(destination))","_navigateCommand.Execute(destination);",
+                  "Reports.AttachReader(reader);"):
+        need("settings_shell",token)
+    for token in ("Binding OpenPersonnelReportsCommand","Binding OpenMonthlyReportsCommand"):
+        need("settings_templates",token)
+    for token in ("Report_entries_reuse_existing_routes_and_never_elevate_roles",
+                  "Reports_without_backend_never_advertise_working_actions"):
+        need("navigation_tests",token)
+
     for key in ("register_xaml","review_xaml","project"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
@@ -518,6 +535,9 @@ if __name__=="__main__":
         ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_shell","if (CurrentPage.Screen == screen) return;"),
+        ("settings_shell","!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)"),
+        ("settings_vm","_personnelAvailable && _canNavigate(NativeScreen.Administration)"),
+        ("settings_templates","Binding OpenMonthlyReportsCommand"),
         ("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&"),
         ("settings_templates","Binding Diagnostics.CheckCommand"),
         ("reset_preview","consent.Phrase==RequiredPhrase"),
