@@ -102,7 +102,8 @@ public sealed class NativeMonthlyExportProgressPhase12Tests
         public CancellationToken Token;
         public int Exports;
         public TaskCompletionSource<NativeMonthlyExcelReceipt> Pending=new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public NativeMonthlyExcelReceipt Receipt()=>new(Filter.Period,Filter.SiteId,Filter.SearchTerm,@"C:\Reports\month.xlsx",1,10);
+        public NativeMonthlyExcelReceipt Receipt()=>new(Filter.Period,Filter.SiteId,Filter.SearchTerm,@"C:\Reports\month.xlsx",1,10)
+        {Files=[new(Filter.SiteId,"الموقع",@"C:\Reports\month.xlsx",10)]};
         public Task<NativeMonthlyExcelPreview> PreviewExcelAsync(NativeIdentity actor,NativeMonthlyExcelFilter filter,CancellationToken ct=default)
             =>Task.FromResult(new NativeMonthlyExcelPreview(filter.Period,filter.SiteId,filter.SearchTerm,"الموقع","month.xlsx",10,DateTime.DaysInMonth(DateTime.Now.Year,DateTime.Now.Month)));
         public Task<NativeMonthlyExcelReceipt> ExportExcelAsync(NativeIdentity actor,NativeMonthlyExcelFilter filter,CancellationToken ct=default)
