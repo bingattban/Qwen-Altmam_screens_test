@@ -72,7 +72,8 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
     public bool TrySelectOutputDirectory(string? folder)
     {
         if(!CanEditDestination || !ValidLocalPath(folder))return false;
-        _outputDirectory=Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder!));
+        try{_outputDirectory=Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder!));}
+        catch(Exception ex) when(ex is ArgumentException or NotSupportedException or IOException){return false;}
         Notify();
         return true;
     }
@@ -81,8 +82,8 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         if(string.IsNullOrWhiteSpace(folder) || folder.Length>600 || folder.Any(char.IsControl) ||
            folder.StartsWith(@"\\",StringComparison.Ordinal) || folder.StartsWith("//",StringComparison.Ordinal))
             return false;
-        try{return Path.IsPathFullyQualified(folder);}
-        catch(ArgumentException){return false;}
+        try{return Path.IsPathFullyQualified(folder) && Path.GetFullPath(folder).Length<=600;}
+        catch(Exception ex) when(ex is ArgumentException or NotSupportedException or IOException){return false;}
     }
     private bool ValidDestination => !HasDestinationReview ||
         (ValidLocalPath(_outputDirectory) &&
@@ -141,6 +142,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _error = "";
         _preview = null;
         _receipt = null;
+        _outputDirectory = _outputFileName = "";
         _progressPercent = 0;
         _hasProgress = false;
         _cancelRequested = false;
