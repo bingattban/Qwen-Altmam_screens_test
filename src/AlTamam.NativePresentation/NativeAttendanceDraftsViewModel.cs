@@ -38,17 +38,21 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     private NativeIdentity? _actor;
     private CancellationTokenSource? _pending;
     private int _generation;
-    private bool _open,_busy;
+    private bool _open,_busy,_restoring;
+    private Func<NativeIdentity,NativeAttendanceDraft,bool,CancellationToken,Task<bool>>? _restore;
     private IReadOnlyList<NativeAttendanceDraft> _rows=[];
     private string _error="";
     public NativeAttendanceDraftsViewModel()
     {
         RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !_busy);
-        CloseCommand=new NativeCommand(_=>Clear(),_=>_open);
+        CloseCommand=new NativeCommand(_=>{if(!_restoring)Clear();},_=>_open && !_restoring);
+        RestoreInitialCommand=new NativeCommand(x=>_ = RestoreAsync(x as NativeAttendanceDraft,true),x=>CanRestore(x as NativeAttendanceDraft));
+        RestoreRevisionCommand=new NativeCommand(x=>_ = RestoreAsync(x as NativeAttendanceDraft,false),x=>CanRestore(x as NativeAttendanceDraft));
     }
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool IsOpen=>_open;
     public bool IsBusy=>_busy;
+    public bool IsRestoring=>_restoring;
     public IReadOnlyList<NativeAttendanceDraft> Rows=>CanRead?_rows:[];
     public string Error=>_error;
     public string CountLabel=>$"عدد المسودات: {Rows.Count}";
@@ -56,6 +60,56 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
         _liveActor?.Invoke()==actor && RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role);
     public NativeCommand RefreshCommand {get;}
     public NativeCommand CloseCommand {get;}
+    public NativeCommand RestoreInitialCommand {get;}
+    public NativeCommand RestoreRevisionCommand {get;}
+    public void AttachRestore(Func<NativeIdentity,NativeAttendanceDraft,bool,CancellationToken,Task<bool>> restore)
+    {
+        if(_restore is not null)throw new InvalidOperationException("Draft restore already attached.");
+        _restore=restore??throw new ArgumentNullException(nameof(restore));
+    }
+    private bool CanRestore(NativeAttendanceDraft? row)=>CanRead && !_busy && _restore is not null &&
+        row is not null && row.IsValid && row.BusinessDate==DateOnly.FromDateTime(DateTime.Now) &&
+        !NativeAttendanceDateRange.RequiresRange(row.TargetStatusId) && _rows.Any(r=>ReferenceEquals(r,row));
+    private static bool SameEvidence(NativeAttendanceDraft a,NativeAttendanceDraft b)=>
+        a.DraftId==b.DraftId && a.BusinessDate==b.BusinessDate && a.SiteId==b.SiteId &&
+        a.TargetStatusId==b.TargetStatusId && a.UpdatedAtUtc==b.UpdatedAtUtc &&
+        a.PersonIds.Order(StringComparer.Ordinal).SequenceEqual(b.PersonIds.Order(StringComparer.Ordinal),StringComparer.Ordinal);
+    public async Task RestoreAsync(NativeAttendanceDraft? row,bool initial,CancellationToken ct=default)
+    {
+        if(!CanRestore(row) || row is null || _reader is not { } reader || _actor is not { } actor || _restore is not { } restore)return;
+        int version=++_generation;
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _pending=linked;_busy=true;_restoring=true;_error="";Notify();
+        try
+        {
+            var fresh=await reader.ReadAttendanceDraftsAsync(actor,linked.Token);
+            if(version!=_generation || linked.IsCancellationRequested)return;
+            if(!CanRead){Clear();return;}
+            if(!NativeAttendanceDraft.ValidCatalogue(fresh) || fresh.SingleOrDefault(r=>r.DraftId==row.DraftId) is not { } current ||
+                !SameEvidence(row,current) || current.BusinessDate!=DateOnly.FromDateTime(DateTime.Now))
+            {
+                _rows=[];_error="تغيرت المسودة أو لم تعد متاحة. حدث القائمة قبل المحاولة.";return;
+            }
+            bool restored=await restore(actor,row,initial,linked.Token);
+            if(version!=_generation || linked.IsCancellationRequested)return;
+            if(!CanRead){Clear();return;}
+            if(restored){Clear();return;}
+            _error="تعذرت المعاينة الجديدة. تحقق من نوع التحضير والحالة والموقع والأفراد. لم يعتمد أي حضور.";
+        }
+        catch(OperationCanceledException) when(linked.IsCancellationRequested){}
+        catch
+        {
+            if(version==_generation && CanRead){_rows=[];_error="تعذر التحقق من المسودة الحالية. حدث القائمة.";}
+        }
+        finally
+        {
+            if(version==_generation)
+            {
+                _pending=null;_busy=false;_restoring=false;
+                if(!CanRead)Clear();else Notify();
+            }
+        }
+    }
     public void Attach(INativeAttendanceDraftReader reader,Func<NativeIdentity?> actor)
     {
         if(_reader is not null)throw new InvalidOperationException("Draft reader already attached.");
@@ -99,11 +153,12 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     public void Clear()
     {
         ++_generation;_pending?.Cancel();_pending=null;_actor=null;
-        _open=false;_busy=false;_rows=[];_error="";Notify();
+        _open=false;_busy=false;_restoring=false;_rows=[];_error="";Notify();
     }
     private void Notify()
     {
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(string.Empty));
         RefreshCommand.NotifyAvailabilityChanged();CloseCommand.NotifyAvailabilityChanged();
+        RestoreInitialCommand.NotifyAvailabilityChanged();RestoreRevisionCommand.NotifyAvailabilityChanged();
     }
 }
