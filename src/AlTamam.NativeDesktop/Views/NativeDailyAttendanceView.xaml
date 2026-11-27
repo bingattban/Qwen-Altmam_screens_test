@@ -147,7 +147,7 @@
                                    Foreground="{DynamicResource NativeHeading}"/>
                     </DockPanel>
                     <StackPanel Grid.Row="1" Margin="0,10">
-                        <TextBlock Text="اختر مسودة اليوم ثم نوع التحضير صراحة. المسودة القديمة لا تحفظ نوع العملية أو مدة الإجازة والإذن. الاستعادة تنشئ معاينة جديدة فقط؛ لا تعتمد الحضور." TextWrapping="Wrap"/>
+                        <TextBlock Text="اختر مسودة اليوم. المسودة المكتملة للإجازة أو الإذن تستعيد المدة ونوع التحضير المحفوظين فقط. المسودات القديمة ناقصة المدة غير قابلة للاستعادة. الاستعادة تنشئ معاينة جديدة فقط؛ لا تعتمد الحضور." TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding CountLabel}" FontWeight="Bold" Margin="0,4"/>
                         <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy,Converter={StaticResource VisibleIfTrue}}"/>
                         <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>

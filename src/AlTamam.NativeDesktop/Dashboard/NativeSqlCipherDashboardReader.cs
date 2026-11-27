@@ -1618,7 +1618,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor,NativeAttendanceDraft expected,CancellationToken ct=default)
     {
         using var nativeOperation = operations.Enter();
-        if(expected is null || !expected.IsValid || expected.RangeEvidence is not null)
+        if(expected is null || !expected.IsValid)
             throw new InvalidDataException("Invalid reviewed draft evidence.");
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
         var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
@@ -1629,19 +1629,22 @@ public sealed class NativeSqlCipherDashboardReader(
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
-        var response=await services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject
+        var response=await services.DeleteNativeReviewedDraftAsync(principal.UserId,new JsonObject
         {
             ["draftId"]=expected.DraftId,
             ["businessDate"]=expected.BusinessDate.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
             ["siteId"]=expected.SiteId==""?null:JsonValue.Create(expected.SiteId),
             ["targetStatusId"]=expected.TargetStatusId,
+            ["rangeStartDate"]=expected.RangeEvidence?.StartDate,
+            ["rangeEndDate"]=expected.RangeEvidence?.EndDate,
+            ["rangeIsInitial"]=expected.RangeEvidence is { } range?JsonValue.Create(range.IsInitial):null,
             ["updatedAtUtc"]=expected.UpdatedAtUtc.ToString("O",CultureInfo.InvariantCulture),
             ["selectedPersonIds"]=new JsonArray(expected.PersonIds.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
         },lifetime.Token).ConfigureAwait(false);
         var receipt=RequiredObject(response,"DeleteAttendanceDraft(native)");
         if(RequiredText(receipt,"draftId")!=expected.DraftId)
             throw new InvalidDataException("Draft deletion receipt mismatch.");
-        var after=await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
+        var after=await services.ListNativeDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
         var remaining=ParseNativeDraftCatalogue(after);
@@ -1663,19 +1666,22 @@ public sealed class NativeSqlCipherDashboardReader(
             !RoleAuthorizationPolicy.CanPerformStandardOperations(principal.Role))
             throw new UnauthorizedAccessException("Draft save session changed.");
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
-        var before=RequiredArray(await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(before native save)");
+        var before=RequiredArray(await services.ListNativeDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(before native save)");
         if(before.Count>=10000 || before.Any(n=>RequiredText(RequireObject(n),"draftId")==intent.DraftId))
             throw new InvalidDataException("Draft identity already exists or catalogue full.");
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
         if(!intent.IsValid(DateOnly.FromDateTime(DateTime.Now)))
             throw new InvalidDataException("Draft date changed.");
-        var response=await services.SaveDraftAsync(principal.UserId,new JsonObject
+        var response=await services.SaveNativeDraftAsync(principal.UserId,new JsonObject
         {
             ["draftId"]=intent.DraftId,
             ["businessDate"]=intent.BusinessDate.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
             ["siteId"]=intent.SiteId==""?null:JsonValue.Create(intent.SiteId),
             ["targetStatusId"]=intent.TargetStatusId,
+            ["rangeStartDate"]=intent.RangeEvidence?.StartDate,
+            ["rangeEndDate"]=intent.RangeEvidence?.EndDate,
+            ["rangeIsInitial"]=intent.RangeEvidence is { } range?JsonValue.Create(range.IsInitial):null,
             ["selectedPersonIds"]=new JsonArray(intent.PersonIds.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
         },lifetime.Token).ConfigureAwait(false);
         var receipt=RequiredObject(response,"SaveAttendanceDraft(native)");
@@ -1683,18 +1689,11 @@ public sealed class NativeSqlCipherDashboardReader(
             !DateTimeOffset.TryParseExact(RequiredText(receipt,"savedAtUtc"),"O",CultureInfo.InvariantCulture,
                 DateTimeStyles.None,out var saved) || saved.Offset!=TimeSpan.Zero)
             throw new InvalidDataException("Invalid canonical draft save receipt.");
-        var after=RequiredArray(await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(after native save)");
+        var after=RequiredArray(await services.ListNativeDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(after native save)");
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
-        var row=after.Select(RequireObject).Single(n=>RequiredText(n,"draftId")==intent.DraftId);
-        if(!DateOnly.TryParseExact(RequiredText(row,"businessDate"),"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var date) ||
-            !DateTimeOffset.TryParseExact(RequiredText(row,"updatedAtUtc"),"O",CultureInfo.InvariantCulture,DateTimeStyles.None,out var updated))
-            throw new InvalidDataException("Invalid saved draft metadata.");
-        var ids=RequiredArray(row,"selectedPersonIds").Select(n=>n?.GetValue<string>()??
-            throw new InvalidDataException("Missing saved person identity.")).ToArray();
-        var result=new NativeAttendanceDraft(RequiredText(row,"draftId"),date,row["siteId"]?.GetValue<string>()??"",
-            RequiredText(row,"targetStatusId"),updated,Array.AsReadOnly(ids));
-        if(!intent.Matches(result) || updated>saved)
+        var result=ParseNativeDraftRows(after).Single(row=>row.DraftId==intent.DraftId);
+        if(!intent.Matches(result) || result.UpdatedAtUtc!=saved)
             throw new InvalidDataException("Draft read-back mismatch.");
         return result;
     }
@@ -1710,7 +1709,7 @@ public sealed class NativeSqlCipherDashboardReader(
             !RoleAuthorizationPolicy.CanPerformStandardOperations(principal.Role))
             throw new UnauthorizedAccessException("Draft session changed.");
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
-        var response=await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
+        var response=await services.ListNativeDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
         return ParseNativeDraftCatalogue(response);
@@ -1718,7 +1717,11 @@ public sealed class NativeSqlCipherDashboardReader(
 
     private static IReadOnlyList<NativeAttendanceDraft> ParseNativeDraftCatalogue(BridgeResponse response)
     {
-        var items=RequiredArray(response,"ListAttendanceDrafts(native)");
+        return ParseNativeDraftRows(RequiredArray(response,"ListAttendanceDrafts(native)"));
+    }
+
+    private static IReadOnlyList<NativeAttendanceDraft> ParseNativeDraftRows(JsonArray items)
+    {
         if(items.Count>10000)throw new InvalidDataException("Draft catalogue exceeds native bound.");
         var rows=items.Select(node=>
         {
@@ -1731,11 +1734,23 @@ public sealed class NativeSqlCipherDashboardReader(
             var ids=RequiredArray(row,"selectedPersonIds").Select(id=>
                 id?.GetValue<string>()??throw new InvalidDataException("Missing draft person identity.")).ToArray();
             return new NativeAttendanceDraft(RequiredText(row,"draftId"),date,
-                row["siteId"]?.GetValue<string>()??"",RequiredText(row,"targetStatusId"),updated,Array.AsReadOnly(ids));
+                row["siteId"]?.GetValue<string>()??"",RequiredText(row,"targetStatusId"),updated,Array.AsReadOnly(ids))
+            { RangeEvidence=ParseNativeDraftRange(row) };
         }).ToArray();
         if(!NativeAttendanceDraft.ValidCatalogue(rows))
             throw new InvalidDataException("Invalid canonical owner draft catalogue.");
         return Array.AsReadOnly(rows);
+    }
+
+    private static NativeAttendanceDraftRangeEvidence? ParseNativeDraftRange(JsonObject row)
+    {
+        if(!row.ContainsKey("rangeStartDate") || !row.ContainsKey("rangeEndDate") || !row.ContainsKey("rangeIsInitial"))
+            throw new InvalidDataException("Missing native range evidence fields.");
+        var start=row["rangeStartDate"];var end=row["rangeEndDate"];var mode=row["rangeIsInitial"];
+        if(start is null && end is null && mode is null)return null;
+        if(start is null || end is null || mode is null)
+            throw new InvalidDataException("Partial stored range evidence.");
+        return new(start.GetValue<string>(),end.GetValue<string>(),mode.GetValue<bool>());
     }
 
     public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(

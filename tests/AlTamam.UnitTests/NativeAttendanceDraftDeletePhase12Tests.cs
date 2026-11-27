@@ -37,6 +37,28 @@ public sealed class NativeAttendanceDraftDeletePhase12Tests
     }
 
     [Fact]
+    public async Task Complete_range_delete_review_includes_dates_and_mode()
+    {
+        var day=DateOnly.FromDateTime(DateTime.Now).AddDays(-1);
+        string from=day.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);
+        string to=day.AddDays(2).ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);
+        var probe=new Probe{Current=Draft() with {TargetStatusId="STS-LEAVE",RangeEvidence=new(from,to,true)}};
+        var vm=new NativeAttendanceDraftsViewModel();
+        vm.Attach(probe,()=>Actor);
+        await vm.OpenAsync();
+        var row=Assert.Single(vm.Rows);
+        vm.BeginDelete(row);
+        Assert.True(vm.IsDeleteReviewOpen);
+        Assert.Contains(from,vm.DeleteReviewLabel);
+        Assert.Contains(to,vm.DeleteReviewLabel);
+        Assert.Contains("تحضير أولي",vm.DeleteReviewLabel);
+        Assert.Equal(0,probe.Deletes);
+        await vm.ConfirmDeleteAsync();
+        Assert.Equal(1,probe.Deletes);
+        Assert.Empty(vm.Rows);
+    }
+
+    [Fact]
     public async Task Cancel_never_calls_delete_and_preserves_catalogue()
     {
         var probe=new Probe();
@@ -94,20 +116,21 @@ public sealed class NativeAttendanceDraftDeletePhase12Tests
 
     private sealed class Probe:INativeAttendanceDraftReader,INativeAttendanceDraftDeleter
     {
-        private readonly NativeAttendanceDraft _draft=Draft();
+        public NativeAttendanceDraft Current=Draft();
         public int Deletes;
         public bool StillPresent,Fail;
         public NativeIdentity? DeletedBy;
         public TaskCompletionSource<IReadOnlyList<NativeAttendanceDraft>>? Pending;
         public Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(NativeIdentity actor,CancellationToken ct=default)
-            =>Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>([_draft]);
+            =>Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>([Current]);
         public Task<IReadOnlyList<NativeAttendanceDraft>> DeleteAttendanceDraftAsync(NativeIdentity actor,NativeAttendanceDraft expected,CancellationToken ct=default)
         {
             Deletes++;DeletedBy=actor;
-            Assert.Equal(_draft.DraftId,expected.DraftId);
-            Assert.Equal(_draft.UpdatedAtUtc,expected.UpdatedAtUtc);
+            Assert.Equal(Current.DraftId,expected.DraftId);
+            Assert.Equal(Current.UpdatedAtUtc,expected.UpdatedAtUtc);
+            Assert.True(Current.SameSavedEvidence(expected));
             if(Fail)throw new InvalidOperationException("Stale draft.");
-            return Pending?.Task??Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>(StillPresent?[_draft]:[]);
+            return Pending?.Task??Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>(StillPresent?[Current]:[]);
         }
     }
 }

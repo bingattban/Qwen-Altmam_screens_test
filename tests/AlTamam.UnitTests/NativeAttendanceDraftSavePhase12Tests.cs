@@ -51,6 +51,32 @@ public sealed class NativeAttendanceDraftSavePhase12Tests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task Save_complete_range_preserves_exact_dates_and_mode(bool initial)
+    {
+        var b=new Probe();
+        var vm=new NativeAttendanceReviewViewModel();
+        vm.AttachBackend(b,()=>Actor);vm.AttachDraftWriter(b);
+        if(initial)await vm.OpenInitialPersonsAsync(Today,"SITE-A",["P-1"]);
+        else await vm.OpenPersonsAsync(Today,"SITE-A",["P-1"]);
+        vm.ChooseStatus("STS-LEAVE");
+        vm.RangeStartDate=Today.ToDateTime(TimeOnly.MinValue);
+        Assert.False(vm.CanSaveDraft);
+        vm.RangeEndDate=Today.AddDays(3).ToDateTime(TimeOnly.MinValue);
+        Assert.True(vm.CanSaveDraft);
+        await vm.SaveDraftAsync();
+        Assert.Equal(1,b.Saves);
+        Assert.NotEmpty(vm.SavedDraftId);
+        Assert.Equal(initial,b.Last!.RangeEvidence!.IsInitial);
+        Assert.Equal(Today.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),b.Last.RangeEvidence.StartDate);
+        Assert.Equal(Today.AddDays(3).ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),b.Last.RangeEvidence.EndDate);
+        Assert.Equal(0,b.Previews+b.Commits);
+        Assert.False(vm.HasPreview);
+        Assert.False(vm.CanSaveDraft);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task Missing_or_forged_receipt_never_claims_success_or_retries(bool lose)
     {
         var b=new Probe{Lose=lose,Forge=!lose};
@@ -96,7 +122,7 @@ public sealed class NativeAttendanceDraftSavePhase12Tests
         public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(NativeIdentity actor,CancellationToken ct=default)
             =>Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>([new("STS-PRESENT","موجود"),new("STS-LEAVE","إجازة")]);
         public NativeAttendanceDraft Receipt(NativeAttendanceDraftIntent intent)=>new(intent.DraftId,intent.BusinessDate,intent.SiteId,
-            intent.TargetStatusId,DateTimeOffset.UtcNow,Forge?["P-OTHER"]:intent.PersonIds);
+            intent.TargetStatusId,DateTimeOffset.UtcNow,Forge?["P-OTHER"]:intent.PersonIds){RangeEvidence=intent.RangeEvidence};
         public Task<NativeAttendanceDraft> SaveAttendanceDraftAsync(NativeIdentity actor,NativeAttendanceDraftIntent intent,CancellationToken ct=default)
         {
             Saves++;Last=intent;

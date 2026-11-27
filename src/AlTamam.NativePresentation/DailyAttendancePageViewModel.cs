@@ -133,7 +133,8 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
             (_boundPrincipal is not null && _boundPrincipal!=actor) ||
             ct.IsCancellationRequested || !draft.IsValid ||
             draft.BusinessDate!=DateOnly.FromDateTime(DateTime.Now) ||
-            NativeAttendanceDateRange.RequiresRange(draft.TargetStatusId))return false;
+            (NativeAttendanceDateRange.RequiresRange(draft.TargetStatusId) &&
+                (!draft.HasCompleteRangeEvidence || draft.RangeEvidence!.IsInitial!=initial)))return false;
         bool accepted=false;
         try
         {
@@ -148,6 +149,14 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
                 !Drafts.IsRestoring || !Review.IsOpen || Review.IsInitial!=initial ||
                 !Review.StatusChoices.Any(choice=>choice.StatusId==draft.TargetStatusId))return false;
             Review.ChooseStatus(draft.TargetStatusId);
+            if(draft.RangeEvidence is { } evidence)
+            {
+                // Exact dates/mode come from the reviewed row, never inferred.
+                Review.RangeStartDate=DateOnly.ParseExact(evidence.StartDate,"yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture).ToDateTime(TimeOnly.MinValue);
+                Review.RangeEndDate=DateOnly.ParseExact(evidence.EndDate,"yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture).ToDateTime(TimeOnly.MinValue);
+            }
             await Review.PreviewAsync(ct);
             accepted=!ct.IsCancellationRequested && _currentPrincipal?.Invoke()==actor &&
                 Drafts.IsRestoring && Review.IsOpen && Review.HasPreview &&

@@ -73,6 +73,34 @@ public sealed class NativeAttendanceDraftRestorePhase12Tests
         Assert.False(vm.Review.IsOpen);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Complete_range_restores_only_saved_mode_and_exact_dates(bool initial)
+    {
+        string start=Today.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);
+        string end=Today.AddDays(3).ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);
+        var backend=new Probe{Initial=initial,Current=Draft() with
+            {TargetStatusId="STS-LEAVE",RangeEvidence=new(start,end,initial)}};
+        var vm=new DailyAttendancePageViewModel();
+        vm.AttachReader(backend,()=>Actor);
+        await vm.Drafts.OpenAsync();
+        var row=Assert.Single(vm.Drafts.Rows);
+        Assert.Equal(initial,vm.Drafts.RestoreInitialCommand.CanExecute(row));
+        Assert.Equal(!initial,vm.Drafts.RestoreRevisionCommand.CanExecute(row));
+        await vm.Drafts.RestoreAsync(row,!initial);
+        Assert.Equal(1,backend.Reads);
+        Assert.Equal(0,backend.Previews);
+        await vm.Drafts.RestoreAsync(row,initial);
+        Assert.Equal(2,backend.Reads);
+        Assert.Equal(1,backend.Previews);
+        Assert.Equal(0,backend.Commits);
+        Assert.True(vm.Review.HasPreview);
+        Assert.Equal(Today.ToDateTime(TimeOnly.MinValue),vm.Review.RangeStartDate);
+        Assert.Equal(Today.AddDays(3).ToDateTime(TimeOnly.MinValue),vm.Review.RangeEndDate);
+        Assert.False(vm.Drafts.IsOpen);
+    }
+
     [Fact]
     public async Task Wrong_mode_or_inactive_status_is_rejected_without_automatic_fallback()
     {
@@ -147,19 +175,21 @@ public sealed class NativeAttendanceDraftRestorePhase12Tests
         public Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(NativeIdentity actor,CancellationToken ct=default)
         { Reads++;return Pending?.Task??Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>([Current]); }
         public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(NativeIdentity actor,CancellationToken ct=default)
-            =>Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>(NoStatus?[]:[new("STS-PRESENT","موجود")]);
+            =>Task.FromResult<IReadOnlyList<NativeAttendanceStatusChoice>>(NoStatus?[]:[new("STS-PRESENT","موجود"),new("STS-LEAVE","إجازة")]);
         public Task<NativeAttendanceRevisionPreview> PreviewAsync(NativeIdentity actor,DateOnly date,string site,IReadOnlyList<string> ids,string statusId,CancellationToken ct=default,NativeAttendanceDateRange? range=null)
-            =>Preview(date,site,ids,statusId,false);
+            =>Preview(date,site,ids,statusId,false,range);
         public Task<NativeAttendanceRevisionPreview> PreviewInitialAsync(NativeIdentity actor,DateOnly date,string site,IReadOnlyList<string> ids,string statusId,CancellationToken ct=default,NativeAttendanceDateRange? range=null)
-            =>Preview(date,site,ids,statusId,true);
-        private Task<NativeAttendanceRevisionPreview> Preview(DateOnly date,string site,IReadOnlyList<string> ids,string statusId,bool initial)
+            =>Preview(date,site,ids,statusId,true,range);
+        private Task<NativeAttendanceRevisionPreview> Preview(DateOnly date,string site,IReadOnlyList<string> ids,string statusId,bool initial,NativeAttendanceDateRange? range)
         {
             Previews++;
             Assert.Equal(Current.SiteId,site);
+            Assert.Equal(Current.RangeEvidence?.StartDate,range?.StartDate);
+            Assert.Equal(Current.RangeEvidence?.EndDate,range?.EndDate);
             if(initial!=Initial)throw new InvalidOperationException("Canonical mode conflict.");
             if(PreviewPending is not null)return PreviewPending.Task;
             return Task.FromResult(new NativeAttendanceRevisionPreview(new string('a',64),date,statusId,"موجود",
-                ids.Select(id=>new NativeAttendancePreviewPerson(id,"اسم الفرد","123","الموقع",initial?"":"غياب",initial?"":"STS-ABSENT")).ToArray()){IsInitial=initial});
+                ids.Select(id=>new NativeAttendancePreviewPerson(id,"اسم الفرد","123","الموقع",initial?"":"غياب",initial?"":"STS-ABSENT")).ToArray()){IsInitial=initial,RangeStartDate=range?.StartDate,RangeEndDate=range?.EndDate});
         }
         public Task<NativeAttendanceCommitReceipt> CommitAsync(NativeIdentity actor,string token,string operationId,CancellationToken ct=default)
         {Commits++;throw new InvalidOperationException();}
