@@ -54,7 +54,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
     public bool CanSaveDraft=>_draftWriter is not null && _open && !_busy &&
         !_committing && !_completed && !_unverifiedCommit && !_draftAttempted &&
         _actor is { } actor && HasValidActor(actor) &&
-        _choices.Any(x=>x.StatusId==_selectedStatusId) && !RequiresDateRange &&
+        _choices.Any(x=>x.StatusId==_selectedStatusId) && TryGetDraftRange(out _) &&
         _personIds.Length is >=1 and <=100;
     public ICommand SaveDraftCommand {get;}
     public void AttachDraftWriter(INativeAttendanceDraftWriter writer)
@@ -64,11 +64,23 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         Update();
     }
 
+    private bool TryGetDraftRange(out NativeAttendanceDraftRangeEvidence? evidence)
+    {
+        evidence=null;
+        if(!NativeAttendanceDateRange.TryCreate(_selectedStatusId,_businessDate,
+            _rangeStartDate?.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            _rangeEndDate?.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            out var range,out _))return false;
+        if(range is not null)evidence=new(range.StartDate,range.EndDate,_initial);
+        return true;
+    }
+
     public async Task SaveDraftAsync(CancellationToken ct=default)
     {
-        if(!CanSaveDraft || _draftWriter is not { } writer || _actor is not { } actor)return;
+        if(!CanSaveDraft || _draftWriter is not { } writer || _actor is not { } actor ||
+            !TryGetDraftRange(out var evidence))return;
         var intent=new NativeAttendanceDraftIntent("DRF-"+Guid.NewGuid().ToString("N"),
-            _businessDate,_site,_selectedStatusId,Array.AsReadOnly(_personIds.ToArray()));
+            _businessDate,_site,_selectedStatusId,Array.AsReadOnly(_personIds.ToArray())){RangeEvidence=evidence};
         if(!intent.IsValid(DateOnly.FromDateTime(DateTime.Now)))return;
         int version=++_generation;
         _pending?.Cancel();
