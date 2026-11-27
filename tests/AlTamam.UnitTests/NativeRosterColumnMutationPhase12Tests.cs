@@ -1,0 +1,70 @@
+using AlTamam.Domain.Enums;
+using AlTamam.NativePresentation;
+using Xunit;
+
+namespace AlTamam.UnitTests;
+
+public sealed class NativeRosterColumnMutationPhase12Tests
+{
+    private static readonly NativeRosterColumn Existing=new("FLD-EXAMPLE","custom_example","ملاحظة",1,5,false,true,true,7,new string('A',64));
+    private static readonly NativeIdentity Manager=new("USR-1","owner",UserRole.GeneralAdministration,"NONCE-A");
+    private static NativeRosterColumn[] Rows()=>
+    [
+        new("FLD-SYS-ROWNUM","sys_row_number","الرقم",2,1,true,true,true,0,new string('A',64)),
+        new("FLD-SYS-SVC-NUM","sys_service_number_a","الرقم (ع)",1,2,true,true,true,0,new string('B',64)),
+        new("FLD-SYS-NAME","sys_person_name","الاسم",1,3,true,true,true,0,new string('C',64)),
+        new("FLD-SYS-SITE","sys_site_name","الموقع",1,4,true,true,true,0,new string('D',64)),
+        Existing
+    ];
+    private static NativeRosterColumnChange Edit(NativeRosterColumn? row=null)=>
+        new(NativeRosterColumnOperation.Update,row??Existing,"ملاحظة جديدة",1,5,false);
+    [Fact]
+    public void Exact_current_metadata_and_protected_columns_are_required()
+    {
+        var rows=Rows();
+        Assert.True(Edit().CanApply(rows));
+        Assert.False(Edit(rows[2]).CanApply(rows));
+        Assert.False(Edit(Existing with {Snapshot=new string('B',64)}).CanApply(rows));
+        Assert.False((Edit() with {FieldType=2}).CanApply(rows));
+        Assert.False((Edit() with {DisplayOrder=6}).CanApply(rows));
+        Assert.False((Edit() with {Caption=Existing.Caption,Visible=true}).CanApply(rows));
+        Assert.False((Edit() with {Caption="الاسم"}).CanApply(rows));
+        Assert.False(Edit().CanApply([..rows.Take(4),Existing with {StoredValueCount=8}]));
+    }
+    [Fact]
+    public void Create_and_retire_have_distinct_rules_and_cannot_change_saved_values()
+    {
+        var create=new NativeRosterColumnChange(NativeRosterColumnOperation.Create,null,"رقم جديد",2,0,true);
+        Assert.True(create.CanApply(Rows()));
+        Assert.False((create with {Caption="ملاحظة"}).CanApply(Rows()));
+        Assert.False((create with {Visible=false}).CanApply(Rows()));
+        var retire=new NativeRosterColumnChange(NativeRosterColumnOperation.Deactivate,Existing,Existing.Caption,1,5,false);
+        Assert.True(retire.CanApply(Rows()));
+        Assert.False((retire with {FieldType=2}).CanApply(Rows()));
+        Assert.False((retire with {Visible=true}).CanApply(Rows()));
+        var retired=Existing with {Active=false,Visible=false,Snapshot=new string('B',64)};
+        Assert.True(retire.MatchesReceipt(retired));
+        Assert.False(retire.MatchesReceipt(retired with {StoredValueCount=0}));
+        Assert.False(retire.MatchesReceipt(retired with {TechnicalKey="changed"}));
+        Assert.False(retire.MatchesReceipt(retired with {Active=true}));
+    }
+    [Fact]
+    public void Commit_requires_review_and_does_not_automatically_retry_uncertain_result()
+    {
+        var review=new NativeRosterColumnMutationReview();
+        review.Begin(Manager,Edit(),Rows());
+        Assert.False(review.CanConfirm(Manager,Rows()));
+        Assert.True(review.Review(Manager,Rows()));
+        Assert.False(review.CanConfirm(Manager with {SessionNonce="OTHER"},Rows()));
+        var operation=review.Take(Manager,Rows());
+        Assert.NotNull(operation);
+        Assert.True(Guid.TryParseExact(operation.OperationId,"N",out _));
+        Assert.False(review.CanConfirm(Manager,Rows()));
+        Assert.Null(review.Take(Manager,Rows()));
+        Assert.True(review.HasUnverifiedCommit);
+        Assert.False(review.Accept(operation,Existing));
+        Assert.True(review.HasUnverifiedCommit);
+        Assert.True(review.Accept(operation,Existing with {Caption="ملاحظة جديدة",Visible=false,Snapshot=new string('B',64)}));
+        Assert.False(review.HasUnverifiedCommit);
+    }
+}
