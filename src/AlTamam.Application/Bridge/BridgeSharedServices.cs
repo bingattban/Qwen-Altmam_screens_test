@@ -549,13 +549,15 @@ public sealed class BridgeSharedServices
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = native
-            ? "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson, RangeStartDate, RangeEndDate, RangeIsInitial FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;"
+            ? "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson, RangeStartDate, RangeEndDate, RangeIsInitial FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC, DraftId LIMIT 10001;"
             : "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u AND RangeIsInitial IS NULL ORDER BY UpdatedAtUtc DESC;";
         cmd.Parameters.AddWithValue("$u", userId);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
+            if(native && rows.Count>=10000)
+                return Error(BridgeErrorCodes.ValidationError,"عدد المسودات يتجاوز الحد المسموح؛ لا يمكن عرض قائمة جزئية.");
             var row=new JsonObject
             {
                 ["draftId"] = reader.GetString(0),
@@ -718,11 +720,25 @@ public sealed class BridgeSharedServices
             cmd.CommandText = @"DELETE FROM AttendanceDrafts
                                 WHERE DraftId = $id AND CreatedByUserId = $user
                                 AND BusinessDate = $date AND SiteId IS $site
-                                AND TargetStatusId = $status AND UpdatedAtUtc = $updated
-                                AND SelectedPersonIdsJson = $json";
+                                AND TargetStatusId = $status AND UpdatedAtUtc = $updated";
+            // Native evidence is an ordered list of exact string identities, not
+            // a JSON formatting contract. Compare within the same write transaction.
+            // CASE protects JSON functions from malformed historical data.
             cmd.CommandText+=native
-                ? " AND RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode;"
-                : " AND RangeIsInitial IS NULL;";
+                ? """
+                    AND RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode
+                   AND CASE WHEN json_valid(SelectedPersonIdsJson)=1 THEN
+                       json_type(SelectedPersonIdsJson)='array'
+                       AND json_array_length(SelectedPersonIdsJson)=json_array_length($json)
+                       AND NOT EXISTS(
+                           SELECT 1 FROM json_each(SelectedPersonIdsJson) AS stored
+                           WHERE stored.type<>'text' OR NOT EXISTS(
+                               SELECT 1 FROM json_each($json) AS reviewed
+                               WHERE reviewed.key=stored.key AND reviewed.type='text'
+                                 AND reviewed.value=stored.value COLLATE BINARY))
+                       ELSE 0 END;
+                   """
+                : " AND SelectedPersonIdsJson = $json AND RangeIsInitial IS NULL;";
             if(native)
             {
                 var mode=expected["rangeIsInitial"];
