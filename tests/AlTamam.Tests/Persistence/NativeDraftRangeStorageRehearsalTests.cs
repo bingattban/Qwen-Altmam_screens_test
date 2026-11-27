@@ -176,5 +176,31 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
         Assert.Equal(0L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts;"));
     }
 
+    [Fact]
+    public async Task LegacyDraftEndpoints_CannotReadModifyOrDeleteCompleteRangeEvidence()
+    {
+        using var db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
+        await db.InitializeAsync();
+        await InsertAsync(db,DraftId,"STS-LEAVE",Day,"2026-12-01",1);
+        var services=new AlTamam.Application.Bridge.BridgeSharedServices(db);
+        var payload=new System.Text.Json.Nodes.JsonObject
+        {
+            ["draftId"]=DraftId,["businessDate"]=Day,["targetStatusId"]="STS-LEAVE",
+            ["siteId"]=null,["selectedPersonIds"]=System.Text.Json.Nodes.JsonNode.Parse("[\"TST-P1\"]"),
+            ["updatedAtUtc"]="2026-11-27T08:00:00.0000000+00:00"
+        };
+        var listed=await services.ListDraftsAsync(Owner,CancellationToken.None);
+        Assert.True(listed.Success);
+        Assert.Empty(Assert.IsType<System.Text.Json.Nodes.JsonArray>(listed.Data));
+        Assert.False((await services.SaveDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.False((await services.DeleteDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.False((await services.DeleteReviewedDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.Equal(1L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts WHERE RangeIsInitial=1 AND RangeEndDate='2026-12-01';"));
+        await InsertAsync(db,"TST-LEGACY-NEW","STS-PRESENT",null,null,null);
+        var legacy=Assert.IsType<System.Text.Json.Nodes.JsonArray>((await services.ListDraftsAsync(Owner,CancellationToken.None)).Data);
+        Assert.Single(legacy);
+        Assert.Equal(6,Assert.IsType<System.Text.Json.Nodes.JsonObject>(legacy[0]).Count);
+    }
+
     public void Dispose()=>SyntheticFixtures.DeleteTempDatabase(_path);
 }
