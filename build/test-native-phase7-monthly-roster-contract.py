@@ -35,6 +35,7 @@ FILES = {
     "progress_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportProgressPhase12Tests.cs",
     "destination_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportDestinationPhase12Tests.cs",
     "receipt_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportReceiptPhase12Tests.cs",
+    "navigation_tests": "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
     "receipt_evidence": "src/AlTamam.NativePresentation/NativeMonthlyExcelReceiptEvidence.cs",
     "excel_sql_tests": "tests/AlTamam.Tests/Bridge/MonthlyExcelExportTests.cs",
     "name_policy": "src/AlTamam.Domain/Policies/MonthlyExcelOutputNamePolicy.cs",
@@ -461,6 +462,34 @@ def problems(content):
     for token in ("Excel.ProgressPercent", "Excel.IsProgressIndeterminate", "Excel.CancelExportCommand",
                   "Excel.ProgressMessage", "Excel.IsExporting"):
         require("xaml",token)
+    for token in ("CanOpenRosterExport()", "MonthlyAttendance.CanEnterRosterExport && CanNavigate(NativeScreen.MonthlyAttendance)",
+                  "ReferenceEquals(CurrentPage,Administration) || ReferenceEquals(CurrentPage,Reports)",
+                  "MonthlyAttendance.SetRosterExportEntry(true)", "MonthlyAttendance.SetRosterExportEntry(false)",
+                  "_openRosterExportCommand.NotifyAvailabilityChanged()"):
+        require("shell",token)
+    start=content["shell"].find("private void OpenRosterExport()")
+    end=content["shell"].find("private bool CanOpenAdministrativeHistorical()",start)
+    if not (0<=start<end):
+        errors.append("Roster export navigation boundary missing.")
+    else:
+        entry=content["shell"][start:end]
+        if ("if(!CanOpenRosterExport())return;" not in entry or
+            "_navigateCommand.Execute(NativeScreen.MonthlyAttendance)" not in entry or
+            "if(ReferenceEquals(CurrentPage,MonthlyAttendance))" not in entry or
+            any(x in entry for x in ("OpenPreviewAsync(", "ConfirmAsync(", "ExportExcelAsync(", "ExportWithProgressAsync(", "OpenPreviewCommand.Execute("))):
+            errors.append("Roster entry must only navigate; never automatically preview or export.")
+    for token in ("IsRosterExportEntry", "PageHeading", "CanEnterRosterExport",
+                  "RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role)",
+                  "SetRosterExportEntry(false);"):
+        require("vm",token)
+    for key in ("admin_xaml","templates"):
+        require(key,"DataContext.OpenRosterExportCommand")
+    require("xaml",'Text="{Binding PageHeading}"')
+    require("xaml","Binding IsRosterExportEntry")
+    for token in ("Roster_export_entry_reuses_monthly_scope_without_automatic_preview_or_export",
+                  "Administration_export_entry_respects_pending_review_and_logout",
+                  "Reports_without_backend_never_advertise_working_actions"):
+        require("navigation_tests",token)
     for token in ("Progress_never_claims_completion_before_receipt",
                   "Cancellation_requests_stop_and_never_retries_unverified_result",
                   "Cancellation_after_publication_does_not_hide_verified_receipt",
@@ -518,6 +547,14 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("shell", "MonthlyAttendance.CanEnterRosterExport && CanNavigate(NativeScreen.MonthlyAttendance)"),
+        ("shell", "if(!CanOpenRosterExport())return;"),
+        ("shell", "MonthlyAttendance.SetRosterExportEntry(true)"),
+        ("shell", "MonthlyAttendance.SetRosterExportEntry(false)"),
+        ("vm", "SetRosterExportEntry(false);"),
+        ("admin_xaml", "DataContext.OpenRosterExportCommand"),
+        ("templates", "DataContext.OpenRosterExportCommand"),
+        ("xaml", 'Text="{Binding PageHeading}"'),
         ("receipt_evidence", "files.Count!=receipt.FileCount"),
         ("receipt_evidence", "!sites.Add(row.SiteId)"),
         ("receipt_evidence", "!paths.Add(file)"),
