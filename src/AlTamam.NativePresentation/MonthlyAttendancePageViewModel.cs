@@ -71,6 +71,20 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         };
     }
 
+    private bool _rosterExportEntry;
+    public bool IsRosterExportEntry => _rosterExportEntry;
+    public string PageHeading => IsRosterExportEntry ? "تصدير الكشوفات العامة" : "التمام الشهري";
+    public bool CanEnterRosterExport => _reader is INativeMonthlyExcelExportBackend &&
+        _liveActor?.Invoke() is { } actor && RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role);
+    // Entry only. No implicit preview, export or changes to attendance.
+    internal void SetRosterExportEntry(bool enabled)
+    {
+        bool next=enabled && CanEnterRosterExport;
+        if(_rosterExportEntry==next)return;
+        _rosterExportEntry=next;
+        Changed(nameof(IsRosterExportEntry),nameof(PageHeading));
+    }
+
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
     public NativeClosedDayCorrectionReview Correction { get; }
     public ICommand OpenCorrectionCommand { get; }
@@ -312,6 +326,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
 
     public void Clear()
     {
+        SetRosterExportEntry(false);
         Correction.ForceClear();
         RangeCorrection.ForceClear();
         ++_generation;
