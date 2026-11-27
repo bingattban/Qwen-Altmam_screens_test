@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="NativeCanvas" Color="#0F172A"/>
+    <SolidColorBrush x:Key="NativeSurface" Color="#17263A"/>
+    <SolidColorBrush x:Key="NativeSubtle" Color="#1E293B"/>
+    <SolidColorBrush x:Key="NativeInfoSurface" Color="#182F45"/>
+    <SolidColorBrush x:Key="NativeNavSurface" Color="#243A50"/>
+    <SolidColorBrush x:Key="NativeWarningSurface" Color="#3A2A16"/>
+    <SolidColorBrush x:Key="NativeWarmSurface" Color="#3B261C"/>
+    <SolidColorBrush x:Key="NativePaleWarning" Color="#35291C"/>
+    <SolidColorBrush x:Key="NativeBorder" Color="#51647B"/>
+    <SolidColorBrush x:Key="NativeSubtleBorder" Color="#40536A"/>
+    <SolidColorBrush x:Key="NativeInfoBorder" Color="#426A89"/>
+    <SolidColorBrush x:Key="NativeWarningBorder" Color="#A47C34"/>
+    <SolidColorBrush x:Key="NativeWarmBorder" Color="#A86B3C"/>
+    <SolidColorBrush x:Key="NativeText" Color="#E5EDF7"/>
+    <SolidColorBrush x:Key="NativeHeading" Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="NativeMuted" Color="#B8C5D5"/>
+    <SolidColorBrush x:Key="NativeSecondary" Color="#B8C5D5"/>
+    <SolidColorBrush x:Key="NativeDeepText" Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="NativeBodyText" Color="#CBD5E1"/>
+    <SolidColorBrush x:Key="NativeAccentText" Color="#5EEAD4"/>
+    <SolidColorBrush x:Key="NativeSuccessText" Color="#86EFAC"/>
+    <SolidColorBrush x:Key="NativeDangerText" Color="#FDA4AF"/>
+    <SolidColorBrush x:Key="NativeWarningText" Color="#FDE68A"/>
+    <SolidColorBrush x:Key="NativeHeader" Color="#0C2035"/>
+    <SolidColorBrush x:Key="NativeHeaderCard" Color="#183550"/>
+    <SolidColorBrush x:Key="NativeOnStrong" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="NativeHeaderMuted" Color="#D8E8F1"/>
+    <SolidColorBrush x:Key="NativeHeaderAccent" Color="#99F6E4"/>
+    <SolidColorBrush x:Key="NativeAccentFill" Color="#0F766E"/>
+    <SolidColorBrush x:Key="NativeDangerFill" Color="#9F1239"/>
+    <SolidColorBrush x:Key="NativeAccentBorder" Color="#5EEAD4"/>
+</ResourceDictionary>
