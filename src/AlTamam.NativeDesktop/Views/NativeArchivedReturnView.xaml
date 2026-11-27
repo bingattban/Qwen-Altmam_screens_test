@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ReturnVisible"/>
-        <Style x:Key="ReturnButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="ReturnButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -16,13 +16,13 @@
     </UserControl.Resources>
     <Grid Background="#B80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource ReturnVisible}}">
-        <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="10" Padding="18" Margin="12" Width="670" MaxHeight="690"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
             <DockPanel LastChildFill="True">
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                     <TextBlock Text="عودة فرد مؤرشف — التحقق من الهوية"
-                               FontSize="19" FontWeight="Bold" Foreground="#0F2942"
+                               FontSize="19" FontWeight="Bold" Foreground="{DynamicResource NativeText}"
                                DockPanel.Dock="Right" VerticalAlignment="Center"/>
                     <Button Content="إغلاق" Style="{StaticResource ReturnButton}"
                             Command="{Binding CloseCommand}"
@@ -32,10 +32,10 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="لا يُنشأ شخص جديد عند العودة؛ يحتفظ الفرد بمعرفه السابق وجميع كشوفاته وحركاته. تأكد من الشخص والموقع قبل اعتماد أي تغيير."
-                                   TextWrapping="Wrap" Foreground="#475569" Margin="0,0,0,10"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,0,0,10"/>
                         <ProgressBar Height="5" IsIndeterminate="True"
                                      Visibility="{Binding IsBusy, Converter={StaticResource ReturnVisible}}"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    FontWeight="SemiBold" TextWrapping="Wrap"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <Grid Margin="0,8,0,12">
@@ -44,49 +44,49 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="الهوية التاريخية المحددة" FontWeight="Bold" Foreground="#64748B"/>
-                                <TextBlock Text="{Binding PersonName}" Foreground="#0F2942" FontWeight="SemiBold"/>
+                                <TextBlock Text="الهوية التاريخية المحددة" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"/>
+                                <TextBlock Text="{Binding PersonName}" Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding ServiceNumberA}"/>
-                                <TextBlock Text="{Binding PersonStatus}" Foreground="#BE123C"/>
+                                <TextBlock Text="{Binding PersonStatus}" Foreground="{DynamicResource NativeDangerText}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Text="معرف الفرد الثابت" FontWeight="Bold" Foreground="#64748B"/>
-                                <TextBlock Text="{Binding OriginalPersonId}" Foreground="#0F2942"
+                                <TextBlock Text="معرف الفرد الثابت" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"/>
+                                <TextBlock Text="{Binding OriginalPersonId}" Foreground="{DynamicResource NativeText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Grid>
                         <TextBlock Text="اختر موقع العودة النشط" FontWeight="Bold"
-                                   Foreground="#0F2942" Margin="0,6,0,5"/>
+                                   Foreground="{DynamicResource NativeText}" Margin="0,6,0,5"/>
                         <ComboBox ItemsSource="{Binding SiteOptions}"
                                   DisplayMemberPath="Name" SelectedValuePath="SiteId"
                                   SelectedValue="{Binding SelectedSiteId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsEnabled="{Binding CanEdit}" MinHeight="35"
                                   AutomationProperties.Name="الموقع الذي سيعاد إليه الفرد"/>
                         <TextBlock Text="قد يرفض النظام الموقع غير النشط أو العودة في يوم مغلق؛ لا يتجاوز هذا الخيار الصلاحيات أو السجل التاريخي."
-                                   Foreground="#64748B" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"
                                    Margin="0,5,0,10"/>
                         <Button Content="معاينة الهويات المؤرشفة دون حفظ"
                                 Style="{StaticResource ReturnButton}"
                                 Command="{Binding PreviewCommand}"
                                 AutomationProperties.Name="التحقق من كافة الهويات المؤرشفة المتشابهة دون حفظ"/>
                         <Border Visibility="{Binding HasPreview, Converter={StaticResource ReturnVisible}}"
-                                Background="#F8FAFC" BorderBrush="#CBD5E1"
+                                Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeBorder}"
                                 BorderThickness="1" CornerRadius="6" Margin="0,8" Padding="12">
                             <StackPanel>
                                 <TextBlock Text="المعاينة: جميع الهويات المحتملة"
-                                           FontWeight="Bold" Foreground="#0F2942"/>
+                                           FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="{Binding ConfirmationNote}" TextWrapping="Wrap"
-                                           Foreground="#475569" Margin="0,8,0,8"/>
+                                           Foreground="{DynamicResource NativeMuted}" Margin="0,8,0,8"/>
                                 <ItemsControl ItemsSource="{Binding Preview.Candidates}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Margin="0,3" Padding="8" Background="#FFFFFF"
-                                                    BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <Border Margin="0,3" Padding="8" Background="{DynamicResource NativeSurface}"
+                                                    BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Name}"
-                                                               FontWeight="SemiBold" Foreground="#0F2942"/>
+                                                               FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                                                     <TextBlock Text="{Binding ServiceNumberA}"/>
-                                                    <TextBlock Text="{Binding PersonId}" Foreground="#475569"
+                                                    <TextBlock Text="{Binding PersonId}" Foreground="{DynamicResource NativeMuted}"
                                                                TextWrapping="Wrap"/>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding ExitType}"/>
@@ -113,11 +113,11 @@
                                 Style="{StaticResource ReturnButton}"
                                 Command="{Binding ConfirmCommand}"
                                 AutomationProperties.Name="تأكيد نفس الهوية التاريخية واعتماد العودة"/>
-                        <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                        <TextBlock Text="{Binding CompletionNote}" Foreground="{DynamicResource NativeAccentText}"
                                    FontWeight="Bold" TextWrapping="Wrap" Margin="0,8,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="إذا انقطع الرد أثناء الاعتماد، افتح أرشيف التنقلات وسجل العمليات وتحقق من حالة الفرد. لا يُعاد إرسال طلب العودة تلقائيا."
-                                   Foreground="#64748B" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap" FontSize="12"
                                    Margin="0,10,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

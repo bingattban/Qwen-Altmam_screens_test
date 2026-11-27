@@ -28,6 +28,13 @@ public sealed class SettingsReadBackupService
         q.Parameters.AddWithValue("$key",key);
         return (await q.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()??fallback;
     }
+    // Program-wide appearance only; safe before authentication and never
+    // returns account, attendance, or backup data.
+    public async Task<string> ReadThemeAsync(CancellationToken ct=default)
+    {
+        string theme=await Setting("Theme","light",ct).ConfigureAwait(false);
+        return theme is "dark" ? "dark" : "light";
+    }
     public async Task<BridgeResponse> OverviewAsync(BridgePrincipal person,CancellationToken ct)
     {
         string backupPath=await new OutputDirectorySettings(_db).GetAsync(ct);
@@ -36,7 +43,7 @@ public sealed class SettingsReadBackupService
         int retentionCount=await new BackupRetentionService(_db,_time)
             .ReadCountAsync(ct).ConfigureAwait(false);
         string? lastDate=await backup.LastSuccessfulDateAsync(ct).ConfigureAwait(false);
-        string theme=await Setting("Theme","light",ct);
+        string theme=await ReadThemeAsync(ct);
         string lastBackupFailure=await Setting("AutoBackupLastFailure","",ct);
         var monthlyExcel=await new AlTamam.Application.Scheduling.AutomaticMonthlyExcelService(_db,_time)
             .ReadAsync(ct).ConfigureAwait(false);

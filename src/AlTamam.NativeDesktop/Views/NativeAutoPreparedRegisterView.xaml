@@ -16,9 +16,9 @@
     </UserControl.Style>
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
-        <Style x:Key="AutoButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Style x:Key="AutoButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeOnStrong}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="14,8"/>
@@ -27,16 +27,16 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style x:Key="AutoNeutralButton" TargetType="Button" BasedOn="{StaticResource AutoButton}">
-            <Setter Property="Background" Value="#F8FAFC"/>
-            <Setter Property="Foreground" Value="#0F2942"/>
-            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="Background" Value="{DynamicResource NativeSubtle}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NativeBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
     </UserControl.Resources>
     <!-- This is a genuine native WPF overlay, scoped to the Dashboard.
          Read-only until the separate audited preview/commit UI is migrated. -->
     <Grid Background="#B30F2942">
-        <Border Background="#FFFFFF" CornerRadius="12" BorderBrush="#CBD5E1"
+        <Border Background="{DynamicResource NativeSurface}" CornerRadius="12" BorderBrush="{DynamicResource NativeBorder}"
                 BorderThickness="1" Padding="18" Margin="12"
                 HorizontalAlignment="Stretch" VerticalAlignment="Center"
                 MaxWidth="1100" MaxHeight="650" MinHeight="400"
@@ -66,21 +66,21 @@
                             Style="{StaticResource AutoNeutralButton}"
                             AutomationProperties.Name="إغلاق سجل المحضّرين تلقائياً"/>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Title}" Foreground="#0F2942"
+                        <TextBlock Text="{Binding Title}" Foreground="{DynamicResource NativeText}"
                                    FontSize="20" FontWeight="Bold"/>
                         <TextBlock Text="سجل التحضير التلقائي المحفوظ — قراءة محمية من قاعدة البيانات"
-                                   Foreground="#475569" TextWrapping="Wrap" FontSize="12"/>
+                                   Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap" FontSize="12"/>
                     </StackPanel>
                 </DockPanel>
-                <Border Grid.Row="1" Background="#F1F5F9" BorderBrush="#CBD5E1"
+                <Border Grid.Row="1" Background="{DynamicResource NativeCanvas}" BorderBrush="{DynamicResource NativeBorder}"
                         BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,0,0,13">
                     <TextBlock Text="هذا السجل للعرض والبحث فقط. لتغيير حالات الأفراد حدد الأسماء ثم افتح نافذة المراجعة، واختر الحالة وتاريخي البداية والنهاية عند الإجازة أو الإذن، وراجع البيانات ثم أكد الاعتماد."
-                               Foreground="#0F2942" TextWrapping="Wrap" FontSize="13"/>
+                               Foreground="{DynamicResource NativeText}" TextWrapping="Wrap" FontSize="13"/>
                 </Border>
                 <StackPanel Grid.Row="2" Margin="0,0,0,10">
                     <WrapPanel VerticalAlignment="Center">
                         <TextBlock Text="بحث بالاسم أو الرقم (ع)" VerticalAlignment="Center"
-                                   FontWeight="SemiBold" Foreground="#0F2942" Margin="0,0,10,0"/>
+                                   FontWeight="SemiBold" Foreground="{DynamicResource NativeText}" Margin="0,0,10,0"/>
                         <TextBox Width="245" Height="38" MaxLength="101"
                                  Padding="10,7" VerticalContentAlignment="Center"
                                  AutomationProperties.Name="بحث في سجل المحضّرين تلقائيا"
@@ -101,14 +101,14 @@
                                 Style="{StaticResource AutoNeutralButton}"/>
                         <Button Content="معاينة تغيير المحددين" Command="{Binding ReviewSelectedCommand}"
                                 Style="{StaticResource AutoButton}"/>
-                        <TextBlock Text="{Binding SelectedLabel}" Foreground="#0F2942"
+                        <TextBlock Text="{Binding SelectedLabel}" Foreground="{DynamicResource NativeText}"
                                    FontWeight="SemiBold" VerticalAlignment="Center"
                                    Margin="10,0,0,0"/>
                     </WrapPanel>
-                    <TextBlock Text="{Binding LoadError}" Foreground="#BE123C"
+                    <TextBlock Text="{Binding LoadError}" Foreground="{DynamicResource NativeDangerText}"
                                FontSize="13" TextWrapping="Wrap"
                                AutomationProperties.LiveSetting="Polite" Margin="3,5,0,2"/>
-                    <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
+                    <ProgressBar Height="4" IsIndeterminate="True" Foreground="{DynamicResource NativeAccentText}"
                                  Visibility="{Binding IsLoading, Converter={StaticResource VisibleWhenTrue}}"/>
                 </StackPanel>
                 <DataGrid x:Name="RegisterGrid" Grid.Row="3"
@@ -116,8 +116,8 @@
                           CanUserAddRows="False" CanUserDeleteRows="False"
                           CanUserSortColumns="False" AutoGenerateColumns="False"
                           HeadersVisibility="Column" FlowDirection="RightToLeft"
-                          AlternatingRowBackground="#F8FAFC"
-                          BorderBrush="#CBD5E1" BorderThickness="1"
+                          AlternatingRowBackground="{DynamicResource NativeSubtle}"
+                          BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                           GridLinesVisibility="Horizontal" RowHeight="36"
                           ColumnHeaderHeight="39" MinHeight="210">
                     <DataGrid.Columns>
@@ -144,7 +144,7 @@
                     </DataGrid.Columns>
                 </DataGrid>
                 <DockPanel Grid.Row="4" Margin="0,12,0,0">
-                    <TextBlock Text="{Binding PageLabel}" Foreground="#475569"
+                    <TextBlock Text="{Binding PageLabel}" Foreground="{DynamicResource NativeMuted}"
                                DockPanel.Dock="Right" VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                         <Button Content="السابق" Command="{Binding PreviousPageCommand}"

@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
-        <Style x:Key="MutationButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="MutationButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="MinHeight" Value="37"/>
@@ -16,13 +16,13 @@
     </UserControl.Resources>
     <Grid Visibility="{Binding IsOpen, Converter={StaticResource VisibleWhenTrue}}"
           Background="#B80F172A">
-        <Border Background="#FFFFFF" BorderBrush="#CBD5E1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}"
                 BorderThickness="1" CornerRadius="10" Padding="18"
                 Width="590" MaxHeight="640"
                 VerticalAlignment="Center" HorizontalAlignment="Center">
             <DockPanel LastChildFill="True">
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                    <TextBlock Text="{Binding Header}" Foreground="#0F2942"
+                    <TextBlock Text="{Binding Header}" Foreground="{DynamicResource NativeText}"
                                FontWeight="Bold" FontSize="19"
                                VerticalAlignment="Center" DockPanel.Dock="Right"/>
                     <Button Content="إغلاق" Style="{StaticResource MutationButton}"
@@ -33,28 +33,28 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="أدخل البيانات ثم اضغط معاينة؛ لن يُحفظ شيء قبل تأكيد مستقل."
-                                   TextWrapping="Wrap" Foreground="#475569"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                         <ProgressBar Height="5" IsIndeterminate="True"
                                      Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhenTrue}}"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    FontWeight="SemiBold" TextWrapping="Wrap"
                                    AutomationProperties.LiveSetting="Polite"
                                    Margin="0,8,0,6"/>
                         <StackPanel IsEnabled="{Binding CanEdit}">
                             <TextBlock Text="الاسم الكامل" FontWeight="Bold"
-                                       Foreground="#0F2942" Margin="0,8,0,3"/>
+                                       Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                             <TextBox Text="{Binding FormName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Height="35" Padding="8,4"
                                      AutomationProperties.Name="اسم الفرد الكامل"/>
                             <TextBlock Text="الرقم (ع) — أربعة أرقام على الأقل"
-                                       FontWeight="Bold" Foreground="#0F2942" Margin="0,8,0,3"/>
+                                       FontWeight="Bold" Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                             <TextBox Text="{Binding FormNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Height="35" Padding="8,4"
                                      FlowDirection="LeftToRight"
                                      AutomationProperties.Name="الرقم العسكري الثابت"/>
                             <StackPanel Visibility="{Binding IsCreate, Converter={StaticResource VisibleWhenTrue}}">
                                 <TextBlock Text="الموقع عند الإضافة" FontWeight="Bold"
-                                           Foreground="#0F2942" Margin="0,8,0,3"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                                 <ComboBox ItemsSource="{Binding SiteOptions}"
                                           DisplayMemberPath="Name" SelectedValuePath="SiteId"
                                           SelectedValue="{Binding FormSiteId, Mode=TwoWay}"
@@ -63,7 +63,7 @@
                             </StackPanel>
                             <StackPanel Visibility="{Binding IsEdit, Converter={StaticResource VisibleWhenTrue}}">
                                 <TextBlock Text="سبب تصحيح الاسم أو الرقم"
-                                           FontWeight="Bold" Foreground="#0F2942" Margin="0,8,0,3"/>
+                                           FontWeight="Bold" Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                                 <TextBox Text="{Binding FormReason, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          Height="55" Padding="8,4" TextWrapping="Wrap"
                                          AcceptsReturn="True"
@@ -74,31 +74,31 @@
                                 Style="{StaticResource MutationButton}"
                                 Margin="0,12,0,0" Command="{Binding PreviewCommand}"
                                 AutomationProperties.Name="معاينة دون تعديل بيانات الفرد"/>
-                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
+                        <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                                 BorderThickness="1" CornerRadius="6"
                                 Padding="12" Margin="0,8,0,8"
                                 Visibility="{Binding HasPreview, Converter={StaticResource VisibleWhenTrue}}">
                             <StackPanel>
                                 <TextBlock Text="مراجعة النتيجة المعتمدة" FontWeight="Bold"
-                                           Foreground="#0F2942" Margin="0,0,0,6"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,0,0,6"/>
                                 <TextBlock Text="الاسم السابق:" FontWeight="SemiBold"
                                            Visibility="{Binding IsEdit, Converter={StaticResource VisibleWhenTrue}}"/>
-                                <TextBlock Text="{Binding Preview.OldName}" Foreground="#475569"/>
+                                <TextBlock Text="{Binding Preview.OldName}" Foreground="{DynamicResource NativeMuted}"/>
                                 <TextBlock Text="الرقم (ع) السابق:"
                                            Visibility="{Binding IsEdit, Converter={StaticResource VisibleWhenTrue}}"/>
-                                <TextBlock Text="{Binding Preview.OldNumber}" Foreground="#475569"/>
+                                <TextBlock Text="{Binding Preview.OldNumber}" Foreground="{DynamicResource NativeMuted}"/>
                                 <TextBlock Text="الاسم الجديد:" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding Preview.Draft.Name}" Foreground="#0F2942"/>
+                                <TextBlock Text="{Binding Preview.Draft.Name}" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="الرقم (ع) المعتمد:" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding Preview.CanonicalNumber}"
                                            FlowDirection="LeftToRight" HorizontalAlignment="Right"
-                                           Foreground="#0F2942"/>
+                                           Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="تاريخ السريان:" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding Preview.EffectiveLocalDate}"
                                            FlowDirection="LeftToRight" HorizontalAlignment="Right"
-                                           Foreground="#0F2942"/>
+                                           Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="{Binding ConfirmationNote}"
-                                           TextWrapping="Wrap" Foreground="#475569"
+                                           TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"
                                            Margin="0,8,0,2"/>
                             </StackPanel>
                         </Border>
@@ -106,12 +106,12 @@
                                 Style="{StaticResource MutationButton}"
                                 Command="{Binding ConfirmCommand}"
                                 AutomationProperties.Name="تأكيد عملية إضافة أو تعديل الفرد بعد المعاينة"/>
-                        <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                        <TextBlock Text="{Binding CompletionNote}" Foreground="{DynamicResource NativeAccentText}"
                                    FontWeight="Bold" TextWrapping="Wrap"
                                    Margin="0,8,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="تحذير: في حال انقطاع نتيجة الحفظ، راجع سجل الأفراد والعمليات. لن تُعاد العملية تلقائيا."
-                                   Foreground="#64748B" FontSize="12"
+                                   Foreground="{DynamicResource NativeSecondary}" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,12,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

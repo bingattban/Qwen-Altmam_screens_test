@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BulkVisible"/>
-        <Style x:Key="BulkButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="BulkButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -16,7 +16,7 @@
     </UserControl.Resources>
     <Grid Background="#CF0F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource BulkVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="16" Width="870" MaxHeight="730"
                 Margin="12" HorizontalAlignment="Center" VerticalAlignment="Center">
             <DockPanel LastChildFill="True">
@@ -26,28 +26,28 @@
                             Style="{StaticResource BulkButton}"/>
                     <TextBlock Text="النقل الجماعي الداخلي — مراجعة أفراد الصفحة الحالية"
                                FontSize="18" FontWeight="Bold"
-                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource NativeText}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="حدد الأفراد صراحة بعلامة ✓ من هذه الصفحة الحالية فقط (1–100 فرد). لا تُنقل بقية المواقع أو الصفحات تلقائيا. يُراجع النظام كل معرف فرد وانتسابه، وتعتمد الحركة مرة واحدة دون تغيير التحضير السابق."
-                                   Foreground="#475569" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                   Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="الموقع المصدر: " FontWeight="Bold" Foreground="#0F2942"/>
-                            <TextBlock Text="{Binding SourceSiteName}" Foreground="#0F2942"/>
-                            <TextBlock Text=" — المعرف: " Foreground="#64748B"/>
-                            <TextBlock Text="{Binding SourceSiteId}" Foreground="#475569"/>
+                            <TextBlock Text="الموقع المصدر: " FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
+                            <TextBlock Text="{Binding SourceSiteName}" Foreground="{DynamicResource NativeText}"/>
+                            <TextBlock Text=" — المعرف: " Foreground="{DynamicResource NativeSecondary}"/>
+                            <TextBlock Text="{Binding SourceSiteId}" Foreground="{DynamicResource NativeMuted}"/>
                         </StackPanel>
                         <TextBlock Text="الأفراد الذين اختارهم المشرف المصرح لهم"
-                                   FontWeight="Bold" Foreground="#0F2942" Margin="0,2,0,5"/>
+                                   FontWeight="Bold" Foreground="{DynamicResource NativeText}" Margin="0,2,0,5"/>
                         <DataGrid ItemsSource="{Binding Options}" Height="245"
                                   AutoGenerateColumns="False" IsReadOnly="False"
                                   IsEnabled="{Binding CanEdit}"
                                   SelectionMode="Single" SelectionUnit="FullRow"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" RowHeight="32"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="اختر الأفراد الذين تريد نقلهم من الصفحة الحالية فقط">
                             <DataGrid.Columns>
                                 <DataGridCheckBoxColumn Header="اختر" Width="65"
@@ -65,9 +65,9 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <TextBlock Text="{Binding SelectedCount, StringFormat='عدد الأفراد المحددين: {0}'}"
-                                   FontWeight="Bold" Foreground="#0D9488" Margin="0,7,0,7"/>
+                                   FontWeight="Bold" Foreground="{DynamicResource NativeAccentText}" Margin="0,7,0,7"/>
                         <TextBlock Text="الموقع الهدف النشط (يجب أن يختلف عن المصدر)"
-                                   FontWeight="Bold" Foreground="#0F2942"/>
+                                   FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
                         <ComboBox ItemsSource="{Binding SiteOptions}"
                                   DisplayMemberPath="Name" SelectedValuePath="SiteId"
                                   SelectedValue="{Binding DestinationSiteId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -80,18 +80,18 @@
                                 Style="{StaticResource BulkButton}"
                                 Command="{Binding PreviewCommand}"
                                 AutomationProperties.Name="المعاينة الأصلية للمعرفات المختارة دون حفظ"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    TextWrapping="Wrap" FontWeight="SemiBold"
                                    AutomationProperties.LiveSetting="Polite"/>
-                        <Border Background="#F8FAFC" BorderBrush="#CBD5E1"
+                        <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeBorder}"
                                 BorderThickness="1" CornerRadius="6" Padding="12"
                                 Margin="0,8,0,8"
                                 Visibility="{Binding HasPreview, Converter={StaticResource BulkVisible}}">
                             <StackPanel>
                                 <TextBlock Text="نتيجة معاينة خدمة SQLCipher الأصلية"
-                                           Foreground="#0F2942" FontWeight="Bold"/>
+                                           Foreground="{DynamicResource NativeText}" FontWeight="Bold"/>
                                 <TextBlock Text="{Binding ReviewMessage}"
-                                           Foreground="#334155" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource NativeBodyText}" TextWrapping="Wrap"
                                            Margin="0,8,0,8"/>
                                 <ItemsControl ItemsSource="{Binding Preview.Persons}">
                                     <ItemsControl.ItemTemplate>
@@ -101,7 +101,7 @@
                                                 <TextBlock Text=" — "/>
                                                 <TextBlock Text="{Binding ServiceNumberA}"/>
                                                 <TextBlock Text=" — "/>
-                                                <TextBlock Text="{Binding PersonId}" Foreground="#64748B"/>
+                                                <TextBlock Text="{Binding PersonId}" Foreground="{DynamicResource NativeSecondary}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -120,11 +120,11 @@
                                 Style="{StaticResource BulkButton}"
                                 AutomationProperties.Name="اعتماد معاملة نقل داخلي جماعي واحدة"/>
                         <TextBlock Text="{Binding CompletionMessage}"
-                                   Foreground="#0D9488" FontWeight="Bold"
+                                   Foreground="{DynamicResource NativeAccentText}" FontWeight="Bold"
                                    TextWrapping="Wrap" Margin="0,8,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="في حال تغير موقع أي فرد أو سبق نقله اليوم، تُرفض الدفعة كاملة. إذا فقدنا رد الحفظ افحص أرشيف التنقلات وسجل العمليات قبل أي إجراء؛ لا إعادة إرسال تلقائية."
-                                   Foreground="#64748B" FontSize="12"
+                                   Foreground="{DynamicResource NativeSecondary}" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

@@ -59,6 +59,9 @@ internal static class NativeRestoreConfirmationDialog
             Foreground = System.Windows.Media.Brushes.DarkRed,
             Margin = new Thickness(0, 0, 0, 10)
         };
+        // Native pilot supplies palette resources; the original host retains its default.
+        if(owner.TryFindResource("NativeDangerText") is System.Windows.Media.Brush danger)
+            error.Foreground=danger;
         layout.Children.Add(error);
         var actions = new StackPanel
         {

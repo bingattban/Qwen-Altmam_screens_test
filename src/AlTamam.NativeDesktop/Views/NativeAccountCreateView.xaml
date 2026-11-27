@@ -7,9 +7,9 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="8">
-            <TextBlock Text="إنشاء حساب جديد" FontSize="19" FontWeight="Bold" Foreground="#123752"/>
+            <TextBlock Text="إنشاء حساب جديد" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
             <TextBlock Text="اختر فردا نشطا من كشف القوة. لا يمكن إنشاء حساب الإدارة العامة من هنا."
-                       TextWrapping="Wrap" Foreground="#475569" Margin="0,5,0,10"/>
+                       TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,10"/>
             <StackPanel IsEnabled="{Binding CanEdit}">
                 <TextBlock Text="البحث عن فرد بالاسم أو الرقم (ع)" FontWeight="SemiBold"/>
                 <DockPanel Margin="0,4,0,8">
@@ -31,7 +31,7 @@
                 <Button Content="معاينة بيانات الحساب" Command="{Binding PreviewCommand}" Padding="12,6"
                         HorizontalAlignment="Right" Margin="0,4,0,8"/>
             </StackPanel>
-            <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6"
+            <Border Background="{DynamicResource NativeCanvas}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6"
                     Padding="10" Visibility="{Binding HasPreview, Converter={StaticResource ShowIfTrue}}"
                     IsVisibleChanged="OnPreviewVisibilityChanged">
                 <StackPanel>
@@ -55,8 +55,8 @@
                 </StackPanel>
             </Border>
             <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource ShowIfTrue}}" Margin="0,5"/>
-            <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap" Margin="0,5"/>
-            <TextBlock Text="{Binding CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap" Margin="0,5"/>
+            <TextBlock Text="{Binding CompletionMessage}" Foreground="{DynamicResource NativeSuccessText}" FontWeight="Bold" TextWrapping="Wrap"/>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

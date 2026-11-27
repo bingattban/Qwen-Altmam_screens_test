@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="TransferVisible"/>
-        <Style x:Key="TransferButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="TransferButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -16,14 +16,14 @@
     </UserControl.Resources>
     <Grid Visibility="{Binding IsOpen, Converter={StaticResource TransferVisible}}"
           Background="#B80F172A">
-        <Border Background="#FFFFFF" BorderBrush="#CBD5E1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}"
                 BorderThickness="1" CornerRadius="10" Padding="18"
                 Width="585" MaxHeight="610"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
             <DockPanel LastChildFill="True">
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                     <TextBlock Text="{Binding Header}" FontSize="19"
-                               FontWeight="Bold" Foreground="#0F2942"
+                               FontWeight="Bold" Foreground="{DynamicResource NativeText}"
                                VerticalAlignment="Center" DockPanel.Dock="Right"/>
                     <Button Content="إغلاق" Command="{Binding CloseCommand}"
                             Style="{StaticResource TransferButton}"
@@ -33,11 +33,11 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="المصدر: الفرد المحدد من كشف موقع محدد. لا يمكن النقل من عرض جميع المواقع."
-                                   Foreground="#475569" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"
                                    Margin="0,0,0,8"/>
                         <ProgressBar Height="5" IsIndeterminate="True"
                                      Visibility="{Binding IsBusy, Converter={StaticResource TransferVisible}}"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    FontWeight="SemiBold" TextWrapping="Wrap"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <Grid Margin="0,6,0,4">
@@ -47,24 +47,24 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="الفرد" FontWeight="Bold"
-                                           Foreground="#64748B"/>
+                                           Foreground="{DynamicResource NativeSecondary}"/>
                                 <TextBlock Text="{Binding SelectedPersonName}"
-                                           Foreground="#0F2942" FontWeight="SemiBold"/>
+                                           Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding SelectedPersonNumber}"
-                                           Foreground="#475569" FlowDirection="LeftToRight"
+                                           Foreground="{DynamicResource NativeMuted}" FlowDirection="LeftToRight"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="الموقع المصدر" FontWeight="Bold"
-                                           Foreground="#64748B"/>
+                                           Foreground="{DynamicResource NativeSecondary}"/>
                                 <TextBlock Text="{Binding SourceSiteName}"
-                                           Foreground="#0F2942" FontWeight="SemiBold"/>
+                                           Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                             </StackPanel>
                         </Grid>
                         <StackPanel IsEnabled="{Binding CanEdit}">
                             <StackPanel Visibility="{Binding IsInternal, Converter={StaticResource TransferVisible}}">
                                 <TextBlock Text="الموقع المنقول إليه" FontWeight="Bold"
-                                           Foreground="#0F2942" Margin="0,8,0,3"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                                 <ComboBox Height="35" MinWidth="210" HorizontalAlignment="Right"
                                           ItemsSource="{Binding SiteOptions}"
                                           DisplayMemberPath="Name" SelectedValuePath="SiteId"
@@ -73,7 +73,7 @@
                             </StackPanel>
                             <StackPanel Visibility="{Binding IsExternal, Converter={StaticResource TransferVisible}}">
                                 <TextBlock Text="اسم الجهة الخارجية" FontWeight="Bold"
-                                           Foreground="#0F2942" Margin="0,8,0,3"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,8,0,3"/>
                                 <TextBox Height="35" Padding="8,4"
                                          Text="{Binding FormExternalName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          AutomationProperties.Name="جهة النقل الخارجية"/>
@@ -83,36 +83,36 @@
                                 Style="{StaticResource TransferButton}"
                                 Command="{Binding PreviewCommand}"
                                 AutomationProperties.Name="التحقق من حركة النقل الأصلية دون حفظ"/>
-                        <Border BorderBrush="#E2E8F0" BorderThickness="1"
-                                Background="#F8FAFC" CornerRadius="6"
+                        <Border BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1"
+                                Background="{DynamicResource NativeSubtle}" CornerRadius="6"
                                 Margin="0,8" Padding="12"
                                 Visibility="{Binding HasPreview, Converter={StaticResource TransferVisible}}">
                             <StackPanel>
                                 <TextBlock Text="نتيجة المعاينة المعتمدة" FontWeight="Bold"
-                                           Foreground="#0F2942" Margin="0,0,0,8"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,0,0,8"/>
                                 <TextBlock Text="{Binding ReviewMessage}"
-                                           TextWrapping="Wrap" Foreground="#475569"/>
+                                           TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                                 <TextBlock Text="الجهة الهدف" FontWeight="Bold"
-                                           Foreground="#64748B" Margin="0,8,0,3"/>
+                                           Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
                                 <TextBlock Text="{Binding Preview.DestinationName}"
-                                           Foreground="#0F2942"/>
+                                           Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="تاريخ الحركة" FontWeight="Bold"
-                                           Foreground="#64748B" Margin="0,8,0,3"/>
+                                           Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
                                 <TextBlock Text="{Binding Preview.BusinessDate}"
                                            FlowDirection="LeftToRight"
-                                           HorizontalAlignment="Right" Foreground="#0F2942"/>
+                                           HorizontalAlignment="Right" Foreground="{DynamicResource NativeText}"/>
                             </StackPanel>
                         </Border>
                         <Button Content="تأكيد واعتماد النقل"
                                 Style="{StaticResource TransferButton}"
                                 Command="{Binding ConfirmCommand}"
                                 AutomationProperties.Name="تأكيد حفظ حركة النقل بعد المعاينة"/>
-                        <TextBlock Text="{Binding CompletionMessage}" Foreground="#0D9488"
+                        <TextBlock Text="{Binding CompletionMessage}" Foreground="{DynamicResource NativeAccentText}"
                                    FontWeight="Bold" TextWrapping="Wrap"
                                    AutomationProperties.LiveSetting="Polite"
                                    Margin="0,8,0,0"/>
                         <TextBlock Text="تنبيه: النقل يتم لتاريخ اليوم فقط، ويُرفض تكرار الحركة لنفس الفرد خلال اليوم. عند فقدان نتيجة الاعتماد، تحقق من سجل النقل والعمليات قبل أي محاولة أخرى."
-                                   Foreground="#64748B" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeSecondary}" FontSize="12" TextWrapping="Wrap"
                                    Margin="0,12,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

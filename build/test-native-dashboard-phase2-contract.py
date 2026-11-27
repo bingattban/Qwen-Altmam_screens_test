@@ -8,10 +8,14 @@ DailyMonthlyReadService, not in a new parallel implementation.
 """
 import json
 from pathlib import Path
+from native_theme_contract import check_visual_resources
 from xml.etree import ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
 PATHS={
+    "theme_light":"src/AlTamam.NativeDesktop/Themes/Light.xaml",
+    "theme_dark":"src/AlTamam.NativeDesktop/Themes/Dark.xaml",
+    "theme_app":"src/AlTamam.NativeDesktop/App.xaml",
  "view":"src/AlTamam.NativeDesktop/Views/NativeDashboardView.xaml",
  "view_code":"src/AlTamam.NativeDesktop/Views/NativeDashboardView.xaml.cs",
  "templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
@@ -36,8 +40,13 @@ def failures(data):
     for path in ("view","templates"):
         try: ET.fromstring(data[path])
         except ET.ParseError as ex: problems.append(f"Invalid {path} XAML: {ex}")
-    for color in ("#0F2942","#0D9488","#FFFFFF","#F8FAFC","#CBD5E1"):
-        require("view",color)
+    problems.extend(check_visual_resources(data["view"],data["theme_light"],data["theme_dark"],data["theme_app"],(
+        ("Foreground","NativeText","#0F2942"),
+        ("Background","NativeAccentFill","#0F766E"),
+        ("Background","NativeSurface","#FFFFFF"),
+        ("Background","NativeSubtle","#F8FAFC"),
+        ("BorderBrush","NativeBorder","#CBD5E1"),
+    )))
     for phrase in ("التمام اليومي","جميع المواقع","كشف الأفراد","الرقم (ع)",
                    "الاسم","الموقع","الحالة","مسح البحث","تحديث البيانات","السابق","التالي"):
         # 'جميع المواقع' is in strongly typed model rather than XAML.
@@ -86,6 +95,10 @@ if __name__=="__main__":
     problems=failures(DATA)
     if problems: raise SystemExit("NATIVE WPF DASHBOARD PHASE 2 FAIL:\n"+"\n".join(problems))
     for key,token in (
+        ("view","{DynamicResource NativeAccentFill}"),
+        ("theme_light",'x:Key="NativeAccentFill" Color="#0F766E"'),
+        ("theme_dark",'x:Key="NativeAccentFill"'),
+        ("theme_app",'Source="Themes/Light.xaml"'),
         ("reader","DailyRosterAsync(rosterQuery"),
         ("reader","ListSitesAsync(includeInactive: false"),
         ("window","_viewModel.AttachDashboardReader(_backend.CreateDashboardReader());"),

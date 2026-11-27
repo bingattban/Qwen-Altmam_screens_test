@@ -3,12 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:AlTamam.NativePresentation;assembly=AlTamam.NativePresentation"
              xmlns:views="clr-namespace:AlTamam.NativeDesktop.Views"
-             FlowDirection="RightToLeft" Background="#FFFFFF" FontFamily="Segoe UI">
+             FlowDirection="RightToLeft" Background="{DynamicResource NativeSurface}" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleIfTrue"/>
-        <Style x:Key="DashboardButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Style x:Key="DashboardButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeOnStrong}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="MinHeight" Value="39"/>
@@ -17,14 +17,14 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style x:Key="DashboardNeutral" TargetType="Button" BasedOn="{StaticResource DashboardButton}">
-            <Setter Property="Background" Value="#F8FAFC"/>
-            <Setter Property="Foreground" Value="#0F2942"/>
+            <Setter Property="Background" Value="{DynamicResource NativeSubtle}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeText}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NativeBorder}"/>
         </Style>
-        <Style x:Key="CounterCard" TargetType="Button">
-            <Setter Property="Background" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        <Style x:Key="CounterCard" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeSurface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NativeBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="4"/>
@@ -33,8 +33,8 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="#E0F2FE"/>
-                    <Setter Property="BorderBrush" Value="#0D9488"/>
+                    <Setter Property="Background" Value="{DynamicResource NativeInfoSurface}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource NativeAccentBorder}"/>
                     <Setter Property="BorderThickness" Value="2"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -45,25 +45,25 @@
         <StackPanel Margin="1">
             <!-- Same functional-header + white cards as current Dashboard.
                  This is an actual native SQLCipher view, not placeholder rows. -->
-            <Border CornerRadius="10" Background="#F8FAFC"
-                    BorderBrush="#E2E8F0" BorderThickness="1" Padding="16,12"
+            <Border CornerRadius="10" Background="{DynamicResource NativeSubtle}"
+                    BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1" Padding="16,12"
                     Margin="0,0,0,12">
                 <DockPanel>
                     <TextBlock Text="التمام اليومي" FontSize="24" FontWeight="Bold"
-                               Foreground="#0F2942" DockPanel.Dock="Right"/>
-                    <TextBlock Text="{Binding BusinessDateLabel}" Foreground="#475569"
+                               Foreground="{DynamicResource NativeText}" DockPanel.Dock="Right"/>
+                    <TextBlock Text="{Binding BusinessDateLabel}" Foreground="{DynamicResource NativeMuted}"
                                FlowDirection="LeftToRight" FontWeight="SemiBold"
                                VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 </DockPanel>
             </Border>
 
             <!-- Existing toolbar semantics: site, name/number search and refresh. -->
-            <Border CornerRadius="10" BorderBrush="#E2E8F0" BorderThickness="1"
-                    Padding="12" Margin="0,0,0,12" Background="#FFFFFF">
+            <Border CornerRadius="10" BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1"
+                    Padding="12" Margin="0,0,0,12" Background="{DynamicResource NativeSurface}">
                 <StackPanel>
                     <WrapPanel VerticalAlignment="Center">
                         <StackPanel Margin="4,2,8,4" MinWidth="165">
-                            <TextBlock Text="الموقع" Foreground="#0F2942"
+                            <TextBlock Text="الموقع" Foreground="{DynamicResource NativeText}"
                                        FontWeight="SemiBold" Margin="0,0,0,5"/>
                             <ComboBox x:Name="SiteFilter" Height="38" MinWidth="166"
                                       ItemsSource="{Binding SiteOptions}"
@@ -73,7 +73,7 @@
                                       AutomationProperties.Name="فلتر المواقع"/>
                         </StackPanel>
                         <StackPanel Margin="4,2,8,4" MinWidth="220">
-                            <TextBlock Text="بحث بالاسم أو الرقم (ع)" Foreground="#0F2942"
+                            <TextBlock Text="بحث بالاسم أو الرقم (ع)" Foreground="{DynamicResource NativeText}"
                                        FontWeight="SemiBold" Margin="0,0,0,5"/>
                             <TextBox x:Name="PersonSearch" Height="38" MaxLength="101"
                                      Padding="9,5" Text="{Binding SearchDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -98,23 +98,23 @@
 
             <!-- Read-only clock from the canonical SQLCipher due-time policy.
                  This 1-second UI tick NEVER creates or commits attendance. -->
-            <Border Background="#E0F2FE" BorderBrush="#BAE6FD"
+            <Border Background="{DynamicResource NativeInfoSurface}" BorderBrush="{DynamicResource NativeInfoBorder}"
                     BorderThickness="1" CornerRadius="7"
                     Padding="12,8" Margin="4,0,4,9">
-                <TextBlock Text="{Binding CountdownLabel}" Foreground="#0F2942"
+                <TextBlock Text="{Binding CountdownLabel}" Foreground="{DynamicResource NativeText}"
                            AutomationProperties.LiveSetting="Polite"
                            FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
             </Border>
-            <TextBlock Text="{Binding AutoPolicyError}" Foreground="#BE123C"
+            <TextBlock Text="{Binding AutoPolicyError}" Foreground="{DynamicResource NativeDangerText}"
                        TextWrapping="Wrap" FontSize="12" Margin="6,0,6,4"/>
-            <TextBlock Text="{Binding StatusMessage}" Foreground="#475569"
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource NativeMuted}"
                        FontSize="13" TextWrapping="Wrap" Margin="7,0,6,7"/>
-            <TextBlock Text="{Binding LoadError}" Foreground="#BE123C"
+            <TextBlock Text="{Binding LoadError}" Foreground="{DynamicResource NativeDangerText}"
                        FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" Margin="7,0,6,9"/>
             <ProgressBar Height="4" IsIndeterminate="True"
                          Visibility="{Binding IsLoading, Converter={StaticResource VisibleIfTrue}}"
-                         Foreground="#0D9488" Margin="4,0,4,7"/>
+                         Foreground="{DynamicResource NativeAccentText}" Margin="4,0,4,7"/>
 
             <ItemsControl ItemsSource="{Binding Counters}" Margin="0,1,0,14">
                 <ItemsControl.ItemsPanel>
@@ -129,11 +129,11 @@
                             <Border BorderThickness="4,0,0,0" BorderBrush="{Binding Color}"
                                     Padding="15,8" MinWidth="155">
                                 <StackPanel>
-                                    <TextBlock Text="{Binding Label}" Foreground="#475569"
+                                    <TextBlock Text="{Binding Label}" Foreground="{DynamicResource NativeMuted}"
                                                FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Count}" Foreground="#0F2942"
+                                    <TextBlock Text="{Binding Count}" Foreground="{DynamicResource NativeText}"
                                                FontWeight="Bold" FontSize="24" Margin="0,3,0,1"/>
-                                    <TextBlock Text="{Binding Percentage}" Foreground="#0D9488"
+                                    <TextBlock Text="{Binding Percentage}" Foreground="{DynamicResource NativeAccentText}"
                                                FontSize="12" FontWeight="SemiBold"/>
                                 </StackPanel>
                             </Border>
@@ -144,14 +144,14 @@
 
             <!-- SQLCipher QueryDailyRoster, 100 rows max per page. Extra
                  configured roster columns are appended from actual metadata. -->
-            <Border CornerRadius="10" Background="#FFFFFF"
-                    BorderBrush="#CBD5E1" BorderThickness="1" Padding="12">
+            <Border CornerRadius="10" Background="{DynamicResource NativeSurface}"
+                    BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" Padding="12">
                 <StackPanel>
                     <DockPanel Margin="2,0,2,10">
-                        <TextBlock Text="كشف الأفراد" Foreground="#0F2942"
+                        <TextBlock Text="كشف الأفراد" Foreground="{DynamicResource NativeText}"
                                    FontSize="17" FontWeight="Bold" DockPanel.Dock="Right"/>
                         <TextBlock Text="قراءة فقط — لا توجد عمليات تحضير أو تعديل في هذه المرحلة"
-                                   Foreground="#475569" FontSize="12"
+                                   Foreground="{DynamicResource NativeMuted}" FontSize="12"
                                    VerticalAlignment="Center" HorizontalAlignment="Left"
                                    TextWrapping="Wrap"/>
                     </DockPanel>
@@ -163,8 +163,8 @@
                               SelectionMode="Single" HeadersVisibility="Column"
                               GridLinesVisibility="Horizontal" RowHeight="37"
                               ColumnHeaderHeight="39" Height="335"
-                              AlternatingRowBackground="#F8FAFC"
-                              BorderBrush="#E2E8F0" BorderThickness="1">
+                              AlternatingRowBackground="{DynamicResource NativeSubtle}"
+                              BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="65"/>
                             <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding ServiceNumberA}" Width="115"/>
@@ -173,10 +173,10 @@
                             <DataGridTemplateColumn Header="الحالة" Width="1.5*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Border Background="#F1F5F9" CornerRadius="8"
+                                        <Border Background="{DynamicResource NativeCanvas}" CornerRadius="8"
                                                 Padding="8,4" Margin="4,2"
-                                                BorderBrush="#E2E8F0" BorderThickness="1">
-                                            <TextBlock Text="{Binding StatusName}" Foreground="#0F2942"
+                                                BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1">
+                                            <TextBlock Text="{Binding StatusName}" Foreground="{DynamicResource NativeText}"
                                                        TextWrapping="Wrap" FontSize="12"/>
                                         </Border>
                                     </DataTemplate>
@@ -185,7 +185,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <DockPanel Margin="0,13,0,1">
-                        <TextBlock Text="{Binding PageLabel}" Foreground="#475569"
+                        <TextBlock Text="{Binding PageLabel}" Foreground="{DynamicResource NativeMuted}"
                                    VerticalAlignment="Center" DockPanel.Dock="Right"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                             <Button Content="السابق" Command="{Binding PreviousPageCommand}"

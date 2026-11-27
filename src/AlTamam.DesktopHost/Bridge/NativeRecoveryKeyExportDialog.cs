@@ -57,6 +57,9 @@ internal static class NativeRecoveryKeyExportDialog
 
         var error=new TextBlock{Foreground=Brushes.DarkRed,
             TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
+        // Native pilot supplies palette resources; the original host retains its default.
+        if(owner.TryFindResource("NativeDangerText") is System.Windows.Media.Brush danger)
+            error.Foreground=danger;
         layout.Children.Add(error);
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,
             HorizontalAlignment=HorizontalAlignment.Left};

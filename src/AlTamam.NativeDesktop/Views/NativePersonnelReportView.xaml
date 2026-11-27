@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
-        <Style x:Key="ReportAction" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="ReportAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="12,7"/>
             <Setter Property="Margin" Value="4"/>
@@ -13,7 +13,7 @@
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
         <Style x:Key="ReportSection" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#0F2942"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeText}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="17"/>
             <Setter Property="Margin" Value="0,13,0,6"/>
@@ -21,7 +21,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource VisibleWhenTrue}}">
-        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="14" Margin="12" MaxWidth="1140"
                 HorizontalAlignment="Center" VerticalAlignment="Stretch">
             <Grid>
@@ -35,15 +35,15 @@
                             Command="{Binding CloseCommand}"
                             Style="{StaticResource ReportAction}"/>
                     <TextBlock Text="التقرير التاريخي الموحد — تقرير فرد (قراءة فقط)"
-                               FontSize="20" Foreground="#0F2942"
+                               FontSize="20" Foreground="{DynamicResource NativeText}"
                                FontWeight="Bold" VerticalAlignment="Center"
                                TextWrapping="Wrap"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
                     <TextBlock Text="يعرض سجلات الفرد الفعلية عبر المعرف الثابت؛ التاريخ والفترة المعروضة لا يغيران السجلات. يمكن معاينة التقرير المعتمد وتصديره إلى Excel دون تعديل السجلات."
-                               TextWrapping="Wrap" Foreground="#475569"/>
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                     <TextBlock Text="تصفية الفترة الزمنية (شاملة يوم البداية والنهاية). اترك الحقل فارغا لعرض السجل دون حد."
-                               TextWrapping="Wrap" Foreground="#475569" Margin="0,8,0,3"/>
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,8,0,3"/>
                     <WrapPanel Orientation="Horizontal" Margin="0,2,0,4"
                                AutomationProperties.Name="حدود الفترة التاريخية الفردية">
                         <TextBlock Text="من تاريخ" VerticalAlignment="Center" Margin="8,0,4,0"/>
@@ -62,10 +62,10 @@
                                 Style="{StaticResource ReportAction}"/>
                     </WrapPanel>
                     <TextBlock Text="{Binding AppliedDateRangeLabel}" FontWeight="SemiBold"
-                               Foreground="#0F2942" Margin="0,0,0,5"
+                               Foreground="{DynamicResource NativeText}" Margin="0,0,0,5"
                                AutomationProperties.Name="الفترة المطبقة على النتائج التاريخية"/>
                     <TextBlock Text="تنبيه: تصفية الفترة تشمل التحضير والتنقلات والتصحيحات وسجل العمليات؛ يبقى تاريخ تغيير هوية الفرد وانتسابه للمواقع كاملا للمراجعة."
-                               TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}" Margin="0,0,0,5"/>
                     <WrapPanel Orientation="Horizontal" Margin="0,4,0,3"
                                AutomationProperties.Name="مرشح نوع الحركة التاريخية للفرد">
                         <TextBlock Text="نوع الحركة" VerticalAlignment="Center" Margin="8,0,4,0"/>
@@ -80,11 +80,11 @@
                                 Style="{StaticResource ReportAction}"/>
                     </WrapPanel>
                     <TextBlock Text="{Binding AppliedMovementTypeLabel}" FontWeight="SemiBold"
-                               Foreground="#0F2942" Margin="0,0,0,3"
+                               Foreground="{DynamicResource NativeText}" Margin="0,0,0,3"
                                AutomationProperties.Name="نوع الحركة المطبق حاليا"/>
                     <TextBlock Text="مرشح نوع الحركة يغير سجل الحركات فقط؛ لا يغير التحضير أو الإجماليات الشهرية أو سجل الهوية والمواقع."
-                               TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
-                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#BE123C"
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}" Margin="0,0,0,5"/>
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource NativeDangerText}"
                                FontWeight="SemiBold" TextWrapping="Wrap"
                                AutomationProperties.LiveSetting="Polite"/>
                     <ProgressBar Height="4" IsIndeterminate="True"
@@ -97,22 +97,22 @@
                                 Command="{Binding Excel.OpenPreviewCommand}"
                                 Style="{StaticResource ReportAction}" HorizontalAlignment="Right"
                                 AutomationProperties.Name="معاينة تصدير التقرير الفردي إلى Excel"/>
-                        <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1"
+                        <Border Background="{DynamicResource NativeCanvas}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                                 CornerRadius="6" Padding="12" Margin="0,4,0,8"
                                 DataContext="{Binding Excel}"
                                 Visibility="{Binding IsOpen, Converter={StaticResource VisibleWhenTrue}}">
                             <StackPanel>
                                 <TextBlock Text="معاينة تصدير التقرير الفردي" FontSize="17"
-                                           FontWeight="Bold" Foreground="#0F2942"/>
+                                           FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="يشمل الملف تسع أوراق من السجلات الكاملة، وليس الصفحة الظاهرة فقط. راجع النطاق والمجلد ثم أكد الحفظ. الموافقة صالحة لدقيقتين."
                                            TextWrapping="Wrap" Margin="0,6"/>
                                 <TextBlock Text="{Binding Preview.Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding Preview.ServiceNumberA}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
                                 <TextBlock Text="{Binding PreviewScope}" Margin="0,6"
-                                           TextWrapping="Wrap" Foreground="#0F2942"
+                                           TextWrapping="Wrap" Foreground="{DynamicResource NativeText}"
                                            AutomationProperties.Name="نطاق تصدير التقرير المعتمد"/>
                                 <TextBlock Text="الفترة تخص التحضير والحركات والتصحيحات والعمليات؛ يبقى تاريخ الهوية والمواقع كاملا. نوع الحركة يخص الحركات فقط."
-                                           TextWrapping="Wrap" Foreground="#475569" Margin="0,0,0,4"/>
+                                           TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,0,0,4"/>
                                 <WrapPanel Margin="0,4">
                                     <TextBlock Text="التحضير: "/><TextBlock Text="{Binding Preview.AttendanceTotal}" Margin="0,0,12,0"/>
                                     <TextBlock Text="الهوية: "/><TextBlock Text="{Binding Preview.IdentityTotal}" Margin="0,0,12,0"/>
@@ -126,9 +126,9 @@
                                          TextWrapping="Wrap" FlowDirection="LeftToRight"/>
                                 <ProgressBar Height="4" IsIndeterminate="True" Margin="0,6"
                                              Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhenTrue}}"/>
-                                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"
                                            AutomationProperties.LiveSetting="Polite"/>
-                                <TextBlock Text="{Binding CompletionMessage}" Foreground="#047857" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding CompletionMessage}" Foreground="{DynamicResource NativeSuccessText}" TextWrapping="Wrap"
                                            AutomationProperties.LiveSetting="Polite"/>
                                 <TextBox Text="{Binding Receipt.FilePath, Mode=OneWay}" IsReadOnly="True"
                                          TextWrapping="Wrap" FlowDirection="LeftToRight" Margin="0,4"/>
@@ -140,19 +140,19 @@
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
-                        <Border Background="#F1F5F9" Padding="10" CornerRadius="6"
-                                BorderBrush="#E2E8F0" BorderThickness="1">
+                        <Border Background="{DynamicResource NativeCanvas}" Padding="10" CornerRadius="6"
+                                BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1">
                             <WrapPanel>
-                                <TextBlock Text="الاسم الحالي: " FontWeight="SemiBold" Foreground="#0F2942"/>
+                                <TextBlock Text="الاسم الحالي: " FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="{Binding Report.Name}" Margin="2,0,16,0"/>
-                                <TextBlock Text="الرقم (ع): " FontWeight="SemiBold" Foreground="#0F2942"/>
+                                <TextBlock Text="الرقم (ع): " FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="{Binding Report.ServiceNumberA}" Margin="2,0,16,0"/>
-                                <TextBlock Text="أول تسجيل: " FontWeight="SemiBold" Foreground="#0F2942"/>
+                                <TextBlock Text="أول تسجيل: " FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                                 <TextBlock Text="{Binding Report.FirstRecordedDate}"/>
                             </WrapPanel>
                         </Border>
                         <TextBlock Text="مرشحات الموقع والحالة التاريخيين (المعرفات ثابتة حتى عند تغيير الأسماء). تطبق على السجلات الأصلية ولا تنشئ سجلات جديدة."
-                                   TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,3"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,10,0,3"/>
                         <WrapPanel Orientation="Horizontal" Margin="0,2,0,4"
                                    AutomationProperties.Name="مرشحات الموقع والحالة التاريخية">
                             <TextBlock Text="الموقع" VerticalAlignment="Center" Margin="8,0,4,0"/>
@@ -175,14 +175,14 @@
                                     Style="{StaticResource ReportAction}"/>
                         </WrapPanel>
                         <TextBlock Text="{Binding AppliedSiteStatusLabel}"
-                                   Foreground="#0F2942" FontWeight="SemiBold" Margin="0,0,0,4"
+                                   Foreground="{DynamicResource NativeText}" FontWeight="SemiBold" Margin="0,0,0,4"
                                    AutomationProperties.Name="الموقع والحالة المطبقان على السجلات"/>
                         <TextBlock Text="الموقع يقيّد التحضير والحركات والتصحيحات؛ الحالة تقيّد التحضير والتصحيحات فقط. أما سجل الهوية والانتساب للمواقع وسجل التدقيق فيظل كاملا وفق الخدمة الأصلية."
-                                   TextWrapping="Wrap" Foreground="#64748B" Margin="0,0,0,5"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}" Margin="0,0,0,5"/>
                         <TextBlock Text="إجماليات حالات التحضير التاريخية" Style="{StaticResource ReportSection}"/>
                         <DataGrid ItemsSource="{Binding Report.StatusTotals}" AutoGenerateColumns="False"
                                   Height="130" IsReadOnly="True" CanUserAddRows="False"
-                                  CanUserDeleteRows="False" AlternatingRowBackground="#F8FAFC"
+                                  CanUserDeleteRows="False" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="ملخص حالات التحضير المحفوظة تاريخيا">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الحالة التاريخية" Binding="{Binding StatusName}" Width="2*"/>
@@ -200,11 +200,11 @@
                                        Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <TextBlock Text="الاسم والرقم التاريخيان غير الموثقين لا يستبدلان بالقيم الحالية."
-                                   TextWrapping="Wrap" Foreground="#64748B"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}"/>
                         <DataGrid ItemsSource="{Binding Report.Attendance}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل التحضير التاريخي للصفحة المختارة">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="التاريخ" Binding="{Binding Date}" Width="*"/>
@@ -228,7 +228,7 @@
                         <DataGrid ItemsSource="{Binding Report.Movements}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="التنقلات والفصل والعودة المسجلة للصفحة المختارة">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="التاريخ" Binding="{Binding Date}" Width="*"/>
@@ -252,7 +252,7 @@
                         <DataGrid ItemsSource="{Binding Report.Identities}" Height="180"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل هوية الفرد المحفوظة بالمعرف الثابت">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="2*"/>
@@ -273,11 +273,11 @@
                                        Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <TextBlock Text="المواقع حسب فترات انتساب الفرد الفعلية، بما فيها المواقع المسماة تاريخيا."
-                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.Sites}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="مواقع الفرد التاريخية حسب فترات الانتساب">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الموقع وقتها" Binding="{Binding SiteName}" Width="2*"/>
@@ -297,11 +297,11 @@
                                        Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <TextBlock Text="التصحيحات المعتمدة محفوظة بأثر مستقل عن حالة التحضير الحالية ولا يمكن تعديلها من التقرير."
-                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.Revisions}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل تصحيحات حالات التحضير المؤرشف">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="تاريخ التحضير" Binding="{Binding Date}" Width="*"/>
@@ -315,11 +315,11 @@
                         <TextBlock Text="ملخص الحضور الشهري حسب الحالة التاريخية"
                                    Style="{StaticResource ReportSection}"/>
                         <TextBlock Text="إجماليات كاملة من السجلات المعتمدة، وليست إعادة احتساب للأيام الظاهرة في الصفحة."
-                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.MonthlyTotals}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="الإجماليات الشهرية للحالات التاريخية">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الشهر" Binding="{Binding Period}" Width="*"/>
@@ -338,11 +338,11 @@
                                        Style="{StaticResource ReportSection}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <TextBlock Text="سجل العمليات التاريخي للقراءة فقط؛ أسماء المستخدمين والمنفذين محفوظة كما سُجلت وقت العملية."
-                                   Foreground="#64748B" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.Audit}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل عمليات الفرد المحفوظ حسب تاريخ تنفيذ العملية">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="العملية" Binding="{Binding Operation}" Width="*"/>

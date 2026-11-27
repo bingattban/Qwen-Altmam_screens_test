@@ -3,11 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:AlTamam.NativeDesktop.Views"
              FlowDirection="RightToLeft" FontFamily="Segoe UI"
-             Background="#FFFFFF">
+             Background="{DynamicResource NativeSurface}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="PersonnelVisible"/>
-        <Style x:Key="PersonnelButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="PersonnelButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -24,18 +24,18 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0"
+        <Border Grid.Row="0" Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                 BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
             <DockPanel>
-                <TextBlock Text="الإدارة — سجل الأفراد" Foreground="#0F2942"
+                <TextBlock Text="الإدارة — سجل الأفراد" Foreground="{DynamicResource NativeText}"
                            FontSize="22" FontWeight="Bold"/>
             </DockPanel>
         </Border>
-        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0"
+        <Border Grid.Row="1" Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                 BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
             <WrapPanel>
                 <StackPanel Margin="4">
-                    <TextBlock Text="الموقع" FontWeight="SemiBold" Foreground="#0F2942"/>
+                    <TextBlock Text="الموقع" FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                     <ComboBox Width="160" Height="34" Margin="0,4,0,0"
                               ItemsSource="{Binding SiteOptions}"
                               DisplayMemberPath="Name" SelectedValuePath="SiteId"
@@ -44,7 +44,7 @@
                               AutomationProperties.Name="تصفية سجل الأفراد حسب الموقع"/>
                 </StackPanel>
                 <StackPanel Margin="4">
-                    <TextBlock Text="حالة الفرد" FontWeight="SemiBold" Foreground="#0F2942"/>
+                    <TextBlock Text="حالة الفرد" FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                     <ComboBox Width="175" Height="34" Margin="0,4,0,0"
                               ItemsSource="{Binding StatusOptions}"
                               DisplayMemberPath="Label" SelectedValuePath="Value"
@@ -54,7 +54,7 @@
                 </StackPanel>
                 <StackPanel Margin="4">
                     <TextBlock Text="الاسم أو الرقم (ع)" FontWeight="SemiBold"
-                               Foreground="#0F2942"/>
+                               Foreground="{DynamicResource NativeText}"/>
                     <TextBox Width="200" Height="34" Margin="0,4,0,0" Padding="8,4"
                              Text="{Binding SearchDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="بحث سجل الأفراد"/>
@@ -146,11 +146,11 @@
             </WrapPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="4,2,4,8">
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
             <TextBlock Text="{Binding LoadError}" TextWrapping="Wrap"
-                       Foreground="#BE123C" FontWeight="SemiBold"
+                       Foreground="{DynamicResource NativeDangerText}" FontWeight="SemiBold"
                        AutomationProperties.LiveSetting="Polite"/>
-            <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
+            <ProgressBar Height="4" IsIndeterminate="True" Foreground="{DynamicResource NativeAccentText}"
                          Visibility="{Binding IsLoading, Converter={StaticResource PersonnelVisible}}"/>
         </StackPanel>
         <DataGrid x:Name="PersonnelGrid" Grid.Row="3" ItemsSource="{Binding Rows}"
@@ -159,8 +159,8 @@
                   CanUserSortColumns="False" SelectionMode="Single"
                   SelectionUnit="FullRow" HeadersVisibility="Column"
                   RowHeight="35" ColumnHeaderHeight="38" MinHeight="190"
-                  GridLinesVisibility="Horizontal" AlternatingRowBackground="#F8FAFC"
-                  BorderBrush="#CBD5E1" BorderThickness="1"
+                  GridLinesVisibility="Horizontal" AlternatingRowBackground="{DynamicResource NativeSubtle}"
+                  BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="62"/>
@@ -173,7 +173,7 @@
         </DataGrid>
         <DockPanel Grid.Row="4" Margin="0,8,0,0">
             <TextBlock Text="{Binding PageLabel}" DockPanel.Dock="Right"
-                       Foreground="#475569" VerticalAlignment="Center"
+                       Foreground="{DynamicResource NativeMuted}" VerticalAlignment="Center"
                        FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                 <Button Content="السابق" Style="{StaticResource PersonnelButton}"
@@ -186,13 +186,13 @@
              transferring is permitted by this first native admin slice. -->
         <Border Grid.RowSpan="5" Background="#B80F172A" Panel.ZIndex="110"
                 Visibility="{Binding IsProfileOpen, Converter={StaticResource PersonnelVisible}}">
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}"
                     BorderThickness="1" CornerRadius="10" Padding="18"
                     Width="580" MaxHeight="540"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <DockPanel LastChildFill="True">
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                        <TextBlock Text="ملف الفرد — قراءة فقط" Foreground="#0F2942"
+                        <TextBlock Text="ملف الفرد — قراءة فقط" Foreground="{DynamicResource NativeText}"
                                    FontWeight="Bold" FontSize="19" DockPanel.Dock="Right"/>
                         <Button Content="إغلاق" Style="{StaticResource PersonnelButton}"
                                 Command="{Binding CloseProfileCommand}"
@@ -203,29 +203,29 @@
                         <StackPanel>
                             <ProgressBar Height="5" IsIndeterminate="True"
                                          Visibility="{Binding IsProfileLoading, Converter={StaticResource PersonnelVisible}}"/>
-                            <TextBlock Text="{Binding ProfileError}" Foreground="#BE123C"
+                            <TextBlock Text="{Binding ProfileError}" Foreground="{DynamicResource NativeDangerText}"
                                        TextWrapping="Wrap" FontWeight="SemiBold"
                                        AutomationProperties.LiveSetting="Polite"/>
-                            <TextBlock Text="الاسم الحالي" Foreground="#64748B"
+                            <TextBlock Text="الاسم الحالي" Foreground="{DynamicResource NativeSecondary}"
                                        FontWeight="Bold" Margin="0,8,0,2"/>
                             <TextBlock Text="{Binding SelectedProfile.Name}"
-                                       Foreground="#0F2942" FontSize="16" FontWeight="SemiBold"/>
-                            <TextBlock Text="الرقم (ع)" Foreground="#64748B"
+                                       Foreground="{DynamicResource NativeText}" FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="الرقم (ع)" Foreground="{DynamicResource NativeSecondary}"
                                        FontWeight="Bold" Margin="0,8,0,2"/>
                             <TextBlock Text="{Binding SelectedProfile.ServiceNumberA}"
-                                       Foreground="#0F2942"/>
-                            <TextBlock Text="أول تاريخ مسجل" Foreground="#64748B"
+                                       Foreground="{DynamicResource NativeText}"/>
+                            <TextBlock Text="أول تاريخ مسجل" Foreground="{DynamicResource NativeSecondary}"
                                        FontWeight="Bold" Margin="0,8,0,2"/>
                             <TextBlock Text="{Binding SelectedProfile.FirstRecordedLocalDate}"
-                                       Foreground="#0F2942" FlowDirection="LeftToRight"
+                                       Foreground="{DynamicResource NativeText}" FlowDirection="LeftToRight"
                                        HorizontalAlignment="Right"/>
                             <Separator Margin="0,12,0,8"/>
-                            <TextBlock Text="سجل الأسماء والأرقام المحفوظ" Foreground="#0F2942"
+                            <TextBlock Text="سجل الأسماء والأرقام المحفوظ" Foreground="{DynamicResource NativeText}"
                                        FontWeight="Bold" Margin="0,6,0,6"/>
                             <ItemsControl ItemsSource="{Binding SelectedProfile.IdentityHistory}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
+                                        <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                                                 BorderThickness="1" CornerRadius="5"
                                                 Margin="0,3" Padding="8">
                                             <StackPanel>
@@ -242,7 +242,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Margin="0,12,0,0" Foreground="#64748B"
+                            <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource NativeSecondary}"
                                        TextWrapping="Wrap"
                                        Text="إضافة الأفراد وتعديل هوياتهم والتنقلات الفردية تتم عبر المعاينة والتأكيد. الفصل وأرشيف الفصل متاحان عبر الواجهة الأصلية المعتمدة؛ عودة الأفراد المؤرشفين تستلزم اختيار نفس الهوية التاريخية؛ النقل الجماعي الداخلي متاح لأفراد الصفحة الحالية المحددين صراحة بعد المعاينة؛ النقل الجماعي الخارجي يتطلب إقرارا منفصلا بتعليق الحسابات المرتبطة وإلغاء جلساتها."/>
                         </StackPanel>

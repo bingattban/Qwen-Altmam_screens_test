@@ -101,6 +101,9 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
         return new NativeSqlCipherDashboardReader(_services, _database, _operations);
     }
 
+    internal Task<string> ReadSavedThemeAsync(CancellationToken ct=default)
+        =>_operations.RunAsync(()=>new SettingsReadBackupService(_database).ReadThemeAsync(ct));
+
     public Task<bool> IsProvisionedAsync(CancellationToken ct = default) =>
         _operations.RunAsync(() => _services.IsProvisionedAsync(ct));
 

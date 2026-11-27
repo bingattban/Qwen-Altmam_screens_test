@@ -25,6 +25,21 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task StartupThemeRead_UsesCanonicalPreferenceWithoutAuthenticationOrWrites()
+    {
+        var service=new SettingsReadBackupService(_db);
+        Assert.Equal("light",await service.ReadThemeAsync());
+        Assert.True((await service.SetThemeAsync(new JsonObject{["theme"]="dark"},default)).Success);
+        var reopened=new SettingsReadBackupService(_db);
+        Assert.Equal("dark",await reopened.ReadThemeAsync());
+        Assert.Equal("dark",await reopened.ReadThemeAsync());
+        using var connection=_db.CreateOpenConnection();
+        using var query=connection.CreateCommand();
+        query.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='THEME_CHANGE';";
+        Assert.Equal(1L,Convert.ToInt64(await query.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task DefaultAndStoredTheme_AreReadFromTheSameCanonicalSetting()
     {
         var service=new SettingsReadBackupService(_db);

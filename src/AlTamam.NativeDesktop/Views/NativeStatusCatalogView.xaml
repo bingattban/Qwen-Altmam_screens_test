@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="StatusVisible"/>
-        <Style x:Key="StatusButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="StatusButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -15,7 +15,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource StatusVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="10" Padding="15" Margin="12"
                 Width="850" MaxWidth="960" MaxHeight="730"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -27,13 +27,13 @@
                             AutomationProperties.Name="إغلاق إدارة الحالات"/>
                     <TextBlock Text="إدارة حالات التحضير — سجل SQLCipher"
                                FontSize="19" FontWeight="Bold"
-                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource NativeText}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="الحالات النشطة المعتمدة فقط. الاسم والرمز واللون والإصدار وعدد مرات التحضير اليوم من السجل الأصلي. التعطيل لا يحذف أي سجل قديم."
-                                   Foreground="#475569" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"/>
                         <StackPanel Orientation="Horizontal" Margin="0,7,0,7">
                             <Button Content="إضافة حالة"
                                     Style="{StaticResource StatusButton}"
@@ -55,7 +55,7 @@
                         </StackPanel>
                         <ProgressBar Height="4" IsIndeterminate="True"
                                      Visibility="{Binding IsBusy, Converter={StaticResource StatusVisible}}"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    TextWrapping="Wrap"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <DataGrid x:Name="StatusGrid" Margin="0,8,0,8" MinHeight="170"
@@ -65,7 +65,7 @@
                                   CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" RowHeight="34"
                                   SelectionMode="Single" SelectionUnit="FullRow"
-                                  AlternatingRowBackground="#F8FAFC">
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="اسم الحالة" Binding="{Binding Name}" Width="2*"/>
                                 <DataGridTextColumn Header="الرمز" Binding="{Binding Symbol}" Width="75"/>
@@ -75,12 +75,12 @@
                                 <DataGridTextColumn Header="المعرف الثابت" Binding="{Binding StatusId}" Width="2*"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                        <Border Background="#F8FAFC" BorderBrush="#CBD5E1"
+                        <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeBorder}"
                                 BorderThickness="1" CornerRadius="6" Padding="12"
                                 Visibility="{Binding HasDraft, Converter={StaticResource StatusVisible}}">
                             <StackPanel>
                                 <TextBlock Text="{Binding Heading}" FontWeight="Bold"
-                                           FontSize="17" Foreground="#0F2942"
+                                           FontSize="17" Foreground="{DynamicResource NativeText}"
                                            Margin="0,0,0,9"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -111,9 +111,9 @@
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Text="المعاينة لا تعدل البيانات. النظام يتحقق من عدم تكرار الرمز والاسم، ويحفظ تاريخ الحالات؛ ولا يسمح بتعطيل الحالة الافتراضية للتحضير التلقائي."
-                                           Foreground="#64748B" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"
                                            Margin="0,8,0,8"/>
-                                <TextBlock Text="{Binding ReviewNote}" Foreground="#0F2942"
+                                <TextBlock Text="{Binding ReviewNote}" Foreground="{DynamicResource NativeText}"
                                            FontWeight="SemiBold" TextWrapping="Wrap"
                                            Visibility="{Binding IsReviewing, Converter={StaticResource StatusVisible}}"/>
                                 <StackPanel Visibility="{Binding IsDeactivating, Converter={StaticResource StatusVisible}}">
@@ -137,11 +137,11 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                        <TextBlock Text="{Binding CompletionNote}" Foreground="{DynamicResource NativeAccentText}"
                                    FontWeight="Bold" TextWrapping="Wrap" Margin="0,8,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="عند فقدان رد الاعتماد، راجع قائمة الحالات وسجل العمليات أولا. لا تُكرر العملية تلقائيا."
-                                   FontSize="12" Foreground="#64748B" TextWrapping="Wrap"
+                                   FontSize="12" Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"
                                    Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

@@ -6,10 +6,14 @@ remains mandatory; negative fixture verifies every fail-closed invariant.
 No scheduler, mutation or skipped legacy WebView2 package acceptance is allowed.
 """
 from pathlib import Path
+from native_theme_contract import check_visual_resources
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = {
+    "theme_light":"src/AlTamam.NativeDesktop/Themes/Light.xaml",
+    "theme_dark":"src/AlTamam.NativeDesktop/Themes/Dark.xaml",
+    "theme_app":"src/AlTamam.NativeDesktop/App.xaml",
   "contracts": "src/AlTamam.NativePresentation/NativeDashboardContinuationContracts.cs",
   "register_vm": "src/AlTamam.NativePresentation/NativeAutoPreparedRegisterViewModel.cs",
   "dashboard_vm": "src/AlTamam.NativePresentation/DashboardPageViewModel.cs",
@@ -70,8 +74,12 @@ def problems(data):
                   "PreviousPageCommand", "NextPageCommand",
                   "KeyboardNavigation.TabNavigation"):
         need("register_xaml",token)
-    for color in ("#0F2942","#0D9488","#F8FAFC","#CBD5E1"):
-        need("register_xaml",color)
+    errors.extend(check_visual_resources(data["register_xaml"],data["theme_light"],data["theme_dark"],data["theme_app"],(
+        ("Foreground","NativeText","#0F2942"),
+        ("Background","NativeAccentFill","#0F766E"),
+        ("Background","NativeSubtle","#F8FAFC"),
+        ("BorderBrush","NativeBorder","#CBD5E1"),
+    )))
     need("register_code","Key.Escape")
     need("register_code","CustomCells[")
     need("dashboard_code","DispatcherTimer")
@@ -101,6 +109,10 @@ if __name__ == "__main__":
     issues=problems(DATA)
     if issues: raise SystemExit("NATIVE AUTO REGISTER PHASE3 FAIL:\n"+"\n".join(issues))
     for key,token in (
+        ("register_xaml","{DynamicResource NativeAccentFill}"),
+        ("theme_light",'x:Key="NativeAccentFill" Color="#0F766E"'),
+        ("theme_dark",'x:Key="NativeAccentFill"'),
+        ("theme_app",'Source="Themes/Light.xaml"'),
        ("reader",'"statusId"] = "__AUTO_PREPARED__"'),
        ("reader","ResolveSessionAsync(identity.SessionNonce"),
        ("reader","AutoAttendancePolicyService(database)"),

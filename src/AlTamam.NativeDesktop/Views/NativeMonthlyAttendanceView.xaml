@@ -1,11 +1,11 @@
 <UserControl x:Class="AlTamam.NativeDesktop.Views.NativeMonthlyAttendanceView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             FlowDirection="RightToLeft" FontFamily="Segoe UI" Background="#FFFFFF">
+             FlowDirection="RightToLeft" FontFamily="Segoe UI" Background="{DynamicResource NativeSurface}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibilityIfTrue"/>
-        <Style x:Key="MonthlyButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="MonthlyButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -22,20 +22,20 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0"
+        <Border Grid.Row="0" Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                 BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right" Text="التمام الشهري"
-                           Foreground="#0F2942" FontSize="22" FontWeight="Bold"/>
+                           Foreground="{DynamicResource NativeText}" FontSize="22" FontWeight="Bold"/>
                 <TextBlock HorizontalAlignment="Left" FlowDirection="LeftToRight"
-                           Foreground="#475569" Text="{Binding SelectedPeriod}"/>
+                           Foreground="{DynamicResource NativeMuted}" Text="{Binding SelectedPeriod}"/>
             </DockPanel>
         </Border>
-        <Border Grid.Row="1" IsEnabled="{Binding CanChangeMonthlyScope}" Background="White" BorderBrush="#E2E8F0"
+        <Border Grid.Row="1" IsEnabled="{Binding CanChangeMonthlyScope}" Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                 BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
             <WrapPanel>
                 <StackPanel Margin="4" MinWidth="140">
-                    <TextBlock Text="شهر الأرشيف" Foreground="#0F2942" FontWeight="SemiBold"/>
+                    <TextBlock Text="شهر الأرشيف" Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                     <ComboBox Width="145" Height="34" Margin="0,4,0,0"
                               ItemsSource="{Binding Periods}"
                               DisplayMemberPath="Label" SelectedValuePath="Period"
@@ -44,7 +44,7 @@
                               AutomationProperties.Name="اختيار شهر التمام من الأرشيف المعتمد"/>
                 </StackPanel>
                 <StackPanel Margin="4" MinWidth="140">
-                    <TextBlock Text="الموقع" Foreground="#0F2942" FontWeight="SemiBold"/>
+                    <TextBlock Text="الموقع" Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                     <ComboBox Width="155" Height="34" Margin="0,4,0,0"
                               ItemsSource="{Binding SiteOptions}"
                               DisplayMemberPath="Name" SelectedValuePath="SiteId"
@@ -54,7 +54,7 @@
                 </StackPanel>
                 <StackPanel Margin="4">
                     <TextBlock Text="الاسم أو الرقم (ع) في الشهر المختار"
-                               Foreground="#0F2942" FontWeight="SemiBold"/>
+                               Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"/>
                     <TextBox Width="190" Height="34" Margin="0,4,0,0" Padding="8,4"
                              Text="{Binding SearchDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="بحث تاريخي في كشف الشهر"/>
@@ -75,12 +75,12 @@
             </WrapPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="4,2,4,8">
-            <TextBlock Text="{Binding MonthModeLabel}" FontWeight="SemiBold" Foreground="#0F2942"/>
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+            <TextBlock Text="{Binding MonthModeLabel}" FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
             <TextBlock Text="{Binding LoadError}" TextWrapping="Wrap"
-                       Foreground="#BE123C" FontWeight="SemiBold"
+                       Foreground="{DynamicResource NativeDangerText}" FontWeight="SemiBold"
                        AutomationProperties.LiveSetting="Polite"/>
-            <ProgressBar Height="4" IsIndeterminate="True" Foreground="#0D9488"
+            <ProgressBar Height="4" IsIndeterminate="True" Foreground="{DynamicResource NativeAccentText}"
                          Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
         </StackPanel>
         <DataGrid x:Name="MonthlyGrid" Grid.Row="3" ItemsSource="{Binding Rows}" IsEnabled="{Binding CanChangeMonthlyScope}"
@@ -88,8 +88,8 @@
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   CanUserSortColumns="False" HeadersVisibility="Column"
                   SelectionMode="Single" RowHeight="35" ColumnHeaderHeight="38"
-                  AlternatingRowBackground="#F8FAFC" GridLinesVisibility="Horizontal"
-                  BorderThickness="1" BorderBrush="#CBD5E1" MinHeight="190"
+                  AlternatingRowBackground="{DynamicResource NativeSubtle}" GridLinesVisibility="Horizontal"
+                  BorderThickness="1" BorderBrush="{DynamicResource NativeBorder}" MinHeight="190"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="62"/>
@@ -101,7 +101,7 @@
         </DataGrid>
         <DockPanel Grid.Row="4" Margin="0,8,0,0" IsEnabled="{Binding CanChangeMonthlyScope}">
             <TextBlock Text="{Binding PageLabel}" DockPanel.Dock="Right"
-                       Foreground="#475569" VerticalAlignment="Center"
+                       Foreground="{DynamicResource NativeMuted}" VerticalAlignment="Center"
                        FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                 <Button Content="السابق" Style="{StaticResource MonthlyButton}"
@@ -114,13 +114,13 @@
              away revokes in-flight reads; no write buttons are offered. -->
         <Border Grid.RowSpan="5" Background="#B80F172A" Panel.ZIndex="110"
                 Visibility="{Binding IsCellDetailsOpen, Converter={StaticResource VisibilityIfTrue}}">
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="10" Padding="18" Width="590" MaxHeight="560"
                     VerticalAlignment="Center" HorizontalAlignment="Center">
                 <DockPanel LastChildFill="True">
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                         <TextBlock Text="تفاصيل يوم التمام الشهري" FontSize="19"
-                                   FontWeight="Bold" Foreground="#0F2942"
+                                   FontWeight="Bold" Foreground="{DynamicResource NativeText}"
                                    VerticalAlignment="Center" DockPanel.Dock="Right"/>
                         <Button Content="إغلاق" Command="{Binding CloseCellDetailsCommand}"
                                 Style="{StaticResource MonthlyButton}"
@@ -131,51 +131,51 @@
                         <StackPanel>
                             <ProgressBar Height="5" IsIndeterminate="True"
                                          Visibility="{Binding IsCellDetailsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <TextBlock Text="{Binding CellDetailsError}" Foreground="#BE123C"
+                            <TextBlock Text="{Binding CellDetailsError}" Foreground="{DynamicResource NativeDangerText}"
                                        FontWeight="SemiBold" TextWrapping="Wrap"
                                        AutomationProperties.LiveSetting="Polite"/>
                             <TextBlock Text="{Binding SelectedCellDateLabel}" FontSize="15"
-                                       FontWeight="SemiBold" Foreground="#0D9488"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource NativeAccentText}"
                                        FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
                             <TextBlock Text="اسم الفرد في التاريخ المحدد" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,10,0,2"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,10,0,2"/>
                             <TextBlock Text="{Binding SelectedCellDetails.PersonName}"
-                                       FontSize="16" FontWeight="SemiBold" Foreground="#0F2942"/>
+                                       FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                             <TextBlock Text="الرقم (ع) في ذلك التاريخ" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,10,0,2"/>
-                            <TextBlock Text="{Binding SelectedCellDetails.ServiceNumberA}" Foreground="#0F2942"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,10,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.ServiceNumberA}" Foreground="{DynamicResource NativeText}"/>
                             <TextBlock Text="الموقع في ذلك التاريخ" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,10,0,2"/>
-                            <TextBlock Text="{Binding SelectedCellDetails.SiteName}" Foreground="#0F2942"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,10,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.SiteName}" Foreground="{DynamicResource NativeText}"/>
                             <Separator Margin="0,12,0,8"/>
                             <TextBlock Text="حالة الحضور المحفوظة" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,4,0,2"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,4,0,2"/>
                             <TextBlock Text="{Binding SelectedCellDetails.AttendanceStatus}"
-                                       FontWeight="SemiBold" Foreground="#0F2942"/>
+                                       FontWeight="SemiBold" Foreground="{DynamicResource NativeText}"/>
                             <TextBlock Text="الموقع وقت تسجيل الحضور" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,8,0,2"/>
-                            <TextBlock Text="{Binding SelectedCellDetails.AttendanceSiteName}" Foreground="#0F2942"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,2"/>
+                            <TextBlock Text="{Binding SelectedCellDetails.AttendanceSiteName}" Foreground="{DynamicResource NativeText}"/>
                             <TextBlock Text="مصدر التسجيل وتوقيته" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,8,0,2"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,2"/>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding SelectedCellDetails.AttendanceSource}"
-                                           Foreground="#0F2942" Margin="0,0,12,0"/>
+                                           Foreground="{DynamicResource NativeText}" Margin="0,0,12,0"/>
                                 <TextBlock Text="{Binding SelectedCellDetails.AttendanceCommittedAtUtc}"
-                                           Foreground="#0F2942" FlowDirection="LeftToRight"/>
+                                           Foreground="{DynamicResource NativeText}" FlowDirection="LeftToRight"/>
                             </StackPanel>
                             <Separator Margin="0,12,0,8"/>
                             <TextBlock Text="حركة الفرد" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,4,0,2"/>
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,4,0,2"/>
                             <TextBlock Text="{Binding SelectedCellDetails.MovementSummary}"
-                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                                       Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding SelectedCellDetails.MovementReason}"
-                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                                       Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
                             <TextBlock Text="سجل التعديلات المسجلة" FontWeight="Bold"
-                                       Foreground="#0F2942" Margin="0,12,0,6"/>
+                                       Foreground="{DynamicResource NativeText}" Margin="0,12,0,6"/>
                             <ItemsControl ItemsSource="{Binding SelectedCellDetails.Revisions}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
+                                        <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                                                 BorderThickness="1" CornerRadius="5"
                                                 Margin="0,2" Padding="8">
                                             <StackPanel>
@@ -187,8 +187,8 @@
                                                                FontWeight="SemiBold"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/>
-                                                <TextBlock Text="{Binding ActorUserId}" Foreground="#475569"/>
-                                                <TextBlock Text="{Binding ExecutedAtUtc}" Foreground="#475569"
+                                                <TextBlock Text="{Binding ActorUserId}" Foreground="{DynamicResource NativeMuted}"/>
+                                                <TextBlock Text="{Binding ExecutedAtUtc}" Foreground="{DynamicResource NativeMuted}"
                                                            FlowDirection="LeftToRight"
                                                            HorizontalAlignment="Right"/>
                                             </StackPanel>
@@ -196,16 +196,16 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Margin="0,10,0,0" Foreground="#64748B"
+                            <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource NativeSecondary}"
                                        TextWrapping="Wrap"
                                        Text="العرض التاريخي لا يغير السجلات. التصحيح الاستثنائي يخضع للصلاحيات وسياسة اليوم المغلق."/>
                             <Button Content="تصحيح استثنائي لليوم المحدد" Style="{StaticResource MonthlyButton}"
                                     Command="{Binding OpenCorrectionCommand}"
                                     Visibility="{Binding CanOpenCorrection, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                            <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="10"
                                     Visibility="{Binding Correction.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                                 <StackPanel>
-                                    <TextBlock Text="تصحيح استثنائي — يوم تاريخي واحد" FontWeight="Bold" Foreground="#0F2942"/>
+                                    <TextBlock Text="تصحيح استثنائي — يوم تاريخي واحد" FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
                                     <TextBlock Text="اختر الحالة الجديدة وأدخل السبب (10 إلى 400 حرف). لا اعتماد قبل المعاينة." TextWrapping="Wrap"/>
                                     <ComboBox ItemsSource="{Binding Correction.StatusChoices}" DisplayMemberPath="DisplayName"
                                               SelectedValuePath="StatusId" SelectedValue="{Binding Correction.SelectedStatusId, Mode=TwoWay}"
@@ -214,7 +214,7 @@
                                              MaxLength="400" TextWrapping="Wrap" MinHeight="40"
                                              IsEnabled="{Binding Correction.CanEdit}" AutomationProperties.Name="سبب التصحيح الاستثنائي"/>
                                     <Button Content="معاينة التصحيح" Command="{Binding Correction.PreviewCommand}" Style="{StaticResource MonthlyButton}"/>
-                                    <TextBlock Text="{Binding Correction.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Correction.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                                     <ProgressBar Height="4" IsIndeterminate="True"
                                                  Visibility="{Binding Correction.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
                                     <TextBlock Text="الحالة السابقة:" FontWeight="Bold"/>
@@ -223,17 +223,17 @@
                                     <TextBlock Text="{Binding Correction.Preview.AfterStatusName}" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding Correction.Preview.Request.Reason}" TextWrapping="Wrap"/>
                                     <Button Content="{Binding Correction.ConfirmLabel}" Command="{Binding Correction.ConfirmCommand}" Style="{StaticResource MonthlyButton}"/>
-                                    <TextBlock Text="{Binding Correction.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Correction.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                                     <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseCorrectionCommand}" Style="{StaticResource MonthlyButton}"/>
                                 </StackPanel>
                             </Border>
                             <Button Content="تعديل تمام سابق لفترة محددة" Style="{StaticResource MonthlyButton}"
                                     Command="{Binding OpenRangeCorrectionCommand}"
                                     Visibility="{Binding CanOpenRangeCorrection, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                            <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="10"
                                     Visibility="{Binding RangeCorrection.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                                 <StackPanel>
-                                    <TextBlock Text="تعديل تمام سابق — فترة محددة" FontWeight="Bold" Foreground="#0F2942"/>
+                                    <TextBlock Text="تعديل تمام سابق — فترة محددة" FontWeight="Bold" Foreground="{DynamicResource NativeText}"/>
                                     <TextBlock Text="حدد من يوم إلى 62 يوما للفرد المحدد. تشمل المعاينة الأيام المؤهلة في جميع مواقعه التاريخية؛ لا تحفظ الأيام غير المدرجة." TextWrapping="Wrap"/>
                                     <TextBlock Text="من تاريخ (yyyy-MM-dd)" Margin="0,8,0,2"/>
                                     <TextBox Text="{Binding RangeCorrection.FromText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -250,7 +250,7 @@
                                              MaxLength="400" TextWrapping="Wrap" MinHeight="40"
                                              IsEnabled="{Binding RangeCorrection.CanEdit}" AutomationProperties.Name="سبب تعديل الفترة"/>
                                     <Button Content="معاينة الأيام قبل التعديل" Command="{Binding RangeCorrection.PreviewCommand}" Style="{StaticResource MonthlyButton}"/>
-                                    <TextBlock Text="{Binding RangeCorrection.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding RangeCorrection.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                                     <ProgressBar Height="4" IsIndeterminate="True"
                                                  Visibility="{Binding RangeCorrection.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
                                     <TextBlock Text="{Binding RangeCorrection.Preview.PersonName}" FontWeight="Bold"/>
@@ -259,12 +259,12 @@
                                     <ItemsControl ItemsSource="{Binding RangeCorrection.Preview.Days}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="5" Margin="0,2" Padding="6">
+                                                <Border Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeSubtleBorder}" BorderThickness="1" CornerRadius="5" Margin="0,2" Padding="6">
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding BusinessDate, StringFormat=yyyy-MM-dd}" FlowDirection="LeftToRight" HorizontalAlignment="Right" FontWeight="Bold"/>
-                                                        <TextBlock Text="{Binding SiteName}" Foreground="#475569"/>
+                                                        <TextBlock Text="{Binding SiteName}" Foreground="{DynamicResource NativeMuted}"/>
                                                         <TextBlock Text="{Binding BeforeStatusName}" TextWrapping="Wrap"/>
-                                                        <TextBlock Text="{Binding AfterStatusName}" Foreground="#0D9488" FontWeight="Bold" TextWrapping="Wrap"/>
+                                                        <TextBlock Text="{Binding AfterStatusName}" Foreground="{DynamicResource NativeAccentText}" FontWeight="Bold" TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                 </Border>
                                             </DataTemplate>
@@ -272,7 +272,7 @@
                                     </ItemsControl>
                                     <TextBlock Text="{Binding RangeCorrection.Preview.Request.Reason}" TextWrapping="Wrap"/>
                                     <Button Content="{Binding RangeCorrection.ConfirmLabel}" Command="{Binding RangeCorrection.ConfirmCommand}" Style="{StaticResource MonthlyButton}"/>
-                                    <TextBlock Text="{Binding RangeCorrection.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding RangeCorrection.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                                     <Button Content="إغلاق مراجعة الفترة" Command="{Binding CloseRangeCorrectionCommand}" Style="{StaticResource MonthlyButton}"/>
                                 </StackPanel>
                             </Border>
@@ -285,13 +285,13 @@
              Original MonthlyExcelExportService owns safe path, files, and cleanup. -->
         <Border Grid.RowSpan="5" Background="#B80F172A" Panel.ZIndex="120"
                 Visibility="{Binding Excel.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="10" Padding="18" Width="550" MaxHeight="520"
                     VerticalAlignment="Center" HorizontalAlignment="Center">
                 <DockPanel LastChildFill="True">
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                         <TextBlock Text="معاينة تصدير التمام الشهري" FontSize="19"
-                                   FontWeight="Bold" Foreground="#0F2942"
+                                   FontWeight="Bold" Foreground="{DynamicResource NativeText}"
                                    VerticalAlignment="Center" DockPanel.Dock="Right"/>
                         <Button Content="إغلاق" Command="{Binding Excel.CloseCommand}"
                                 Style="{StaticResource MonthlyButton}"
@@ -301,43 +301,43 @@
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
                             <TextBlock Text="المصدر: الأرشيف الشهري المعتمد في SQLCipher"
-                                       Foreground="#475569" TextWrapping="Wrap"/>
+                                       Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"/>
                             <ProgressBar Height="5" IsIndeterminate="True"
                                          Visibility="{Binding Excel.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <TextBlock Text="{Binding Excel.Error}" Foreground="#BE123C"
+                            <TextBlock Text="{Binding Excel.Error}" Foreground="{DynamicResource NativeDangerText}"
                                        FontWeight="SemiBold" TextWrapping="Wrap"
                                        AutomationProperties.LiveSetting="Polite"/>
-                            <TextBlock Text="الشهر المختار" FontWeight="Bold" Foreground="#64748B"
+                            <TextBlock Text="الشهر المختار" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"
                                        Margin="0,12,0,3"/>
                             <TextBlock Text="{Binding Excel.Preview.Period}" FontWeight="SemiBold"
-                                       Foreground="#0F2942" FlowDirection="LeftToRight"
+                                       Foreground="{DynamicResource NativeText}" FlowDirection="LeftToRight"
                                        HorizontalAlignment="Right"/>
-                            <TextBlock Text="الموقع المختار" FontWeight="Bold" Foreground="#64748B"
+                            <TextBlock Text="الموقع المختار" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"
                                        Margin="0,8,0,3"/>
-                            <TextBlock Text="{Binding Excel.Preview.SiteName}" Foreground="#0F2942"/>
-                            <TextBlock Text="البحث المطبق" FontWeight="Bold" Foreground="#64748B"
+                            <TextBlock Text="{Binding Excel.Preview.SiteName}" Foreground="{DynamicResource NativeText}"/>
+                            <TextBlock Text="البحث المطبق" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"
                                        Margin="0,8,0,3"/>
-                            <TextBlock Text="{Binding Excel.Preview.SearchTerm}" Foreground="#0F2942"/>
+                            <TextBlock Text="{Binding Excel.Preview.SearchTerm}" Foreground="{DynamicResource NativeText}"/>
                             <TextBlock Text="عدد الأفراد ضمن المعاينة" FontWeight="Bold"
-                                       Foreground="#64748B" Margin="0,8,0,3"/>
-                            <TextBlock Text="{Binding Excel.Preview.PersonCount}" Foreground="#0F2942"
+                                       Foreground="{DynamicResource NativeSecondary}" Margin="0,8,0,3"/>
+                            <TextBlock Text="{Binding Excel.Preview.PersonCount}" Foreground="{DynamicResource NativeText}"
                                        FontWeight="SemiBold"/>
-                            <TextBlock Text="اسم الملف المقترح" FontWeight="Bold" Foreground="#64748B"
+                            <TextBlock Text="اسم الملف المقترح" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"
                                        Margin="0,8,0,3"/>
                             <TextBlock Text="{Binding Excel.Preview.SuggestedFileName}"
-                                       Foreground="#0F2942" TextWrapping="Wrap"/>
+                                       Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
                             <TextBlock Text="يعتمد الحفظ على مجلد التقارير المحلي المحدد في إعدادات البرنامج. عند اختيار جميع المواقع ينشئ النظام كشفا موحدا وكشوفا لكل موقع، ولا يستبدل ملفات سابقة."
-                                       Foreground="#475569" TextWrapping="Wrap" Margin="0,12,0,8"/>
+                                       Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap" Margin="0,12,0,8"/>
                             <Button Content="تأكيد تصدير Excel"
                                     Style="{StaticResource MonthlyButton}"
                                     Command="{Binding Excel.ConfirmCommand}"
                                     AutomationProperties.Name="تأكيد إنشاء ملفات Excel في المجلد المعتمد"/>
                             <TextBlock Text="{Binding Excel.CompletionMessage}"
-                                       Foreground="#0D9488" FontWeight="Bold"
+                                       Foreground="{DynamicResource NativeAccentText}" FontWeight="Bold"
                                        TextWrapping="Wrap" Margin="0,10,0,2"
                                        AutomationProperties.LiveSetting="Polite"/>
                             <TextBlock Text="{Binding Excel.Receipt.PrimaryFilePath}"
-                                       Foreground="#0F2942" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"
                                        FlowDirection="LeftToRight"/>
                         </StackPanel>
                     </ScrollViewer>

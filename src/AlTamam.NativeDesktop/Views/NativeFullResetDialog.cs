@@ -25,7 +25,7 @@ internal static class NativeFullResetDialog
         {
             Text="تحذير: سيتم حذف البيانات والحسابات وسجل العمليات والنسخ المسجلة المطابقة لبصماتها. "+
                 "ينشئ البرنامج نسخة إنقاذ مشفرة داخلية قبل الحذف، ويتوقف بعدها لتبدأ التهيئة الأولى عند فتحه مجددا.",
-            Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap,
+            Foreground=owner.TryFindResource("NativeDangerText") as Brush ?? Brushes.DarkRed,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap,
             Margin=new Thickness(0,0,0,12)
         });
         panel.Children.Add(new TextBlock
@@ -59,7 +59,7 @@ internal static class NativeFullResetDialog
         var buttons=new StackPanel { Orientation=Orientation.Horizontal };
         var cancel=new Button { Content="إلغاء",IsCancel=true,IsDefault=true,Padding=new Thickness(18,8,18,8) };
         var approve=new Button { Content="تأكيد التصفير النهائي",IsEnabled=false,
-            Foreground=Brushes.DarkRed,Padding=new Thickness(18,8,18,8),Margin=new Thickness(8,0,0,0) };
+            Foreground=owner.TryFindResource("NativeDangerText") as Brush ?? Brushes.DarkRed,Padding=new Thickness(18,8,18,8),Margin=new Thickness(8,0,0,0) };
         buttons.Children.Add(cancel); buttons.Children.Add(approve); panel.Children.Add(buttons);
         var elapsed=new Stopwatch();
         var timer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(150) };
