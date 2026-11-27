@@ -19,7 +19,9 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
     private NativeIdentity? _previewActor;
     private NativeMonthlyExcelFilter? _previewFilter;
     private int _generation;
-    private bool _open, _busy;
+    private bool _open, _busy, _exporting, _cancelRequested;
+    private int _progressPercent;
+    private bool _hasProgress;
     private string _error = "";
     private NativeMonthlyExcelPreview? _preview;
     private NativeMonthlyExcelReceipt? _receipt;
@@ -30,11 +32,28 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             _ => CanOpen);
         ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(),
             _ => CanConfirm);
-        CloseCommand = new NativeCommand(_ => Close(), _ => IsOpen);
+        CloseCommand = new NativeCommand(_ => Close(), _ => IsOpen && !IsExporting);
+        CancelExportCommand = new NativeCommand(_ => RequestCancel(), _ => IsExporting && !IsCancelRequested);
     }
 
     public bool IsOpen => _open;
     public bool IsBusy => _busy;
+    public bool IsExporting => _exporting;
+    public bool IsCancelRequested => _cancelRequested;
+    public int ProgressPercent => _progressPercent;
+    public bool IsProgressIndeterminate => !_hasProgress;
+    public string ProgressMessage => !_exporting ? "" : _cancelRequested
+        ? "طلب إيقاف التصدير؛ جار التحقق من النتيجة."
+        : _hasProgress ? $"جار إنشاء ملفات Excel — {_progressPercent}%" : "جار إعداد ملفات Excel...";
+    public ICommand CancelExportCommand { get; }
+
+    private void RequestCancel()
+    {
+        if (!_exporting || _cancelRequested) return;
+        _cancelRequested = true;
+        _pending?.Cancel();
+        Notify();
+    }
     public bool CanConfirm => _open && !_busy && _preview is { PersonCount: > 0 } &&
         _receipt is null && _currentFilter?.Invoke() == _previewFilter &&
         _liveActor?.Invoke() == _previewActor;
@@ -89,6 +108,9 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _error = "";
         _preview = null;
         _receipt = null;
+        _progressPercent = 0;
+        _hasProgress = false;
+        _cancelRequested = false;
         _previewActor = actor;
         _previewFilter = filter;
         Notify();
@@ -135,15 +157,36 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _pending = linked;
         _busy = true;
+        _exporting = true;
+        _cancelRequested = false;
+        _hasProgress = false;
+        _progressPercent = 0;
         _error = "";
         Notify();
+        var context = SynchronizationContext.Current;
+        void Report(int processed,int total)
+        {
+            void Apply()
+            {
+                if (version != _generation || !_exporting || _liveActor?.Invoke() != actor ||
+                    _currentFilter?.Invoke() != filter || total <= 0 || processed < 0 || processed > total) return;
+                _hasProgress = true;
+                _progressPercent = Math.Max(_progressPercent, Math.Min(99, (int)((long)processed * 100 / total)));
+                Notify();
+            }
+            if (context is not null && SynchronizationContext.Current != context)
+                context.Post(_ => Apply(), null);
+            else Apply();
+        }
         try
         {
             // Exactly one user-initiated write. The original service controls
             // the validated local directory, atomic .part commit, names and
             // cleanup after interruption. We do not auto-retry failures.
-            var result = await _backend.ExportExcelAsync(actor, filter, linked.Token);
-            if (version != _generation || linked.IsCancellationRequested) return;
+            var result = _backend is INativeMonthlyExcelProgressBackend progressBackend
+                ? await progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)
+                : await _backend.ExportExcelAsync(actor, filter, linked.Token);
+            if (version != _generation) return;
             if (_liveActor?.Invoke() != actor || _currentFilter?.Invoke() != filter)
             {
                 Close();
@@ -151,9 +194,18 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             }
             ValidateReceipt(result, filter);
             _receipt = result;
+            _hasProgress = true;
+            _progressPercent = 100;
             _preview = null; // the same preview cannot authorize another write
         }
-        catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            if (version == _generation)
+            {
+                _preview = null;
+                _error = "توقف طلب التصدير. تحقق من مجلد التقارير قبل إعادة المحاولة؛ لم يتم تأكيد اكتمال الملفات.";
+            }
+        }
         catch
         {
             if (version == _generation)
@@ -168,6 +220,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             {
                 _pending = null;
                 _busy = false;
+                _exporting = false;
                 Notify();
             }
         }
@@ -185,6 +238,10 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _error = "";
         _open = false;
         _busy = false;
+        _exporting = false;
+        _cancelRequested = false;
+        _hasProgress = false;
+        _progressPercent = 0;
         Notify();
     }
 
@@ -222,11 +279,13 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         foreach (string prop in new[] { nameof(IsOpen), nameof(IsBusy),
                      nameof(CanConfirm), nameof(Preview), nameof(Receipt),
                      nameof(Error), nameof(PeriodLabel),
-                     nameof(CompletionMessage) })
+                     nameof(CompletionMessage), nameof(IsExporting), nameof(IsCancelRequested),
+                     nameof(ProgressPercent), nameof(IsProgressIndeterminate), nameof(ProgressMessage) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
         ((NativeCommand)OpenPreviewCommand).NotifyAvailabilityChanged();
         ((NativeCommand)ConfirmCommand).NotifyAvailabilityChanged();
         ((NativeCommand)CloseCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)CancelExportCommand).NotifyAvailabilityChanged();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
