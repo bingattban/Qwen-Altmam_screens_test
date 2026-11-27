@@ -67,4 +67,71 @@ public sealed class NativeRosterColumnMutationPhase12Tests
         Assert.True(review.Accept(operation,Existing with {Caption="ملاحظة جديدة",Visible=false,Snapshot=new string('B',64)}));
         Assert.False(review.HasUnverifiedCommit);
     }
+    [Fact]
+    public async Task ViewModel_requires_fresh_review_and_clears_saved_metadata_on_close()
+    {
+        var backend=new Backend();
+        var vm=new NativeRosterLayoutViewModel();
+        vm.Attach(backend,()=>Manager);
+        await vm.OpenAsync();
+        Assert.False(vm.EditCommand.CanExecute(vm.Rows[2]));
+        Assert.False(vm.DeactivateCommand.CanExecute(vm.Rows[2]));
+        vm.EditCommand.Execute(vm.Rows[4]);
+        Assert.False(vm.CanEditType);
+        vm.DraftCaption="ملاحظة جديدة";
+        vm.ReviewCommand.Execute(null);
+        Assert.True(vm.CanConfirm);
+        vm.DraftVisible=false;
+        Assert.False(vm.CanConfirm);
+        await vm.ConfirmAsync();
+        Assert.Equal(0,backend.Commits);
+        vm.ReviewCommand.Execute(null);
+        await vm.ConfirmAsync();
+        Assert.Equal(1,backend.Commits);
+        Assert.False(vm.HasUnverifiedCommit);
+        Assert.False(vm.CanConfirm);
+        await vm.ConfirmAsync();
+        Assert.Equal(1,backend.Commits);
+        bool closed=false;
+        vm.CommittedAndClosed+=()=>closed=true;
+        vm.Close();
+        Assert.True(closed);
+        Assert.Empty(vm.Rows);
+    }
+
+    [Fact]
+    public async Task Lost_commit_reply_blocks_repeat_mutation_for_same_session()
+    {
+        var backend=new Backend{Lose=true};
+        var vm=new NativeRosterLayoutViewModel();
+        vm.Attach(backend,()=>Manager);
+        await vm.OpenAsync();
+        vm.DeactivateCommand.Execute(vm.Rows[4]);
+        vm.ReviewCommand.Execute(null);
+        await vm.ConfirmAsync();
+        Assert.True(vm.HasUnverifiedCommit);
+        Assert.False(vm.ConfirmCommand.CanExecute(null));
+        Assert.False(vm.CancelDraftCommand.CanExecute(null));
+        vm.Close();
+        await vm.OpenAsync();
+        Assert.False(vm.CreateCommand.CanExecute(null));
+        Assert.False(vm.EditCommand.CanExecute(vm.Rows[4]));
+        Assert.Equal(1,backend.Commits);
+    }
+
+    private sealed class Backend:INativeRosterLayoutReader,INativeRosterColumnMutationBackend
+    {
+        public int Commits;
+        public bool Lose;
+        public Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Task.FromResult<IReadOnlyList<NativeRosterColumn>>(Rows());
+        public Task<NativeRosterColumn> CommitRosterColumnAsync(NativeRosterColumnCommit operation,CancellationToken ct=default)
+        {
+            Commits++;
+            if(Lose)throw new InvalidOperationException("Lost receipt.");
+            return Task.FromResult(Existing with {Caption=operation.Change.Caption,Visible=operation.Change.Visible,
+                Snapshot=new string('B',64)});
+        }
+    }
+
 }
