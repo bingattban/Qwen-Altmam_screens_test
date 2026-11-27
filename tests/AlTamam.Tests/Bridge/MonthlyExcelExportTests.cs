@@ -538,8 +538,14 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.Equal(2,allFiles.Count); // consolidated + non-empty Unspecified site
         Assert.Equal(2,metadata["fileCount"]!.GetValue<int>());
         Assert.All(allFiles,entry=>{
-            var path=Assert.IsType<JsonObject>(entry)["filePath"]!.GetValue<string>();
+            var item=Assert.IsType<JsonObject>(entry);
+            var path=item["filePath"]!.GetValue<string>();
             Assert.True(File.Exists(path),"Every monthly workbook must exist before success.");
+            using var workbook=ZipFile.OpenRead(path);
+            using var sheet=workbook.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+            XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            Assert.Equal(item["personCount"]!.GetValue<long>(),
+                (long)XDocument.Load(sheet).Descendants(ns+"row").Count()-3);
         });
         Assert.Equal("",allFiles[0]!["siteId"]!.GetValue<string>());
         Assert.Equal("SITE-UNSPECIFIED",allFiles[1]!["siteId"]!.GetValue<string>());
