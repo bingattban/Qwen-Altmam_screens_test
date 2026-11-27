@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private NativeSqlCipherAuthenticationBackend? _backend;
     private Task<NativeSqlCipherAuthenticationBackend>? _openingTask;
     private bool _sessionCheckRunning;
+    private string _appliedTheme="light";
     private bool _closeInProgress;
     private bool _mayClose;
     private bool _restoreInProgress;
@@ -35,6 +36,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.Settings.Overview.PropertyChanged+=(_,_) =>
+        {
+            if(_viewModel.Settings.Overview.Snapshot is { } saved)
+                ApplySavedTheme(saved.Theme);
+        };
         _sessionTimer.Tick += OnSessionTimerTick;
     }
 
@@ -49,6 +55,17 @@ public partial class MainWindow : Window
             _openingTask = Task.Run(() => NativeSqlCipherAuthenticationBackend.OpenAsync());
             _backend = await _openingTask;
             if (_closeInProgress) return;
+            try
+            {
+                string savedTheme=await Task.Run(()=>_backend.ReadSavedThemeAsync());
+                if(!_closeInProgress) ApplySavedTheme(savedTheme);
+            }
+            catch
+            {
+                // Theme is nonessential; failed preference read must not block login.
+                ApplySavedTheme("light");
+            }
+            if(_closeInProgress) return;
             await _viewModel.InitializeAuthenticationAsync(_backend);
             if (_closeInProgress || _mayClose) return;
             _viewModel.AttachDashboardReader(_backend.CreateDashboardReader());
@@ -65,6 +82,29 @@ public partial class MainWindow : Window
                 "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
             // IsReady stays false; the login cannot authenticate against an
             // invalid DB or fall back to a fabricated privileged account.
+        }
+    }
+
+    private void ApplySavedTheme(string theme)
+    {
+        if(theme is not ("light" or "dark") || theme==_appliedTheme) return;
+        Dispatcher.VerifyAccess();
+        try
+        {
+            var dictionaries=Application.Current.Resources.MergedDictionaries;
+            string name=theme=="dark"?"Dark":"Light";
+            var next=new ResourceDictionary
+            {
+                Source=new Uri($"/AlTamam.NativeDesktop.Pilot;component/Themes/{name}.xaml",UriKind.Relative)
+            };
+            // Only replace the palette slot, never view templates or controls.
+            dictionaries[0]=next;
+            _appliedTheme=theme;
+        }
+        catch
+        {
+            // The verified saved setting remains intact; never invent a receipt.
+            System.Diagnostics.Trace.TraceWarning("Native palette could not be applied.");
         }
     }
 
