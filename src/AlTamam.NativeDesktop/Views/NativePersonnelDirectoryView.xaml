@@ -79,25 +79,30 @@
                         Command="{Binding OpenProfileCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فتح تفاصيل فرد بالمعرف الثابت"/>
-                <Button Content="تصدير الكشوفات العامة"
-                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
-                        Command="{Binding DataContext.OpenRosterExportCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                        AutomationProperties.Name="فتح تصدير الكشوفات العامة واختيار الشهر والموقع"/>
-                <Button Content="استيراد كشف أفراد Excel"
-                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
-                        Command="{Binding OpenExcelImportCommand}"
-                        AutomationProperties.Name="اختيار ملف Excel ومعاينة الأفراد الجدد والمواقع قبل الحفظ"/>
-                <Button Content="سجل دفعات استيراد Excel"
-                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
-                        Command="{Binding OpenImportHistoryCommand}"
-                        AutomationProperties.Name="عرض دفعات Excel المحفوظة والأسماء المرفوضة دون تعديل"/>
+                <GroupBox Header="إدارة الكشوفات" Margin="4" Padding="4" VerticalAlignment="Bottom"
+                          AutomationProperties.Name="إدارة الكشوفات: استيراد وتصدير وهيكل الأعمدة">
+                    <WrapPanel MaxWidth="650">
+                        <Button Content="تصدير الكشوفات العامة"
+                                Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                                Command="{Binding DataContext.OpenRosterExportCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                AutomationProperties.Name="فتح تصدير الكشوفات العامة واختيار الشهر والموقع"/>
+                        <Button Content="استيراد كشف أفراد Excel"
+                                Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                                Command="{Binding OpenExcelImportCommand}"
+                                AutomationProperties.Name="اختيار ملف Excel ومعاينة الأفراد الجدد والمواقع قبل الحفظ"/>
+                        <Button Content="سجل دفعات استيراد Excel"
+                                Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                                Command="{Binding OpenImportHistoryCommand}"
+                                AutomationProperties.Name="عرض دفعات Excel المحفوظة والأسماء المرفوضة دون تعديل"/>
+                        <Button Content="هيكل الكشوفات والأعمدة" Style="{StaticResource PersonnelButton}"
+                                VerticalAlignment="Bottom" Command="{Binding OpenColumnLayoutCommand}"
+                                AutomationProperties.Name="عرض تعريفات أعمدة الكشوفات الأصلية"/>
+                    </WrapPanel>
+                </GroupBox>
                 <Button Content="تعديل تمام سابق" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding DataContext.OpenAdministrativeHistoricalCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                         AutomationProperties.Name="فتح البحث التاريخي وتصحيح التمام السابق من الإدارة"/>
-                <Button Content="هيكل الكشوفات والأعمدة" Style="{StaticResource PersonnelButton}"
-                        VerticalAlignment="Bottom" Command="{Binding OpenColumnLayoutCommand}"
-                        AutomationProperties.Name="عرض تعريفات أعمدة الكشوفات الأصلية"/>
                 <Button Content="إدارة حالات التحضير" Style="{StaticResource PersonnelButton}"
                         VerticalAlignment="Bottom"
                         Command="{Binding OpenStatusCatalogCommand}"
@@ -318,7 +323,7 @@
                                    Foreground="{DynamicResource NativeHeading}"/>
                     </DockPanel>
                     <StackPanel Grid.Row="1" Margin="0,10">
-                        <TextBlock Text="عرض التعريفات النشطة والمعطلة والقيم المحفوظة. الأعمدة الأساسية محمية؛ كل تغيير يتطلب معاينة وتأكيداً." TextWrapping="Wrap"/>
+                        <TextBlock Text="عرض التعريفات النشطة والمعطلة والقيم المحفوظة. الأعمدة الأساسية محمية، وترتيب الأعمدة النشطة متصل. تعطيل عمود لا يحذف قيمه؛ كل تغيير يتطلب معاينة وتأكيداً." TextWrapping="Wrap"/>
                         <ProgressBar Height="4" Margin="0,6" IsIndeterminate="True"
                                      Visibility="{Binding IsBusy, Converter={StaticResource PersonnelVisible}}"/>
                         <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
