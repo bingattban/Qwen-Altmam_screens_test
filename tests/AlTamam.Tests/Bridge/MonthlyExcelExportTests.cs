@@ -574,6 +574,53 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
 
 
 
+    private void AddPersonDuringExport()
+    {
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText="""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+                FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+            VALUES('TST-EX-DRIFT','فرد جديد','فرد جديد','91999','91999',
+                '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+            VALUES('TST-EX-DRIFT','فرد جديد','91999','2026-10-01',NULL,
+                'TST-U','2026-10-01T07:00:00Z','اختبار تغير العدد');
+            INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+            VALUES('TST-EX-DRIFT-A','TST-EX-DRIFT','SITE-UNSPECIFIED',
+                '2026-10-01',NULL,NULL,'2026-10-01T07:00:00Z');
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangedRosterCount_RefusesSuccessAndCleansOnlyAttemptFiles(bool allSites)
+    {
+        var service=new MonthlyExcelExportService(_db);
+        var request=Period(allSites?"":"SITE-UNSPECIFIED");
+        request["directory"]=_output;
+        request["fileName"]="drift.xlsx";
+        string existing=Path.Combine(_output,"existing.xlsx");
+        File.WriteAllText(existing,"untouched");
+        bool changed=false;
+        var response=await service.ExportAsync(request,CancellationToken.None,(done,total)=>
+        {
+            if(changed || done!=(allSites?102:0))return;
+            changed=true;
+            AddPersonDuringExport();
+        });
+        Assert.True(changed);
+        Assert.False(response.Success);
+        Assert.Equal("untouched",File.ReadAllText(existing));
+        Assert.Equal(new[]{existing},Directory.GetFiles(_output,"*.xlsx"));
+        Assert.Empty(Directory.GetFiles(_output,"*.part"));
+    }
+
     [Fact]
     public async Task UnavailableEDriveOutput_ReportsFailureWithoutSavingElsewhere()
     {
