@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ExternalVisible"/>
-        <Style x:Key="ExternalButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="ExternalButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -16,7 +16,7 @@
     </UserControl.Resources>
     <Grid Background="#D40F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource ExternalVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1"
+        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}"
                 BorderThickness="1" CornerRadius="9" Padding="16"
                 Width="870" MaxHeight="760" Margin="12"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -27,26 +27,26 @@
                             Command="{Binding CloseCommand}"
                             AutomationProperties.Name="إلغاء معاينة النقل الخارجي الجماعي"/>
                     <TextBlock Text="النقل الجماعي الخارجي — إخراج الأفراد وتعليق حساباتهم"
-                               Foreground="#0F2942" FontSize="18" FontWeight="Bold"
+                               Foreground="{DynamicResource NativeText}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                 </DockPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <Border Background="#FFF7ED" BorderBrush="#FDBA74"
+                        <Border Background="{DynamicResource NativeWarmSurface}" BorderBrush="{DynamicResource NativeWarmBorder}"
                                 BorderThickness="1" Padding="10" CornerRadius="5">
                             <TextBlock Text="تنبيه مهم: النقل الخارجي يؤدي إلى إخراج الأفراد من القوة، وإيقاف حسابات التطبيق المرتبطة بهم وإلغاء جلسات تلك الحسابات في المعاملة نفسها. تبقى سجلات الحضور والحركات السابقة محفوظة. لا يشمل أفرادا لم تختَرهم صراحة."
-                                       Foreground="#9A3412" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource NativeWarningText}" TextWrapping="Wrap"
                                        FontWeight="SemiBold"/>
                         </Border>
                         <StackPanel Orientation="Horizontal" Margin="0,9,0,8">
                             <TextBlock Text="الموقع المصدر: " FontWeight="Bold"/>
                             <TextBlock Text="{Binding SourceSiteName}"/>
-                            <TextBlock Text=" — " Foreground="#64748B"/>
-                            <TextBlock Text="{Binding SourceSiteId}" Foreground="#64748B"/>
+                            <TextBlock Text=" — " Foreground="{DynamicResource NativeSecondary}"/>
+                            <TextBlock Text="{Binding SourceSiteId}" Foreground="{DynamicResource NativeSecondary}"/>
                         </StackPanel>
                         <TextBlock Text="اختر أفراد الصفحة الحالية فقط (حتى 100 فرد)"
-                                   Foreground="#0F2942" FontWeight="Bold"
+                                   Foreground="{DynamicResource NativeText}" FontWeight="Bold"
                                    Margin="0,0,0,5"/>
                         <DataGrid ItemsSource="{Binding Options}" Height="205"
                                   AutoGenerateColumns="False" IsReadOnly="False"
@@ -70,10 +70,10 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <TextBlock Text="{Binding SelectedCount, StringFormat='الأفراد المحددون: {0}'}"
-                                   Foreground="#0D9488" FontWeight="Bold"
+                                   Foreground="{DynamicResource NativeAccentText}" FontWeight="Bold"
                                    Margin="0,7,0,7"/>
                         <TextBlock Text="اسم الجهة الخارجية (2–150 حرفا)"
-                                   Foreground="#0F2942" FontWeight="Bold"/>
+                                   Foreground="{DynamicResource NativeText}" FontWeight="Bold"/>
                         <TextBox Text="{Binding ExternalDestinationName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding CanEdit}" Height="35" Padding="8,5"
                                  Margin="0,4,0,8"
@@ -84,18 +84,18 @@
                                 Command="{Binding PreviewCommand}"
                                 Style="{StaticResource ExternalButton}"
                                 AutomationProperties.Name="معاينة نقل خارجي جماعي دون تعديل البيانات"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    TextWrapping="Wrap" FontWeight="SemiBold"
                                    AutomationProperties.LiveSetting="Polite"/>
-                        <Border Background="#F8FAFC" BorderThickness="1"
-                                BorderBrush="#CBD5E1" Padding="11" CornerRadius="5"
+                        <Border Background="{DynamicResource NativeSubtle}" BorderThickness="1"
+                                BorderBrush="{DynamicResource NativeBorder}" Padding="11" CornerRadius="5"
                                 Margin="0,8,0,8"
                                 Visibility="{Binding HasPreview, Converter={StaticResource ExternalVisible}}">
                             <StackPanel>
                                 <TextBlock Text="معاينة من خدمة التنقلات الأصلية"
-                                           Foreground="#0F2942" FontWeight="Bold"/>
+                                           Foreground="{DynamicResource NativeText}" FontWeight="Bold"/>
                                 <TextBlock Text="{Binding ReviewMessage}"
-                                           Foreground="#334155" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource NativeBodyText}" TextWrapping="Wrap"
                                            Margin="0,7,0,7"/>
                                 <ItemsControl ItemsSource="{Binding Preview.Persons}">
                                     <ItemsControl.ItemTemplate>
@@ -105,7 +105,7 @@
                                                 <TextBlock Text=" — "/>
                                                 <TextBlock Text="{Binding ServiceNumberA}"/>
                                                 <TextBlock Text=" — "/>
-                                                <TextBlock Text="{Binding PersonId}" Foreground="#64748B"/>
+                                                <TextBlock Text="{Binding PersonId}" Foreground="{DynamicResource NativeSecondary}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -122,7 +122,7 @@
                                           Margin="0,4,0,6"
                                           AutomationProperties.Name="أفهم تعليق حسابات الأفراد وإلغاء جلساتهم">
                                     <TextBlock Text="أفهم وأوافق صراحة أن النقل الخارجي يعلّق حسابات التطبيق المرتبطة بهؤلاء الأفراد ويلغي جلساتهم الحالية، دون استرجاعها تلقائيا عند عودتهم."
-                                               TextWrapping="Wrap" Foreground="#9A3412"
+                                               TextWrapping="Wrap" Foreground="{DynamicResource NativeWarningText}"
                                                FontWeight="SemiBold"/>
                                 </CheckBox>
                             </StackPanel>
@@ -132,11 +132,11 @@
                                 Style="{StaticResource ExternalButton}"
                                 AutomationProperties.Name="تنفيذ إخراج خارجي جماعي مرة واحدة بعد إقرارين"/>
                         <TextBlock Text="{Binding CompletionMessage}"
-                                   Foreground="#0D9488" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"
                                    FontWeight="Bold" Margin="0,7,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="في حال تغيّر فرد أو انتسابه أو سبق نقله في اليوم نفسه، تُرفض العملية كاملة. عند فقدان الرد تحقق من أرشيف النقل والحسابات والجلسات؛ لا تُكرر الطلب تلقائيا."
-                                   Foreground="#64748B" FontSize="12"
+                                   Foreground="{DynamicResource NativeSecondary}" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
