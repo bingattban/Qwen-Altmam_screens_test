@@ -99,7 +99,7 @@ public sealed class NativeAttendanceDraftsViewModel:INotifyPropertyChanged
     private bool CanBeginDelete(NativeAttendanceDraft? row)=>CanRead && !_busy && !IsDeleteReviewOpen &&
         _reader is INativeAttendanceDraftDeleter && row is not null && row.IsValid && _rows.Any(r=>ReferenceEquals(r,row));
     private bool CanConfirmDelete=>CanRead && !_busy && _reader is INativeAttendanceDraftDeleter &&
-        _deleteSelection is { } row && row.RangeEvidence is null && _rows.Any(r=>ReferenceEquals(r,row));
+        _deleteSelection is { } row && row.IsValid && _rows.Any(r=>ReferenceEquals(r,row));
     public void BeginDelete(NativeAttendanceDraft? row)
     {
         if(!CanBeginDelete(row))return;
