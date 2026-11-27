@@ -12,7 +12,9 @@ $paths = @(
     "tooling/perf/Collect-Phase13WindowsFacts.ps1",
     "build/package-process-watchdog.ps1",
     "build/test-package-process-watchdog.ps1",
-    "build/test-package-appdata-preservation.ps1"
+    "build/test-package-appdata-preservation.ps1",
+    "build/fetch-offline-webview2.ps1",
+    "build/test-offline-webview2-fetch.ps1"
 )
 foreach ($relative in $paths) {
     $file = Join-Path $root $relative
