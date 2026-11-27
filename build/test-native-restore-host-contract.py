@@ -45,5 +45,32 @@ class NativeRestoreHostContract(unittest.TestCase):
         for script in (ROOT / "src/AlTamam.WebUI/assets/js").glob("*.js"):
             self.assertNotIn('.invoke("RestoreDatabaseAtomically"', script.read_text(encoding="utf-8"))
 
+    def test_native_backup_upgrade_is_separate_from_restore_and_requires_review(self):
+        native = ROOT / "src/AlTamam.NativeDesktop"
+        view = (native / "Views/NativeManualBackupView.xaml").read_text(encoding="utf-8")
+        handler = (native / "Views/NativeManualBackupView.xaml.cs").read_text(encoding="utf-8")
+        dialog = (native / "Views/NativeBackupUpgradeDialog.cs").read_text(encoding="utf-8")
+        host = (native / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        backend = (native / "Auth/NativeSqlCipherAuthenticationBackend.cs").read_text(encoding="utf-8")
+        review = (ROOT / "src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs").read_text(encoding="utf-8")
+        self.assertIn('Click="OnBackupUpgradeClick"', view)
+        self.assertIn('Inspection.CanRequestUpgrade', view)
+        self.assertIn('host.RequestBackupUpgradeAsync(settings)', handler)
+        self.assertIn('PasswordBox', dialog)
+        self.assertIn('password.Clear()', dialog)
+        self.assertIn('window.ShowDialog()', dialog)
+        self.assertIn('SchemaVersion==CurrentSchemaVersion-1', review)
+        self.assertIn('ReferenceEquals(Evidence,intent.Evidence)', review)
+        method = host.split("internal async Task RequestBackupUpgradeAsync",1)[1].split("internal async Task RequestRecoveryExportAsync",1)[0]
+        for needle in ("GetUpgradeIntent()", "MatchesUpgradeIntent(intent)",
+                       "_recoveryExportInProgress=true", "PrepareBackupUpgradeAsync",
+                       "settings.Inspection.ForceClear()", "VerifyCurrentSessionAsync"):
+            self.assertIn(needle,method)
+        self.assertNotIn("TryRestoreAsync",method)
+        self.assertNotIn("ActivateOfflineAsync",method)
+        self.assertIn("NativeBackupForwardUpgradeService",backend)
+        self.assertNotIn("NativeBackupForwardUpgradeService",(APP / "BridgeHandlerCatalog.cs").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
