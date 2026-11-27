@@ -210,6 +210,60 @@ public sealed class NativeWpfNavigationTests
         Assert.False(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
     }
 
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration)]
+    [InlineData(UserRole.OrdinaryAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task Roster_export_entry_reuses_monthly_scope_without_automatic_preview_or_export(UserRole role)
+    {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend(role));
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.NavigateCommand.Execute(NativeScreen.Reports);
+        Assert.True(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.OpenRosterExportCommand.Execute(null);
+        Assert.Same(vm.MonthlyAttendance,vm.CurrentPage);
+        Assert.True(vm.MonthlyAttendance.IsRosterExportEntry);
+        Assert.False(vm.MonthlyAttendance.Excel.IsOpen);
+        Assert.Equal(0,reader.Exports);
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+        Assert.False(vm.MonthlyAttendance.IsRosterExportEntry);
+        vm.NavigateCommand.Execute(NativeScreen.MonthlyAttendance);
+        Assert.False(vm.MonthlyAttendance.IsRosterExportEntry);
+        await vm.LogoutAsync();
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        Assert.False(vm.MonthlyAttendance.IsRosterExportEntry);
+    }
+
+    [Fact]
+    public async Task Administration_export_entry_respects_pending_review_and_logout()
+    {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend());
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        vm.NavigateCommand.Execute(NativeScreen.Administration);
+        Assert.True(vm.OpenRosterExportCommand.CanExecute(null));
+        await vm.Administration.OpenProfileAsync(Assert.Single(vm.Administration.Rows));
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.OpenRosterExportCommand.Execute(null);
+        Assert.Same(vm.Administration,vm.CurrentPage);
+        vm.Administration.CloseProfile();
+        Assert.True(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.OpenRosterExportCommand.Execute(null);
+        Assert.True(vm.MonthlyAttendance.IsRosterExportEntry);
+        Assert.False(vm.MonthlyAttendance.Excel.IsOpen);
+        Assert.Equal(0,reader.Exports);
+        await vm.LogoutAsync();
+        Assert.False(vm.MonthlyAttendance.IsRosterExportEntry);
+    }
+
     [Fact]
     public async Task Reports_without_backend_never_advertise_working_actions()
     {
@@ -219,6 +273,8 @@ public sealed class NativeWpfNavigationTests
         vm.NavigateCommand.Execute(NativeScreen.Reports);
         Assert.False(vm.Reports.OpenPersonnelReportsCommand.CanExecute(null));
         Assert.False(vm.Reports.OpenMonthlyReportsCommand.CanExecute(null));
+        Assert.False(vm.OpenRosterExportCommand.CanExecute(null));
+        vm.OpenRosterExportCommand.Execute(null);
         vm.Reports.OpenMonthlyReportsCommand.Execute(null);
         Assert.Same(vm.Reports,vm.CurrentPage);
     }
