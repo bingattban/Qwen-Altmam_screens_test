@@ -170,4 +170,10 @@ public sealed record NativeMonthlyExcelPreview(
 
 public sealed record NativeMonthlyExcelReceipt(
     string Period, string SiteId, string SearchTerm,
-    string PrimaryFilePath, int FileCount, long PersonCount);
+    string PrimaryFilePath, int FileCount, long PersonCount)
+{
+    public IReadOnlyList<NativeMonthlyExcelFile>? Files {get;init;}
+}
+
+public sealed record NativeMonthlyExcelFile(
+    string SiteId,string SiteName,string FilePath,long PersonCount);
