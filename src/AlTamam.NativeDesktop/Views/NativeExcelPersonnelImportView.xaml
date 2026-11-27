@@ -15,7 +15,7 @@
     </UserControl.Resources>
     <Grid Background="#D50F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource ImportVisible}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="16" Width="950" MaxHeight="780"
                 Margin="12" VerticalAlignment="Center"
                 HorizontalAlignment="Center">
@@ -69,7 +69,7 @@
                                           AutoGenerateColumns="False" IsReadOnly="True"
                                           CanUserAddRows="False" CanUserDeleteRows="False"
                                           HeadersVisibility="Column" Height="180"
-                                          AlternatingRowBackground="#F8FAFC">
+                                          AlternatingRowBackground="{DynamicResource NativeSubtle}">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="الورقة" Binding="{Binding Worksheet}" Width="*"/>
                                         <DataGridTextColumn Header="الصف" Binding="{Binding Row}" Width="55"/>
@@ -85,7 +85,7 @@
                                           AutoGenerateColumns="False" IsReadOnly="True"
                                           CanUserAddRows="False" CanUserDeleteRows="False"
                                           HeadersVisibility="Column" MaxHeight="140"
-                                          AlternatingRowBackground="#FFFBEB">
+                                          AlternatingRowBackground="{DynamicResource NativePaleWarning}">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="الورقة" Binding="{Binding Worksheet}" Width="*"/>
                                         <DataGridTextColumn Header="الصف" Binding="{Binding Row}" Width="55"/>

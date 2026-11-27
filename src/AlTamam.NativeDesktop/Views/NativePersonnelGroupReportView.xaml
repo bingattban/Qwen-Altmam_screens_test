@@ -22,7 +22,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource GroupVisible}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="14" Margin="12" MaxWidth="1120"
                 HorizontalAlignment="Center" VerticalAlignment="Stretch">
             <Grid>
@@ -154,7 +154,7 @@
                                    Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap" Margin="0,0,0,5"/>
                         <DataGrid ItemsSource="{Binding Report.Persons}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
-                                  Height="320" AlternatingRowBackground="#F8FAFC"
+                                  Height="320" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   SelectionMode="Single" SelectionUnit="FullRow"
                                   RowDetailsVisibilityMode="VisibleWhenSelected"
                                   AutomationProperties.Name="المجموعة المختارة بمعرفات الأفراد ومجاميع أصلية">
@@ -198,7 +198,7 @@
                         <TextBlock Text="إجماليات حالات التحضير (المجموعة كاملة)" Style="{StaticResource GroupTitle}"/>
                         <DataGrid ItemsSource="{Binding Report.StatusTotals}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
-                                  Height="145" AlternatingRowBackground="#F8FAFC"
+                                  Height="145" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="إجماليات الحالات الأصلية للمجموعة">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الحالة التاريخية" Binding="{Binding StatusName}" Width="2*"/>
@@ -219,7 +219,7 @@
                                    Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"/>
                         <DataGrid ItemsSource="{Binding Report.DailyStatuses}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
-                                  Height="195" AlternatingRowBackground="#F8FAFC"
+                                  Height="195" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="الملخص اليومي المجمع للحالات من قاعدة SQLCipher">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="التاريخ" Binding="{Binding Date}" Width="*"/>
@@ -237,7 +237,7 @@
                 <Border Grid.RowSpan="3" Background="#D10F172A" Panel.ZIndex="50"
                         DataContext="{Binding Excel}"
                         Visibility="{Binding IsOpen, Converter={StaticResource GroupVisible}}">
-                    <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+                    <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                             CornerRadius="10" Padding="18" MaxWidth="620"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                         <StackPanel>

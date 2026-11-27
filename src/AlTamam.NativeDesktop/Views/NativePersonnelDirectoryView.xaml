@@ -159,7 +159,7 @@
                   CanUserSortColumns="False" SelectionMode="Single"
                   SelectionUnit="FullRow" HeadersVisibility="Column"
                   RowHeight="35" ColumnHeaderHeight="38" MinHeight="190"
-                  GridLinesVisibility="Horizontal" AlternatingRowBackground="#F8FAFC"
+                  GridLinesVisibility="Horizontal" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                   BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>

@@ -116,7 +116,7 @@
                           IsReadOnly="True" AutoGenerateColumns="False"
                           CanUserAddRows="False" CanUserDeleteRows="False"
                           CanUserSortColumns="False" FlowDirection="RightToLeft"
-                          AlternatingRowBackground="#F8FAFC"
+                          AlternatingRowBackground="{DynamicResource NativeSubtle}"
                           BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                           RowHeight="36" ColumnHeaderHeight="39"
                           MinHeight="145" MaxHeight="285">
