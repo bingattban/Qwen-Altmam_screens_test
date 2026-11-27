@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Persistence.Migrations;
@@ -86,8 +87,8 @@ public sealed class NativeBackupForwardUpgradeAuthorizationTests : IAsyncLifetim
         {
             q.CommandText="""
                 INSERT INTO BackupHistory(BackupId,BackupFilePath,Sha256Checksum,SchemaVersion,
-                    IsAutomatic,VerificationPassed,KeyProtectionMode,CreatedAtUtc,CreatedByUserId)
-                VALUES('TST-CATALOG-UPGRADE',$path,$sha,$version,0,1,'DPAPI','2026-11-27T00:00:00Z',$user);
+                    IsAutomatic,VerificationPassed,KeyProtectionMode,CreatedAtUtc,CreatedByUserId,NotesArabic)
+                VALUES('TST-CATALOG-UPGRADE',$path,$sha,$version,0,1,'DPAPI','2026-11-27T00:00:00Z',$user,'synthetic');
                 """;
             q.Parameters.AddWithValue("$path",Source);
             q.Parameters.AddWithValue("$sha",new string('a',64));
