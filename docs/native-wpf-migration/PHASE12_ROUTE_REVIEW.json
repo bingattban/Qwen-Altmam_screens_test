@@ -457,34 +457,46 @@
     {
       "screenId": "screen_041",
       "routeKey": "Export",
-      "reviewStatus": "partial",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
-        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+        "src/AlTamam.NativeDesktop/Views/NativeMonthlyAttendanceView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelReceiptEvidence.cs",
+        "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
+        "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs"
       ],
-      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "note": "General roster export entry from native Administration and Reports reuses monthly period, site and search selection, with no automatic preview/export. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
       "screenId": "screen_042",
       "routeKey": "PreviewAndConfirmExport",
-      "reviewStatus": "partial",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
-        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+        "src/AlTamam.NativeDesktop/Views/NativeMonthlyAttendanceView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelReceiptEvidence.cs",
+        "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
+        "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs"
       ],
-      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "note": "Native explicit preview, destination/name review and confirmation reuse canonical Excel service; destination applies to this export only instead of persisting global settings. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
       "screenId": "screen_043",
       "routeKey": "ExportProgressAndResult",
-      "reviewStatus": "partial",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
-        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+        "src/AlTamam.NativeDesktop/Views/NativeMonthlyAttendanceView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelReceiptEvidence.cs",
+        "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
+        "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs"
       ],
-      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "note": "Native actual row progress, cancellation request, and verified complete workbook result grid; no unverified success or automatic retry. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
