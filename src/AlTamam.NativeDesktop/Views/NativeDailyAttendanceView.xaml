@@ -160,6 +160,7 @@
                             <DataGridTextColumn Header="معرّف الموقع" Binding="{Binding ScopeLabel}" Width="*"/>
                             <DataGridTextColumn Header="معرّف الحالة" Binding="{Binding TargetStatusId}" Width="*"/>
                             <DataGridTextColumn Header="عدد الأفراد" Binding="{Binding PersonCount}" Width="90"/>
+                            <DataGridTextColumn Header="المدة ونوع التحضير" Binding="{Binding RangeLabel}" Width="2*"/>
                             <DataGridTextColumn Header="آخر حفظ" Binding="{Binding UpdatedLabel}" Width="*"/>
                             <DataGridTextColumn Header="معرّف المسودة" Binding="{Binding DraftId}" Width="2*"/>
                         </DataGrid.Columns>
