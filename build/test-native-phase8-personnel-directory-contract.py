@@ -20,6 +20,10 @@ FILES = {
     "templates": "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
     "xaml": "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
     "view": "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml.cs",
+    "layout": "src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+    "mutation": "src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+    "layout_tests": "tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
+    "mutation_tests": "tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs",
     "core": ".github/workflows/windows-ci.yml",
     "release": ".github/workflows/windows-release.yml",
 }
@@ -114,6 +118,25 @@ def problems(files):
         require("tests", token)
     if files["tests"].count("[Fact]") < 6:
         failures.append("Missing Phase8 manager-only native C# regressions.")
+    for token in ("SequenceEqual(Enumerable.Range(1,rows.Count(x=>x.Active)))",
+                  "RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)",
+                  "NativeRosterColumn.ValidCatalogue(rows)"):
+        require("layout",token)
+    for token in ("ArabicTextNormalizer.NormalizeForSearch(Caption).Length>0",
+                  "ArabicTextNormalizer.NormalizeForSearch(r.Caption)==normalized",
+                  "old.StoredValueCount==0"):
+        require("mutation",token)
+    require("layout_tests","Active_order_must_be_contiguous_even_when_retired_rows_reuse_positions")
+    require("mutation_tests","Native_caption_review_matches_canonical_arabic_normalization")
+    try:
+        root=ET.fromstring(files["xaml"])
+        ns="{http://schemas.microsoft.com/winfx/2006/xaml/presentation}"
+        groups=[node for node in root.iter(ns+"GroupBox") if node.get("Header")=="إدارة الكشوفات"]
+        commands=("OpenExcelImportCommand","OpenImportHistoryCommand","OpenRosterExportCommand","OpenColumnLayoutCommand")
+        if len(groups)!=1 or any(sum(command in node.get("Command","") for node in groups[0].iter(ns+"Button"))!=1 for command in commands):
+            failures.append("Roster management must group all four existing commands exactly once.")
+    except ET.ParseError:
+        pass
     for key in ("core", "release"):
         require(key, "python build/test-native-phase8-personnel-directory-contract.py")
     for token in ("new SqliteConnection(", "ExecuteInWriteTransactionAsync(",
@@ -129,6 +152,14 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("PHASE8 NATIVE PERSONNEL FAIL:\n" + "\n".join(errors))
     for key, token in (
+        ("layout", "SequenceEqual(Enumerable.Range(1,rows.Count(x=>x.Active)))"),
+        ("mutation", "ArabicTextNormalizer.NormalizeForSearch(r.Caption)==normalized"),
+        ("mutation", "ArabicTextNormalizer.NormalizeForSearch(Caption).Length>0"),
+        ("xaml", 'Header="إدارة الكشوفات"'),
+        ("xaml", "OpenColumnLayoutCommand"),
+        ("xaml", "OpenExcelImportCommand"),
+        ("xaml", "OpenImportHistoryCommand"),
+        ("xaml", "OpenRosterExportCommand"),
         ("vm", "RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)"),
         ("vm", "_reader.ReadProfileAsync(actor, row.PersonId, linked.Token)"),
         ("vm", "ReferenceEquals(current, row)"),
