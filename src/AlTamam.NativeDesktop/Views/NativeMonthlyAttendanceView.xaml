@@ -353,6 +353,21 @@
                             <TextBlock Text="{Binding Excel.Receipt.PrimaryFilePath}"
                                        Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"
                                        FlowDirection="LeftToRight"/>
+                            <DataGrid ItemsSource="{Binding Excel.ResultFiles}"
+                                      Visibility="{Binding Excel.HasResultFiles, Converter={StaticResource VisibilityIfTrue}}"
+                                      AutomationProperties.Name="قائمة ملفات Excel المحفوظة"
+                                      IsReadOnly="True" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" CanUserDeleteRows="False"
+                                      EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                                      MaxHeight="235" MinHeight="85" Margin="0,10,0,0"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="الموقع" Binding="{Binding SiteName}" Width="130"/>
+                                    <DataGridTextColumn Header="الأفراد" Binding="{Binding PersonCount}" Width="65"/>
+                                    <DataGridTextColumn Header="مسار الملف" Binding="{Binding FilePath}" Width="340"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
