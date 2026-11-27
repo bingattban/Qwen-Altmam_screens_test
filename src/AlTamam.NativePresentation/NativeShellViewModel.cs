@@ -151,6 +151,9 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeSettingsOverviewReader overviewReader)
             Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen && !Settings.Schedule.IsOpen && !Settings.Inspection.IsOpen);
+        if (reader is INativeThemeBackend themeBackend)
+            Settings.Overview.AttachTheme(themeBackend, () => !Settings.IsReviewOpen &&
+                ReferenceEquals(CurrentPage,Settings));
         if (reader is INativeProgramDiagnosticsBackend diagnosticsBackend)
             Settings.Diagnostics.Attach(diagnosticsBackend, () => _active,
                 () => !Settings.IsReviewOpen && !Settings.Overview.IsLoading &&

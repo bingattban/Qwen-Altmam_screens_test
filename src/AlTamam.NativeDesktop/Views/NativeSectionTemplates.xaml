@@ -374,6 +374,13 @@
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="#BE123C" TextWrapping="Wrap"/>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
+                        <WrapPanel Margin="0,5,0,0">
+                            <Button Content="حفظ المظهر النهاري" Command="{Binding Overview.SaveLightCommand}" Padding="12,6" Margin="4"/>
+                            <Button Content="حفظ المظهر الليلي" Command="{Binding Overview.SaveDarkCommand}" Padding="12,6" Margin="4"/>
+                        </WrapPanel>
+                        <ProgressBar Height="4" IsIndeterminate="True" Margin="0,4"
+                                     Visibility="{Binding Overview.IsSavingTheme, Converter={StaticResource VisibilityIfTrue}}"/>
+                        <TextBlock Text="يتم حفظ الاختيار في الإعداد الأصلي للبرنامج. تطبيق ألوان المظهر الليلي على جميع شاشات WPF قيد الاستكمال." TextWrapping="Wrap" Foreground="#475569"/>
                         <TextBlock Text="هذه قراءة للإعدادات المحفوظة وآخر النتائج المسجلة. يعمل المجدول الأصلي أثناء تشغيل البرنامج؛ تفعيل الإعداد وحده لا يعني نجاح النسخ. حدّث الإعدادات لعرض آخر نتيجة." TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,0"/>
                     </StackPanel>
                 </StackPanel>

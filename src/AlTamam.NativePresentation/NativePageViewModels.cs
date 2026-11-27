@@ -42,7 +42,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
         CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
         Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
-        Overview.PropertyChanged+=(_,_)=>NotifyBackupCommands();
+        Overview.PropertyChanged+=(_,_)=>NotifySettingsAvailability();
         Diagnostics.PropertyChanged+=(_,_)=>NotifySessionChanged();
         CatchUp = new NativeAdministrativeCatchUpReview();
         Policy = new NativeClosedDayPolicyReview();
@@ -161,7 +161,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
+    public bool IsReviewOpen => Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -271,9 +271,9 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         if (CanOpenPolicy && _policyBackend is not null && _policyActor is not null)
             Policy.Open(_policyBackend,_policyActor,enabled);
     }
-    public void NotifySessionChanged()
+    public void NotifySessionChanged()=>Overview.Notify();
+    private void NotifySettingsAvailability()
     {
-        Overview.Notify();
         NotifyBackupCommands();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenCatchUp)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDataConnected)));
