@@ -287,6 +287,12 @@ public sealed class AlTamamDbContext : IDisposable
         CancellationToken ct=default)
         => EncryptedBackupInspector.VerifyAsync(path,_databasePath,_databaseKey,ct);
 
+    /// <summary>Native inspection of standalone backup bytes without creating
+    /// SQLite sidecars beside the original file.</summary>
+    public Task<EncryptedBackupInspection> InspectStandaloneEncryptedBackupAsync(string path,
+        CancellationToken ct=default)
+        => EncryptedBackupInspector.VerifyStandaloneCopyAsync(path,_databasePath,_databaseKey,ct);
+
     /// <summary>
     /// Prepare a separate, verified forward-upgraded backup for explicit later
     /// selection. Does not restore, approve, or open the active database.
