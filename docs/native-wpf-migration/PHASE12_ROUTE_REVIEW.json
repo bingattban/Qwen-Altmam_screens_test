@@ -748,9 +748,16 @@
     {
       "screenId": "screen_066",
       "routeKey": "DraftsAndTemporarySave",
-      "reviewStatus": "gap",
-      "evidence": [],
-      "note": "No dedicated shared drafts/temporary-save implementation confirmed in native route inventory.",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeDailyAttendanceView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
+        "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeAttendanceDraftIntent.cs",
+        "src/AlTamam.Application/Bridge/BridgeSharedServices.cs",
+        "tests/AlTamam.Tests/Bridge/NativeAttendanceDraftLifecycleTests.cs"
+      ],
+      "note": "Source-level owner-only catalogue, explicit native save, fresh preview and reviewed deletion are implemented; PR #121 Windows Core/Release passed. Bounded reads and exact semantic legacy JSON deletion are reviewed in the subsequent hardening PR. Physical WPF route acceptance remains required; no functional parity or production switch asserted.",
       "functionalParityVerified": false
     },
     {
