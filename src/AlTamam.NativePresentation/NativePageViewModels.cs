@@ -15,7 +15,44 @@ public abstract class NativePageViewModel(NativeScreen screen, string title)
         "تم تفعيل تسجيل الدخول الأصلي والتحقق من الجلسة. لم يتم بعد ربط هذه الشاشة بالخدمات التشغيلية؛ هذه معاينة XAML للمرحلة التالية.";
 }
 
-public sealed class ReportsPageViewModel() : NativePageViewModel(NativeScreen.Reports, "التقارير");
+/// <summary>Navigation only: reuse the existing authorized report/Excel workflows.</summary>
+public sealed class ReportsPageViewModel : NativePageViewModel, System.ComponentModel.INotifyPropertyChanged
+{
+    private bool _personnelAvailable,_monthlyAvailable;
+    private bool _attached;
+    private readonly Func<NativeScreen,bool> _canNavigate;
+    private readonly Action<NativeScreen> _navigate;
+    public ReportsPageViewModel(Func<NativeScreen,bool> canNavigate,Action<NativeScreen> navigate)
+        : base(NativeScreen.Reports,"التقارير")
+    {
+        _canNavigate=canNavigate; _navigate=navigate;
+        OpenPersonnelReportsCommand=new NativeCommand(_=>_navigate(NativeScreen.Administration),
+            _=>_personnelAvailable && _canNavigate(NativeScreen.Administration));
+        OpenMonthlyReportsCommand=new NativeCommand(_=>_navigate(NativeScreen.MonthlyAttendance),
+            _=>_monthlyAvailable && _canNavigate(NativeScreen.MonthlyAttendance));
+    }
+    public NativeCommand OpenPersonnelReportsCommand { get; }
+    public NativeCommand OpenMonthlyReportsCommand { get; }
+    public override string StatusMessage => _attached
+        ? "اختر مسار التقرير المتاح لصلاحيتك. يتم اختيار الأفراد والفترة ومعاينة التصدير في الشاشات الأصلية؛ لا يتم إنشاء أي ملف تلقائيا."
+        : base.StatusMessage;
+    public void AttachReader(INativeDashboardReader reader)
+    {
+        if(_attached) throw new InvalidOperationException("Reports entry already attached.");
+        _attached=true;
+        _personnelAvailable=reader is INativePersonnelDirectoryReader &&
+            reader is INativePersonnelReportReader && reader is INativePersonnelGroupReportReader;
+        _monthlyAvailable=reader is INativeMonthlyAttendanceReader && reader is INativeMonthlyExcelExportBackend;
+        NotifyAvailability();
+    }
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    public void NotifyAvailability()
+    {
+        PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(StatusMessage)));
+        OpenPersonnelReportsCommand.NotifyAvailabilityChanged();
+        OpenMonthlyReportsCommand.NotifyAvailabilityChanged();
+    }
+}
 public sealed class SettingsPageViewModel : NativePageViewModel, System.ComponentModel.INotifyPropertyChanged
 {
     private INativeAdministrativeCatchUpBackend? _backend;
