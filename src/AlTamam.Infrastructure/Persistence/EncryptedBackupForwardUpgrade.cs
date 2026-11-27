@@ -10,7 +10,8 @@ public sealed record ForwardUpgradedBackup(int SourceSchemaVersion,string Source
 internal static class EncryptedBackupForwardUpgrade
 {
     internal static async Task<ForwardUpgradedBackup> PrepareAsync(string sourcePath,string activePath,
-        string keyHex,string expectedSha256,CancellationToken ct)
+        string keyHex,string expectedSha256,CancellationToken ct,
+        Func<CancellationToken,Task<bool>>? authorizePublication=null)
     {
         ct.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -133,6 +134,12 @@ internal static class EncryptedBackupForwardUpgrade
                     throw new InvalidDataException("Verified output SHA256 changed.");
             }
             RequireStandalone(candidate);
+            ct.ThrowIfCancellationRequested();
+            // Native callers can revalidate the current session immediately
+            // before publishing. Denial or cancellation leaves no output.
+            if(authorizePublication is not null &&
+               !await authorizePublication(ct).ConfigureAwait(false))
+                throw new UnauthorizedAccessException("Backup upgrade publication authorization expired.");
             ct.ThrowIfCancellationRequested();
             File.Move(candidate,output,overwrite:false);
             return new ForwardUpgradedBackup(before.SchemaVersion,before.Sha256,after with {FullPath=output});
