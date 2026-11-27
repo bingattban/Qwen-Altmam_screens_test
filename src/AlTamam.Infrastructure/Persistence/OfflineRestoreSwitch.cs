@@ -22,7 +22,7 @@ public sealed class OfflineRestoreSwitch
     }
     public enum RecoveryOutcome { NothingPending, OriginalRetained, ReplacementVerified, OriginalRecovered }
     private sealed record Intent(string Live,string Stage,string Rollback,string Rescue,
-        string OldDigest,string NewDigest);
+        string OldDigest,string NewDigest,int? SchemaVersion=null);
     private const string JournalName=".altamam-restore-activation.pending.json";
     private static string Journal(string live)
         =>Path.Combine(Path.GetDirectoryName(Path.GetFullPath(live))!,JournalName);
@@ -99,7 +99,7 @@ public sealed class OfflineRestoreSwitch
     }
 
     private static async Task<bool> ValidExactAsync(string path,string digest,
-        string live,string key,CancellationToken ct,bool allowPreviousSchema=false)
+        string live,string key,CancellationToken ct,bool allowPreviousSchema=false,int? expectedSchemaVersion=null)
     {
         if(!File.Exists(path))return false;
 
@@ -131,7 +131,8 @@ public sealed class OfflineRestoreSwitch
             }
             var result=await EncryptedBackupInspector.VerifyAsync(replay,live,key,ct)
                 .ConfigureAwait(false);
-            if(!string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase))
+            if((expectedSchemaVersion.HasValue && result.SchemaVersion!=expectedSchemaVersion.Value) ||
+               !string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase))
                 return false;
             if(result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion)
                 return true;
@@ -223,6 +224,10 @@ public sealed class OfflineRestoreSwitch
            state.OldDigest.Length!=64||!state.OldDigest.All(Uri.IsHexDigit)||
            state.NewDigest.Length!=64||!state.NewDigest.All(Uri.IsHexDigit))
             throw new InvalidDataException("Restore intent paths/digests are not trusted.");
+        if(state.SchemaVersion is int version &&
+           version!=AlTamamDbContext.CurrentSchemaVersion &&
+           version!=AlTamamDbContext.CurrentSchemaVersion-1)
+            throw new InvalidDataException("Restore intent schema is not supported for startup reconciliation.");
         ValidateStagePath(live,state.Stage);
         return state;
     }
@@ -265,7 +270,7 @@ public sealed class OfflineRestoreSwitch
         string rollback=Path.Combine(Path.GetDirectoryName(live)!,
             ".altamam-restore-rollback-"+id+".dbbackup");
         var intent=new Intent(live,Path.GetFullPath(prepared.StageFilePath),
-            rollback,freshRescue,old.Sha256,stage.Sha256);
+            rollback,freshRescue,old.Sha256,stage.Sha256,AlTamamDbContext.CurrentSchemaVersion);
         ct.ThrowIfCancellationRequested();
         await WriteIntentAsync(Journal(live),intent,ct).ConfigureAwait(false);
         // The durable intent must be reconciled after interruption.
@@ -287,17 +292,17 @@ public sealed class OfflineRestoreSwitch
         if(!File.Exists(Journal(live)))return RecoveryOutcome.NothingPending;
         RequireOffline(live);
         var state=await ReadIntentAsync(live,ct).ConfigureAwait(false);
-        if(await ValidExactAsync(live,state.NewDigest,live,key,ct,allowPreviousSchema:true).ConfigureAwait(false))
+        if(await ValidExactAsync(live,state.NewDigest,live,key,ct,allowPreviousSchema:true,expectedSchemaVersion:state.SchemaVersion).ConfigureAwait(false))
         {
             File.Delete(Journal(live));
             return RecoveryOutcome.ReplacementVerified;
         }
-        if(await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true).ConfigureAwait(false))
+        if(await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true,expectedSchemaVersion:state.SchemaVersion).ConfigureAwait(false))
         {
             File.Delete(Journal(live));
             return RecoveryOutcome.OriginalRetained;
         }
-        if(!await ValidExactAsync(state.Rollback,state.OldDigest,live,key,ct,allowPreviousSchema:true)
+        if(!await ValidExactAsync(state.Rollback,state.OldDigest,live,key,ct,allowPreviousSchema:true,expectedSchemaVersion:state.SchemaVersion)
             .ConfigureAwait(false))
             throw new InvalidDataException(
                 "Unknown DB state without a valid rollback; no overwrite performed.");
@@ -321,7 +326,7 @@ public sealed class OfflineRestoreSwitch
                 output.Flush(flushToDisk:true);
             }
             testCheckpoint?.Invoke(RecoveryCheckpoint.AfterReplayCopy);
-            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct,allowPreviousSchema:true)
+            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct,allowPreviousSchema:true,expectedSchemaVersion:state.SchemaVersion)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
                     "Rollback replay copy is not valid; original and intent retained.");
@@ -330,7 +335,7 @@ public sealed class OfflineRestoreSwitch
             else File.Replace(replay,live,
                 live+".failed-restore-"+Guid.NewGuid().ToString("N"));
             testCheckpoint?.Invoke(RecoveryCheckpoint.AfterRecoveryReplace);
-            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true)
+            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true,expectedSchemaVersion:state.SchemaVersion)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
                     "Rollback verification failed; intent and original retained.");
