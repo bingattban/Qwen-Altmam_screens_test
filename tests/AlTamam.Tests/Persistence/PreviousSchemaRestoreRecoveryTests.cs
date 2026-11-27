@@ -106,6 +106,32 @@ public sealed class PreviousSchemaRestoreRecoveryTests : IDisposable
         Assert.Equal(rescue,Digest(Rescue));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task VersionedJournal_RequiresExactPinnedSchema(bool matching)
+    {
+        await WriteLegacyJournalAsync(Current-1);
+        File.Copy(Stage,_live);
+        var intent=System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(Journal))!.AsObject();
+        intent["SchemaVersion"]=matching?Current-1:Current;
+        await File.WriteAllTextAsync(Journal,intent.ToJsonString());
+        string original=Digest(_live);
+        var service=new OfflineRestoreSwitch();
+        if(matching)
+        {
+            Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.ReplacementVerified,
+                await service.ReconcileAtStartupAsync(_live,Key));
+            Assert.False(File.Exists(Journal));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(()=>service.ReconcileAtStartupAsync(_live,Key));
+            Assert.True(File.Exists(Journal));
+        }
+        Assert.Equal(original,Digest(_live));
+    }
+
     [Fact]
     public async Task PreviousSchemaCannotEnterNewActivation()
     {
