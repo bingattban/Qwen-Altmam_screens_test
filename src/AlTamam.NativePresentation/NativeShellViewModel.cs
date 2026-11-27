@@ -193,6 +193,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         if (reader is INativeHistoricalPeriodReader historicalReader && reader is INativeHistoricalRangeBackend historicalBackend &&
             reader is INativeClosedDayCorrectionBackend historicalCatalogue)
             Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active);
+        _openRosterExportCommand.NotifyAvailabilityChanged();
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand OpenAdministrativeHistoricalCommand => _openAdministrativeHistoricalCommand;
@@ -463,6 +464,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Reports.NotifyAvailability();
         _logoutCommand.NotifyAvailabilityChanged();
         _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+        _openRosterExportCommand.NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)
