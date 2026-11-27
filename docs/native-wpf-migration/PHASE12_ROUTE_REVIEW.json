@@ -1,0 +1,802 @@
+{
+  "schemaVersion": 1,
+  "reviewedBase": "b5d07cecc63cedd2de55051715efe60c973bd860",
+  "purpose": "Source-level triage only; no functional parity or production acceptance asserted. candidate means implementation surface identified, partial means explicit comparison/incomplete scope, gap means native implementation not confirmed. All 69 require physical route evidence.",
+  "productionSwitchAllowed": false,
+  "routes": [
+    {
+      "screenId": "screen_001",
+      "routeKey": "Dashboard",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeDashboardView.xaml",
+        "src/AlTamam.NativePresentation/DashboardPageViewModel.cs"
+      ],
+      "note": "Canonical dashboard counts, roster filters and pagination; validate actual Windows behavior and custom fields.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_002",
+      "routeKey": "UnpreparedPersonnel",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeAutoPreparedRegisterView.xaml",
+        "src/AlTamam.NativePresentation/NativeAutoPreparedRegisterViewModel.cs"
+      ],
+      "note": "Read-only saved auto-preparation register.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_003",
+      "routeKey": "SelectStatusAndConfirm",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeDailyAttendanceView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
+        "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs"
+      ],
+      "note": "Reviewed initial/revised attendance; verify original route entry points and range/status handling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_004",
+      "routeKey": "MonthlyAttendance",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeMonthlyAttendanceView.xaml",
+        "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs"
+      ],
+      "note": "Monthly and archive modes, historical cell correction and export.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_005",
+      "routeKey": "SelectArchive",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeMonthlyAttendanceView.xaml",
+        "src/AlTamam.NativePresentation/MonthlyAttendancePageViewModel.cs"
+      ],
+      "note": "Monthly and archive modes, historical cell correction and export.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_006",
+      "routeKey": "Administration",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs"
+      ],
+      "note": "Administration personnel list, RBAC and filters.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_007",
+      "routeKey": "PersonnelManagement",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs"
+      ],
+      "note": "Administration personnel list, RBAC and filters.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_008",
+      "routeKey": "Attendance",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeDailyAttendanceView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
+        "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs"
+      ],
+      "note": "Reviewed initial/revised attendance; verify original route entry points and range/status handling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_009",
+      "routeKey": "ConfirmAttendance",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeDailyAttendanceView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
+        "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs"
+      ],
+      "note": "Reviewed initial/revised attendance; verify original route entry points and range/status handling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_010",
+      "routeKey": "EditPersonnelNames",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelMutationView.xaml",
+        "src/AlTamam.NativePresentation/NativePersonnelMutationViewModel.cs"
+      ],
+      "note": "Reviewed create/edit personnel and stable identity.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_011",
+      "routeKey": "EditPersonDetails",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelMutationView.xaml",
+        "src/AlTamam.NativePresentation/NativePersonnelMutationViewModel.cs"
+      ],
+      "note": "Reviewed create/edit personnel and stable identity.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_012",
+      "routeKey": "RemovePersonnel",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativePresentation/NativePersonnelSeparationViewModel.cs"
+      ],
+      "note": "Separation is present; exact legacy removal-from-strength workflow requires comparison, not assumed equivalent.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_013",
+      "routeKey": "Transfers",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkInternalTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkExternalTransferView.xaml"
+      ],
+      "note": "Single/bulk reviewed transfers; check legacy entry/confirmation paths.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_014",
+      "routeKey": "InternalTransfer",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkInternalTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkExternalTransferView.xaml"
+      ],
+      "note": "Single/bulk reviewed transfers; check legacy entry/confirmation paths.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_015",
+      "routeKey": "ConfirmTransfer",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkInternalTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkExternalTransferView.xaml"
+      ],
+      "note": "Single/bulk reviewed transfers; check legacy entry/confirmation paths.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_016",
+      "routeKey": "ExternalTransfer",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkInternalTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkExternalTransferView.xaml"
+      ],
+      "note": "Single/bulk reviewed transfers; check legacy entry/confirmation paths.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_017",
+      "routeKey": "ConfirmExternalTransfer",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkInternalTransferView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeBulkExternalTransferView.xaml"
+      ],
+      "note": "Single/bulk reviewed transfers; check legacy entry/confirmation paths.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_018",
+      "routeKey": "TransferArchive",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeMovementArchiveView.xaml",
+        "src/AlTamam.NativePresentation/NativeMovementArchiveViewModel.cs"
+      ],
+      "note": "Transfer archive and read-only history.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_019",
+      "routeKey": "ReportsAndDismissal",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSeparationArchiveView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeArchivedReturnView.xaml"
+      ],
+      "note": "Separation, archive and return; verify each route's behavior.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_021",
+      "routeKey": "Dismissal",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSeparationArchiveView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeArchivedReturnView.xaml"
+      ],
+      "note": "Separation, archive and return; verify each route's behavior.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_022",
+      "routeKey": "DismissPerson",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSeparationArchiveView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeArchivedReturnView.xaml"
+      ],
+      "note": "Separation, archive and return; verify each route's behavior.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_023",
+      "routeKey": "ConfirmDismissal",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSeparationArchiveView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeArchivedReturnView.xaml"
+      ],
+      "note": "Separation, archive and return; verify each route's behavior.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_024",
+      "routeKey": "DismissedPersonnelArchive",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSeparationArchiveView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeArchivedReturnView.xaml"
+      ],
+      "note": "Separation, archive and return; verify each route's behavior.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_025",
+      "routeKey": "PersonnelReport",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelReportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
+        "src/AlTamam.NativePresentation/NativeIndividualExcelViewModel.cs",
+        "src/AlTamam.NativePresentation/NativePersonnelGroupExcelViewModel.cs"
+      ],
+      "note": "Individual/group reports and Excel through Administration, not yet a complete Reports landing section.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_026",
+      "routeKey": "ExportPersonReport",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelReportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
+        "src/AlTamam.NativePresentation/NativeIndividualExcelViewModel.cs",
+        "src/AlTamam.NativePresentation/NativePersonnelGroupExcelViewModel.cs"
+      ],
+      "note": "Individual/group reports and Excel through Administration, not yet a complete Reports landing section.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_027",
+      "routeKey": "StatusesAndSites",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeStatusCatalogView.xaml",
+        "src/AlTamam.NativePresentation/NativeStatusCatalogViewModel.cs"
+      ],
+      "note": "Canonical status catalogue reviewed mutations; verify protected/default status semantics.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_028",
+      "routeKey": "Statuses",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeStatusCatalogView.xaml",
+        "src/AlTamam.NativePresentation/NativeStatusCatalogViewModel.cs"
+      ],
+      "note": "Canonical status catalogue reviewed mutations; verify protected/default status semantics.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_029",
+      "routeKey": "AddStatus",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeStatusCatalogView.xaml",
+        "src/AlTamam.NativePresentation/NativeStatusCatalogViewModel.cs"
+      ],
+      "note": "Canonical status catalogue reviewed mutations; verify protected/default status semantics.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_030",
+      "routeKey": "EditStatus",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeStatusCatalogView.xaml",
+        "src/AlTamam.NativePresentation/NativeStatusCatalogViewModel.cs"
+      ],
+      "note": "Canonical status catalogue reviewed mutations; verify protected/default status semantics.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_031",
+      "routeKey": "DeleteStatus",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeStatusCatalogView.xaml",
+        "src/AlTamam.NativePresentation/NativeStatusCatalogViewModel.cs"
+      ],
+      "note": "Canonical status catalogue reviewed mutations; verify protected/default status semantics.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_032",
+      "routeKey": "Sites",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSiteCatalogView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSiteRetirementView.xaml"
+      ],
+      "note": "Site creation/edit/retirement, reviewed dependencies.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_033",
+      "routeKey": "AddSite",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSiteCatalogView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSiteRetirementView.xaml"
+      ],
+      "note": "Site creation/edit/retirement, reviewed dependencies.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_034",
+      "routeKey": "EditSite",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSiteCatalogView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSiteRetirementView.xaml"
+      ],
+      "note": "Site creation/edit/retirement, reviewed dependencies.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_035",
+      "routeKey": "DeleteSite",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSiteCatalogView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeSiteRetirementView.xaml"
+      ],
+      "note": "Site creation/edit/retirement, reviewed dependencies.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_036",
+      "routeKey": "Rosters",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml"
+      ],
+      "note": "Roster features exist, but exact combined roster management navigation and all functions remain unverified.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_037",
+      "routeKey": "Import",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeImportOutcomeHistoryView.xaml",
+        "src/AlTamam.NativePresentation/NativeExcelPersonnelImportViewModel.cs"
+      ],
+      "note": "File selection, preview, import and committed outcome/rejection history.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_038",
+      "routeKey": "SelectFile",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeImportOutcomeHistoryView.xaml",
+        "src/AlTamam.NativePresentation/NativeExcelPersonnelImportViewModel.cs"
+      ],
+      "note": "File selection, preview, import and committed outcome/rejection history.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_039",
+      "routeKey": "PreviewAndValidate",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeImportOutcomeHistoryView.xaml",
+        "src/AlTamam.NativePresentation/NativeExcelPersonnelImportViewModel.cs"
+      ],
+      "note": "File selection, preview, import and committed outcome/rejection history.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_040",
+      "routeKey": "ImportResults",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeImportOutcomeHistoryView.xaml",
+        "src/AlTamam.NativePresentation/NativeExcelPersonnelImportViewModel.cs"
+      ],
+      "note": "File selection, preview, import and committed outcome/rejection history.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_041",
+      "routeKey": "Export",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+      ],
+      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_042",
+      "routeKey": "PreviewAndConfirmExport",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+      ],
+      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_043",
+      "routeKey": "ExportProgressAndResult",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelGroupReportView.xaml",
+        "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs"
+      ],
+      "note": "Report/monthly export exists; exact original general roster export format, selection and progress need comparison.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_044",
+      "routeKey": "RosterLayout",
+      "reviewStatus": "gap",
+      "evidence": [
+        "src/AlTamam.NativePresentation/NativePersonnelDirectoryContracts.cs"
+      ],
+      "note": "Custom columns are read; no dedicated native reviewed roster layout editor confirmed. Do not equate display with editing.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_045",
+      "routeKey": "AddOrEditColumn",
+      "reviewStatus": "gap",
+      "evidence": [
+        "src/AlTamam.NativePresentation/NativePersonnelDirectoryContracts.cs"
+      ],
+      "note": "Custom columns are read; no dedicated native reviewed roster layout editor confirmed. Do not equate display with editing.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_046",
+      "routeKey": "Users",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml"
+      ],
+      "note": "Account list, creation and reviewed lifecycle; verify password and delete-specific behavior per role.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_047",
+      "routeKey": "AddUser",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml"
+      ],
+      "note": "Account list, creation and reviewed lifecycle; verify password and delete-specific behavior per role.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_048",
+      "routeKey": "ChangePassword",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml"
+      ],
+      "note": "Account list, creation and reviewed lifecycle; verify password and delete-specific behavior per role.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_049",
+      "routeKey": "DeleteAccount",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountCreateView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAccountLifecycleView.xaml"
+      ],
+      "note": "Account list, creation and reviewed lifecycle; verify password and delete-specific behavior per role.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_050",
+      "routeKey": "AuditLog",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeAuditEditReview.cs"
+      ],
+      "note": "Canonical audit query, reviewed edit/hide and history; verify no physical deletion.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_051",
+      "routeKey": "EditAuditEntry",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeAuditEditReview.cs"
+      ],
+      "note": "Canonical audit query, reviewed edit/hide and history; verify no physical deletion.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_052",
+      "routeKey": "DeleteAuditEntry",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeAuditEditReview.cs"
+      ],
+      "note": "Canonical audit query, reviewed edit/hide and history; verify no physical deletion.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_053",
+      "routeKey": "ModifiedDeletedAuditEntries",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeAuditPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeAuditEditReview.cs"
+      ],
+      "note": "Canonical audit query, reviewed edit/hide and history; verify no physical deletion.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_054",
+      "routeKey": "Settings",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeSettingsOverview.cs"
+      ],
+      "note": "Multiple settings implemented; compare every original setting, including automatic monthly export.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_055",
+      "routeKey": "CreateBackup",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml",
+        "src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs",
+        "src/AlTamam.NativePresentation/NativeBackupScheduleReview.cs"
+      ],
+      "note": "Verified encrypted backups, restore, and scheduling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_056",
+      "routeKey": "RestoreBackup",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml",
+        "src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs",
+        "src/AlTamam.NativePresentation/NativeBackupScheduleReview.cs"
+      ],
+      "note": "Verified encrypted backups, restore, and scheduling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_057",
+      "routeKey": "ScheduledBackups",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml",
+        "src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs",
+        "src/AlTamam.NativePresentation/NativeBackupScheduleReview.cs"
+      ],
+      "note": "Verified encrypted backups, restore, and scheduling.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_058",
+      "routeKey": "ResetApplicationData",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeFullResetDialog.cs",
+        "src/AlTamam.Application/Bridge/FullDataResetService.cs"
+      ],
+      "note": "Session-bound physical reset, rescue and restart.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_059",
+      "routeKey": "AboutApplication",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
+        "src/AlTamam.NativeDesktop/Themes/Light.xaml",
+        "src/AlTamam.NativeDesktop/Themes/Dark.xaml"
+      ],
+      "note": "Program information, canonical integrity, persisted appearance; physical appearance acceptance pending.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_060",
+      "routeKey": "Logout",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/MainWindow.xaml.cs",
+        "src/AlTamam.NativeDesktop/Views/NativeLoginView.xaml",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs"
+      ],
+      "note": "Live authentication, first-run provisioning and logout.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_061",
+      "routeKey": "AppearanceAndDiagnostics",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
+        "src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
+        "src/AlTamam.NativeDesktop/Themes/Light.xaml",
+        "src/AlTamam.NativeDesktop/Themes/Dark.xaml"
+      ],
+      "note": "Program information, canonical integrity, persisted appearance; physical appearance acceptance pending.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_062",
+      "routeKey": "Login",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/MainWindow.xaml.cs",
+        "src/AlTamam.NativeDesktop/Views/NativeLoginView.xaml",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs"
+      ],
+      "note": "Live authentication, first-run provisioning and logout.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_063",
+      "routeKey": "FirstRunSetup",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/MainWindow.xaml.cs",
+        "src/AlTamam.NativeDesktop/Views/NativeLoginView.xaml",
+        "src/AlTamam.NativePresentation/NativeShellViewModel.cs"
+      ],
+      "note": "Live authentication, first-run provisioning and logout.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_064",
+      "routeKey": "PersonPickerAndSearch",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml"
+      ],
+      "note": "Multiple feature-specific pickers/reviews exist; shared legacy route scope requires explicit comparison.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_065",
+      "routeKey": "ConfirmationAndWarning",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml"
+      ],
+      "note": "Multiple feature-specific pickers/reviews exist; shared legacy route scope requires explicit comparison.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_066",
+      "routeKey": "DraftsAndTemporarySave",
+      "reviewStatus": "gap",
+      "evidence": [],
+      "note": "No dedicated shared drafts/temporary-save implementation confirmed in native route inventory.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_067",
+      "routeKey": "ConflictsAndNotifications",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativePresentation/NativeAttendanceReviewViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeBackupInspectionReview.cs"
+      ],
+      "note": "Some stale/conflict rejection exists; shared notification/conflict route parity not established.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_068",
+      "routeKey": "ClosedDayExceptionalCorrection",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativePresentation/NativeClosedDayCorrectionReview.cs",
+        "src/AlTamam.NativePresentation/NativeHistoricalRangeReview.cs",
+        "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml"
+      ],
+      "note": "Reviewed historical corrections with original authorization.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_069",
+      "routeKey": "EightPmScheduler",
+      "reviewStatus": "partial",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Scheduling/NativeDurableAttendanceScheduler.cs",
+        "src/AlTamam.NativePresentation/NativeDashboardContinuationContracts.cs"
+      ],
+      "note": "Original durable scheduler and read-only policy/countdown; compare full original scheduler configuration and diagnostics route.",
+      "functionalParityVerified": false
+    },
+    {
+      "screenId": "screen_070",
+      "routeKey": "AddPerson",
+      "reviewStatus": "candidate",
+      "evidence": [
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelMutationView.xaml",
+        "src/AlTamam.NativePresentation/NativePersonnelMutationViewModel.cs"
+      ],
+      "note": "Reviewed create/edit personnel and stable identity.",
+      "functionalParityVerified": false
+    }
+  ]
+}
