@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows.Input;
+using AlTamam.Domain.Policies;
 
 namespace AlTamam.NativePresentation;
 
@@ -22,7 +23,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
     private bool _open, _busy, _exporting, _cancelRequested;
     private int _progressPercent;
     private bool _hasProgress;
-    private string _error = "";
+    private string _error = "", _outputDirectory = "", _outputFileName = "";
     private NativeMonthlyExcelPreview? _preview;
     private NativeMonthlyExcelReceipt? _receipt;
 
@@ -54,8 +55,40 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _pending?.Cancel();
         Notify();
     }
+    public bool HasDestinationReview => _preview?.OutputDirectory is not null;
+    public bool CanEditDestination => HasDestinationReview && _open && !_busy && _receipt is null &&
+        _currentFilter?.Invoke() == _previewFilter && _liveActor?.Invoke() == _previewActor;
+    public string OutputDirectory => _outputDirectory;
+    public string OutputFileName
+    {
+        get => _outputFileName;
+        set
+        {
+            if(!CanEditDestination || value==_outputFileName)return;
+            _outputFileName=value??"";
+            Notify();
+        }
+    }
+    public bool TrySelectOutputDirectory(string? folder)
+    {
+        if(!CanEditDestination || !ValidLocalPath(folder))return false;
+        _outputDirectory=Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder!));
+        Notify();
+        return true;
+    }
+    private static bool ValidLocalPath(string? folder)
+    {
+        if(string.IsNullOrWhiteSpace(folder) || folder.Length>600 || folder.Any(char.IsControl) ||
+           folder.StartsWith(@"\\",StringComparison.Ordinal) || folder.StartsWith("//",StringComparison.Ordinal))
+            return false;
+        try{return Path.IsPathFullyQualified(folder);}
+        catch(ArgumentException){return false;}
+    }
+    private bool ValidDestination => !HasDestinationReview ||
+        (ValidLocalPath(_outputDirectory) &&
+         MonthlyExcelOutputNamePolicy.TryNormalize(_outputFileName,out var name) && name.Length>0);
     public bool CanConfirm => _open && !_busy && _preview is { PersonCount: > 0 } &&
-        _receipt is null && _currentFilter?.Invoke() == _previewFilter &&
+        _receipt is null && ValidDestination && _currentFilter?.Invoke() == _previewFilter &&
         _liveActor?.Invoke() == _previewActor;
     public NativeMonthlyExcelPreview? Preview => _preview;
     public NativeMonthlyExcelReceipt? Receipt => _receipt;
@@ -125,6 +158,8 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             }
             ValidatePreview(result, filter);
             _preview = result;
+            _outputDirectory = ValidLocalPath(result.OutputDirectory)?result.OutputDirectory!:"";
+            _outputFileName = result.SuggestedFileName;
             if (result.PersonCount == 0)
                 _error = "لا توجد أسماء تطابق هذا الشهر والموقع والبحث لتصديرها.";
         }
@@ -152,6 +187,13 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             _previewActor is not { } actor)
             return;
 
+        var request=filter;
+        if(HasDestinationReview)
+        {
+            if(!MonthlyExcelOutputNamePolicy.TryNormalize(_outputFileName,out var name) || name.Length==0 ||
+               !ValidLocalPath(_outputDirectory))return;
+            request=filter with { OutputDirectory=_outputDirectory,OutputFileName=name };
+        }
         int version = ++_generation;
         _pending?.Cancel();
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -184,15 +226,15 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             // the validated local directory, atomic .part commit, names and
             // cleanup after interruption. We do not auto-retry failures.
             var result = _backend is INativeMonthlyExcelProgressBackend progressBackend
-                ? await progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)
-                : await _backend.ExportExcelAsync(actor, filter, linked.Token);
+                ? await progressBackend.ExportWithProgressAsync(actor, request, Report, linked.Token)
+                : await _backend.ExportExcelAsync(actor, request, linked.Token);
             if (version != _generation) return;
             if (_liveActor?.Invoke() != actor || _currentFilter?.Invoke() != filter)
             {
                 Close();
                 return;
             }
-            ValidateReceipt(result, filter);
+            ValidateReceipt(result, request);
             _receipt = result;
             _hasProgress = true;
             _progressPercent = 100;
@@ -242,6 +284,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _cancelRequested = false;
         _hasProgress = false;
         _progressPercent = 0;
+        _outputDirectory = _outputFileName = "";
         Notify();
     }
 
@@ -272,6 +315,10 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
             string.IsNullOrWhiteSpace(receipt.PrimaryFilePath) ||
             !receipt.PrimaryFilePath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Forged monthly Excel export receipt.");
+        if(filter.OutputDirectory is { } folder && filter.OutputFileName is { } name &&
+           !string.Equals(Path.GetFullPath(receipt.PrimaryFilePath),Path.GetFullPath(Path.Combine(folder,name)),
+               OperatingSystem.IsWindows()?StringComparison.OrdinalIgnoreCase:StringComparison.Ordinal))
+            throw new InvalidDataException("Monthly Excel receipt destination mismatch.");
     }
 
     private void Notify()
@@ -280,7 +327,8 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
                      nameof(CanConfirm), nameof(Preview), nameof(Receipt),
                      nameof(Error), nameof(PeriodLabel),
                      nameof(CompletionMessage), nameof(IsExporting), nameof(IsCancelRequested),
-                     nameof(ProgressPercent), nameof(IsProgressIndeterminate), nameof(ProgressMessage) })
+                     nameof(ProgressPercent), nameof(IsProgressIndeterminate), nameof(ProgressMessage),
+                     nameof(HasDestinationReview),nameof(CanEditDestination),nameof(OutputDirectory),nameof(OutputFileName) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
         ((NativeCommand)OpenPreviewCommand).NotifyAvailabilityChanged();
         ((NativeCommand)ConfirmCommand).NotifyAvailabilityChanged();
