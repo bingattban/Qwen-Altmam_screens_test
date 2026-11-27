@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.IO;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -82,6 +84,21 @@ public partial class NativeMonthlyAttendanceView : UserControl
                 IsReadOnly = true
             });
         }
+    }
+
+    private void OnChooseExportFolder(object sender,RoutedEventArgs e)
+    {
+        if(_viewModel?.Excel is not { CanEditDestination:true } export)return;
+        var preview=export.Preview;
+        var picker=new OpenFolderDialog{Title="اختيار مجلد محلي لتصدير Excel",Multiselect=false};
+        if(Directory.Exists(export.OutputDirectory))picker.InitialDirectory=export.OutputDirectory;
+        var owner=Window.GetWindow(this);
+        bool? selected=owner is null?picker.ShowDialog():picker.ShowDialog(owner);
+        if(selected==true && ReferenceEquals(_viewModel?.Excel,export) &&
+           ReferenceEquals(export.Preview,preview) && export.CanEditDestination &&
+           !export.TrySelectOutputDirectory(picker.FolderName))
+            MessageBox.Show("اختر مجلدا محليا صالحا خارج مسارات الشبكة.","تصدير Excel",
+                MessageBoxButton.OK,MessageBoxImage.Warning);
     }
 
     private async void OnDayCellClick(object sender, RoutedEventArgs e)
