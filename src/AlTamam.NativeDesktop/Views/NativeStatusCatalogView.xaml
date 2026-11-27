@@ -15,7 +15,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource StatusVisible}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="10" Padding="15" Margin="12"
                 Width="850" MaxWidth="960" MaxHeight="730"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -65,7 +65,7 @@
                                   CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" RowHeight="34"
                                   SelectionMode="Single" SelectionUnit="FullRow"
-                                  AlternatingRowBackground="#F8FAFC">
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="اسم الحالة" Binding="{Binding Name}" Width="2*"/>
                                 <DataGridTextColumn Header="الرمز" Binding="{Binding Symbol}" Width="75"/>

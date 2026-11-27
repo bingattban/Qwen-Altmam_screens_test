@@ -21,7 +21,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource VisibleWhenTrue}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="14" Margin="12" MaxWidth="1140"
                 HorizontalAlignment="Center" VerticalAlignment="Stretch">
             <Grid>
@@ -182,7 +182,7 @@
                         <TextBlock Text="إجماليات حالات التحضير التاريخية" Style="{StaticResource ReportSection}"/>
                         <DataGrid ItemsSource="{Binding Report.StatusTotals}" AutoGenerateColumns="False"
                                   Height="130" IsReadOnly="True" CanUserAddRows="False"
-                                  CanUserDeleteRows="False" AlternatingRowBackground="#F8FAFC"
+                                  CanUserDeleteRows="False" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="ملخص حالات التحضير المحفوظة تاريخيا">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الحالة التاريخية" Binding="{Binding StatusName}" Width="2*"/>
@@ -204,7 +204,7 @@
                         <DataGrid ItemsSource="{Binding Report.Attendance}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل التحضير التاريخي للصفحة المختارة">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="التاريخ" Binding="{Binding Date}" Width="*"/>
@@ -228,7 +228,7 @@
                         <DataGrid ItemsSource="{Binding Report.Movements}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="التنقلات والفصل والعودة المسجلة للصفحة المختارة">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="التاريخ" Binding="{Binding Date}" Width="*"/>
@@ -252,7 +252,7 @@
                         <DataGrid ItemsSource="{Binding Report.Identities}" Height="180"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل هوية الفرد المحفوظة بالمعرف الثابت">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" Width="2*"/>
@@ -277,7 +277,7 @@
                         <DataGrid ItemsSource="{Binding Report.Sites}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="مواقع الفرد التاريخية حسب فترات الانتساب">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الموقع وقتها" Binding="{Binding SiteName}" Width="2*"/>
@@ -301,7 +301,7 @@
                         <DataGrid ItemsSource="{Binding Report.Revisions}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل تصحيحات حالات التحضير المؤرشف">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="تاريخ التحضير" Binding="{Binding Date}" Width="*"/>
@@ -319,7 +319,7 @@
                         <DataGrid ItemsSource="{Binding Report.MonthlyTotals}" Height="190"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="الإجماليات الشهرية للحالات التاريخية">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="الشهر" Binding="{Binding Period}" Width="*"/>
@@ -342,7 +342,7 @@
                         <DataGrid ItemsSource="{Binding Report.Audit}" Height="200"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="سجل عمليات الفرد المحفوظ حسب تاريخ تنفيذ العملية">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="العملية" Binding="{Binding Operation}" Width="*"/>

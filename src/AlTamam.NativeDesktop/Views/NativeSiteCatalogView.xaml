@@ -16,7 +16,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource SitesVisible}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="10" Padding="16" Margin="12"
                 Width="840" MaxWidth="960" MaxHeight="720"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -68,7 +68,7 @@
                           CanUserAddRows="False" CanUserDeleteRows="False"
                           SelectionMode="Single" SelectionUnit="FullRow"
                           HeadersVisibility="Column"
-                          AlternatingRowBackground="#F8FAFC" RowHeight="35"
+                          AlternatingRowBackground="{DynamicResource NativeSubtle}" RowHeight="35"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="اسم الموقع" Binding="{Binding Name}" Width="2*"/>
