@@ -59,7 +59,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     if (screen != NativeScreen.Dashboard)
                         Dashboard.AutoRegister.Close();
                     if (screen != NativeScreen.DailyAttendance)
+                    {
                         DailyAttendance.Review.Cancel();
+                        DailyAttendance.Drafts.Clear();
+                    }
                     if (screen != NativeScreen.MonthlyAttendance)
                     {
                         MonthlyAttendance.CloseCellDetails();
@@ -122,6 +125,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
             _navigateCommand.NotifyAvailabilityChanged();
         };
+        DailyAttendance.Drafts.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
@@ -244,6 +248,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
            // Never hide a live or ambiguous audited commit by leaving its page.
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
+           (screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&
            (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
            (screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&
            !Audit.Edit.IsOpen && !Accounts.Create.IsOpen && !Accounts.Lifecycle.IsOpen;

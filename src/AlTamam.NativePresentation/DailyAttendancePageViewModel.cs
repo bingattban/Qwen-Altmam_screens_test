@@ -28,6 +28,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     private IReadOnlyList<NativeDailyAttendanceRow> _selected = [];
     private string _selectionError = "";
     public NativeAttendanceReviewViewModel Review { get; } = new();
+    public NativeAttendanceDraftsViewModel Drafts { get; } = new();
     private IReadOnlyList<NativeDashboardColumn> _customColumns = [];
     private IReadOnlyList<NativeDashboardSite> _sites = [new("", "جميع المواقع")];
     private IReadOnlyList<NativeDailyStatusOption> _statuses = [new("", "جميع الحالات")];
@@ -49,6 +50,9 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
                     _ = OpenReviewAsync(row);
             },
             parameter => parameter is NativeDailyAttendanceRow row && CanReviewPerson(row));
+        OpenDraftsCommand = new NativeCommand(_ => _ = Drafts.OpenAsync(),
+            _ => CanChangeRosterScope && !IsLoading && _reader is INativeAttendanceDraftReader);
+        Drafts.PropertyChanged += (_, _) => { Changed(nameof(CanChangeRosterScope)); NotifyCommands(); };
         ReviewSelectedCommand = new NativeCommand(_ => _ = OpenSelectedReviewAsync(),
             _ => CanReviewSelected());
         Review.Committed += receipt => { _ = RefreshAfterVerifiedCommitAsync(); };
@@ -61,7 +65,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
 
     private bool CanRead => _currentPrincipal?.Invoke() is not null && _reader is not null;
     public bool CanChangeRosterScope => CanRead && !Review.IsOpen &&
-        !Review.IsBusy && !Review.IsCommitting && !Review.HasUnverifiedCommit;
+        !Review.IsBusy && !Review.IsCommitting && !Review.HasUnverifiedCommit && !Drafts.IsOpen;
     public override bool IsDataConnected => _connected;
     public override string StatusMessage => IsLoading
         ? "جار قراءة كشف التمام اليومي من قاعدة البيانات المشفرة..."
@@ -103,12 +107,15 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public ICommand PreviousPageCommand { get; }
     public ICommand ReviewPersonCommand { get; }
     public ICommand ReviewSelectedCommand { get; }
+    public ICommand OpenDraftsCommand { get; }
 
     public void AttachReader(INativeDashboardReader reader, Func<NativeIdentity?> principal)
     {
         if (_reader is not null) throw new InvalidOperationException("Native daily roster reader already attached.");
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _currentPrincipal = principal ?? throw new ArgumentNullException(nameof(principal));
+        if (reader is INativeAttendanceDraftReader draftReader)
+            Drafts.Attach(draftReader, principal);
         if (reader is INativeAttendanceReviewBackend backend)
         {
             Review.AttachBackend(backend, principal);
@@ -120,7 +127,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     {
         var live = _currentPrincipal?.Invoke();
         return row is not null && _reviewAttached && _connected && !_loading &&
-            !Review.IsOpen && _loadedDate == DateOnly.FromDateTime(DateTime.Now) &&
+            !Review.IsOpen && !Drafts.IsOpen && _loadedDate == DateOnly.FromDateTime(DateTime.Now) &&
             live is not null && live == _boundPrincipal &&
             _rows.Any(item => ReferenceEquals(item, row)) &&
             !row.IsTransferDay && !string.IsNullOrWhiteSpace(row.PersonId);
@@ -144,7 +151,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
     public bool SetSelectedRows(IReadOnlyList<NativeDailyAttendanceRow>? selection)
     {
         // Never replace an already previewed/possibly committed intent.
-        if (Review.IsOpen || Review.IsBusy || Review.IsCommitting ||
+        if (Drafts.IsOpen || Review.IsOpen || Review.IsBusy || Review.IsCommitting ||
             Review.HasUnverifiedCommit) return false;
 
         NativeIdentity? live = _currentPrincipal?.Invoke();
@@ -211,6 +218,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         _activeRead?.Cancel();
         _activeRead = null;
         Review.ForceCancel();
+        Drafts.Clear();
         _boundPrincipal = null;
         _selectedSite = "";
         _selectedStatus = "";
@@ -439,6 +447,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         ((NativeCommand)NextPageCommand).NotifyAvailabilityChanged();
         ((NativeCommand)ReviewPersonCommand).NotifyAvailabilityChanged();
         ((NativeCommand)ReviewSelectedCommand).NotifyAvailabilityChanged();
+        ((NativeCommand)OpenDraftsCommand).NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)

@@ -223,11 +223,46 @@ public sealed class NativeWpfNavigationTests
         Assert.Same(vm.Reports,vm.CurrentPage);
     }
 
+    [Fact]
+    public async Task Draft_catalogue_freezes_daily_scope_and_navigation_and_logout_scrubs_rows()
+    {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        Assert.False(vm.DailyAttendance.OpenDraftsCommand.CanExecute(null));
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend(UserRole.Supervisor));
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        vm.NavigateCommand.Execute(NativeScreen.DailyAttendance);
+        Assert.True(vm.DailyAttendance.OpenDraftsCommand.CanExecute(null));
+        await vm.DailyAttendance.Drafts.OpenAsync();
+        Assert.Single(vm.DailyAttendance.Drafts.Rows);
+        Assert.False(vm.DailyAttendance.CanChangeRosterScope);
+        Assert.False(vm.DailyAttendance.RefreshCommand.CanExecute(null));
+        Assert.False(vm.DailyAttendance.SetSelectedRows([]));
+        Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.Dashboard));
+        vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+        Assert.Same(vm.DailyAttendance,vm.CurrentPage);
+        vm.DailyAttendance.Drafts.CloseCommand.Execute(null);
+        Assert.True(vm.NavigateCommand.CanExecute(NativeScreen.Dashboard));
+        await vm.DailyAttendance.Drafts.OpenAsync();
+        Assert.Equal(2,reader.DraftReads);
+        await vm.LogoutAsync();
+        Assert.Empty(vm.DailyAttendance.Drafts.Rows);
+        Assert.False(vm.DailyAttendance.Drafts.IsOpen);
+    }
+
     private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader,
         INativePersonnelDirectoryReader, INativeSettingsOverviewReader, INativePersonnelReportReader,
-        INativePersonnelGroupReportReader, INativeMonthlyAttendanceReader, INativeMonthlyExcelExportBackend
+        INativePersonnelGroupReportReader, INativeMonthlyAttendanceReader, INativeMonthlyExcelExportBackend, INativeAttendanceDraftReader
     {
-        public int PersonnelReads,SettingsReads,ReportReads,Exports;
+        public int PersonnelReads,SettingsReads,ReportReads,Exports,DraftReads;
+        public Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(NativeIdentity actor,CancellationToken ct=default)
+        {
+            DraftReads++;
+            return Task.FromResult<IReadOnlyList<NativeAttendanceDraft>>([new("DRF-"+new string('a',32),
+                new DateOnly(2026,10,23),"SITE-A","STS-PRESENT",
+                new DateTimeOffset(2026,10,23,10,0,0,TimeSpan.Zero),["P-1"])]);
+        }
         public Task<NativePersonnelReportSnapshot> ReadIndividualAsync(NativeIdentity actor,NativeIndividualReportPages pages,CancellationToken ct=default)
         {
             ReportReads++;
