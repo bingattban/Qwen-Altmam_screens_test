@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -1613,6 +1613,55 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8 status definitions: original SQLCipher read and audited
     // AdminConfigurationService create/update/deactivate; never write SQL here.
+    public async Task<NativeAttendanceDraft> SaveAttendanceDraftAsync(
+        NativeIdentity actor,NativeAttendanceDraftIntent intent,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(intent is null || !intent.IsValid(DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Invalid native draft intent.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !RoleAuthorizationPolicy.CanPerformStandardOperations(principal.Role))
+            throw new UnauthorizedAccessException("Draft save session changed.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var before=RequiredArray(await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(before native save)");
+        if(before.Count>=10000 || before.Any(n=>RequiredText(RequireObject(n),"draftId")==intent.DraftId))
+            throw new InvalidDataException("Draft identity already exists or catalogue full.");
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!intent.IsValid(DateOnly.FromDateTime(DateTime.Now)))
+            throw new InvalidDataException("Draft date changed.");
+        var response=await services.SaveDraftAsync(principal.UserId,new JsonObject
+        {
+            ["draftId"]=intent.DraftId,
+            ["businessDate"]=intent.BusinessDate.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            ["siteId"]=intent.SiteId==""?null:JsonValue.Create(intent.SiteId),
+            ["targetStatusId"]=intent.TargetStatusId,
+            ["selectedPersonIds"]=new JsonArray(intent.PersonIds.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
+        },lifetime.Token).ConfigureAwait(false);
+        var receipt=RequiredObject(response,"SaveAttendanceDraft(native)");
+        if(RequiredText(receipt,"draftId")!=intent.DraftId ||
+            !DateTimeOffset.TryParseExact(RequiredText(receipt,"savedAtUtc"),"O",CultureInfo.InvariantCulture,
+                DateTimeStyles.None,out var saved) || saved.Offset!=TimeSpan.Zero)
+            throw new InvalidDataException("Invalid canonical draft save receipt.");
+        var after=RequiredArray(await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false),"ListAttendanceDrafts(after native save)");
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var row=after.Select(RequireObject).Single(n=>RequiredText(n,"draftId")==intent.DraftId);
+        if(!DateOnly.TryParseExact(RequiredText(row,"businessDate"),"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var date) ||
+            !DateTimeOffset.TryParseExact(RequiredText(row,"updatedAtUtc"),"O",CultureInfo.InvariantCulture,DateTimeStyles.None,out var updated))
+            throw new InvalidDataException("Invalid saved draft metadata.");
+        var ids=RequiredArray(row,"selectedPersonIds").Select(n=>n?.GetValue<string>()??
+            throw new InvalidDataException("Missing saved person identity.")).ToArray();
+        var result=new NativeAttendanceDraft(RequiredText(row,"draftId"),date,row["siteId"]?.GetValue<string>()??"",
+            RequiredText(row,"targetStatusId"),updated,Array.AsReadOnly(ids));
+        if(!intent.Matches(result) || updated>saved)
+            throw new InvalidDataException("Draft read-back mismatch.");
+        return result;
+    }
+
     public async Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(
         NativeIdentity actor,CancellationToken ct=default)
     {
