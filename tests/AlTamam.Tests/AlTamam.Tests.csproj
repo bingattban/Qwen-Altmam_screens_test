@@ -20,11 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Persistence/Fixtures/V017_AttendanceDraftRangeEvidence.sql"
-                      LogicalName="AlTamam.Tests.Persistence.Fixtures.V017_AttendanceDraftRangeEvidence.sql" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="../../src/AlTamam.Domain/AlTamam.Domain.csproj" />
     <ProjectReference Include="../../src/AlTamam.Contracts/AlTamam.Contracts.csproj" />
     <ProjectReference Include="../../src/AlTamam.Application/AlTamam.Application.csproj" />
