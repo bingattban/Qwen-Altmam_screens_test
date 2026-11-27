@@ -35,6 +35,7 @@ FILES={
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+ "navigation_tests":"tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
  "settings_templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
@@ -71,6 +72,10 @@ def problems(contents):
     def need(key, token):
         if token not in contents[key]:
             errors.append(f"Missing {key} invariant: {token}")
+    need("settings_shell","if (CurrentPage.Screen == screen) return;")
+    need("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&")
+    need("navigation_tests","Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload")
+    need("navigation_tests","Repeated_click_on_current_settings_does_not_start_second_read")
     for key in ("register_xaml","review_xaml","project"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
@@ -512,6 +517,8 @@ if __name__=="__main__":
         ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),
         ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
+        ("settings_shell","if (CurrentPage.Screen == screen) return;"),
+        ("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&"),
         ("settings_templates","Binding Diagnostics.CheckCommand"),
         ("reset_preview","consent.Phrase==RequiredPhrase"),
         ("reset_dialog","password.Clear();"),
