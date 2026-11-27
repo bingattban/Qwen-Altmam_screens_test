@@ -36,6 +36,10 @@ FILES={
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
  "navigation_tests":"tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
+ "layout_vm":"src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+ "layout_tests":"tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
+ "layout_admin":"src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
+ "layout_view":"src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
  "settings_templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
@@ -93,7 +97,26 @@ def problems(contents):
                   "Reports_without_backend_never_advertise_working_actions"):
         need("navigation_tests",token)
 
-    for key in ("register_xaml","review_xaml","project"):
+    for token in ("NativeRosterColumn.ValidCatalogue(rows)","Snapshot.All(Uri.IsHexDigit)",
+                  "RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)",
+                  "version!=_generation || linked.IsCancellationRequested",
+                  "if(!CanRead){Clear();return;}", "_pending?.Cancel()"):
+        need("layout_vm",token)
+    for token in ("ReadRosterLayoutAsync(", "new RosterColumnStructureService(database)",
+                  '.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)',
+                  'RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows)'):
+        need("reader",token)
+    for token in ("CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen",
+                  "ColumnLayout.Clear();","ColumnLayout.Attach(layoutReader,()=>_liveActor?.Invoke());",
+                  "if(ColumnLayout.IsOpen)return;"):
+        need("layout_admin",token)
+    for token in ("Binding OpenColumnLayoutCommand","Binding ColumnLayout","Binding StoredValueCount"):
+        need("layout_view",token)
+    for token in ("Metadata_denies_duplicate_identity_bad_snapshot_and_unprotected_system_positions",
+                  "Catalogue_is_read_only_and_denies_supervisor_or_missing_session",
+                  "Late_catalogue_is_discarded_after_close_or_session_change"):
+        need("layout_tests",token)
+    for key in ("register_xaml","review_xaml","project","layout_view"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
     need("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs"')
@@ -535,6 +558,10 @@ if __name__=="__main__":
         ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_shell","if (CurrentPage.Screen == screen) return;"),
+        ("layout_vm","Snapshot.All(Uri.IsHexDigit)"),
+        ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
+        ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)'),
+        ("layout_view","Binding StoredValueCount"),
         ("settings_shell","!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)"),
         ("settings_vm","_personnelAvailable && _canNavigate(NativeScreen.Administration)"),
         ("settings_templates","Binding OpenMonthlyReportsCommand"),
