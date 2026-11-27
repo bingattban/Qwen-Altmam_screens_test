@@ -104,7 +104,7 @@
                                                 AutomationProperties.Name="تاريخ نهاية الإجازة أو الإذن"/>
                                 </StackPanel>
                             </WrapPanel>
-                            <TextBlock Text="تبدأ المدة من تاريخ تحضير اليوم، ولا تزيد على 366 يوما. لا يتم الحفظ إلا بعد المعاينة والتأكيد."
+                            <TextBlock Text="تبدأ المدة من تاريخ تحضير اليوم، ولا تزيد على 366 يوما. يمكنك حفظ مسودة دون اعتماد، أما اعتماد الحضور فيتطلب المعاينة والتأكيد."
                                        Foreground="{DynamicResource NativeMuted}" FontSize="12" TextWrapping="Wrap"/>
                         </StackPanel>
                     </StackPanel>
