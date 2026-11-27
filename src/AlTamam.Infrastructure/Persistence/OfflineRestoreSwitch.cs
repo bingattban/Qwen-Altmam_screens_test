@@ -99,7 +99,7 @@ public sealed class OfflineRestoreSwitch
     }
 
     private static async Task<bool> ValidExactAsync(string path,string digest,
-        string live,string key,CancellationToken ct)
+        string live,string key,CancellationToken ct,bool allowPreviousSchema=false)
     {
         if(!File.Exists(path))return false;
 
@@ -131,8 +131,29 @@ public sealed class OfflineRestoreSwitch
             }
             var result=await EncryptedBackupInspector.VerifyAsync(replay,live,key,ct)
                 .ConfigureAwait(false);
-            return result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion &&
-                string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase);
+            if(!string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase))
+                return false;
+            if(result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion)
+                return true;
+            // Only an existing startup journal may reconcile the immediately
+            // preceding schema. Never accept it for a new restore activation.
+            if(!allowPreviousSchema ||
+               result.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion-1)
+                return false;
+            // Old intent JSON did not record a schema. Require the actual
+            // encrypted image to have the exact canonical historical pins,
+            // not just MAX(SchemaVersion) or a matching raw file digest.
+            using(var historical=new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource=replay,Mode=SqliteOpenMode.ReadOnly,Password=key,
+                Pooling=false,ForeignKeys=true,DefaultTimeout=15
+            }.ConnectionString))
+            {
+                await historical.OpenAsync(ct).ConfigureAwait(false);
+                new Migrations.SchemaMigrationRunner(AlTamamDbContext.CanonicalMigrations)
+                    .VerifyRecordedHashes(historical);
+            }
+            return true;
         }
         catch(Exception ex) when(ex is SqliteException or IOException or
             InvalidDataException or FormatException or InvalidOperationException){return false;}
@@ -266,17 +287,17 @@ public sealed class OfflineRestoreSwitch
         if(!File.Exists(Journal(live)))return RecoveryOutcome.NothingPending;
         RequireOffline(live);
         var state=await ReadIntentAsync(live,ct).ConfigureAwait(false);
-        if(await ValidExactAsync(live,state.NewDigest,live,key,ct).ConfigureAwait(false))
+        if(await ValidExactAsync(live,state.NewDigest,live,key,ct,allowPreviousSchema:true).ConfigureAwait(false))
         {
             File.Delete(Journal(live));
             return RecoveryOutcome.ReplacementVerified;
         }
-        if(await ValidExactAsync(live,state.OldDigest,live,key,ct).ConfigureAwait(false))
+        if(await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true).ConfigureAwait(false))
         {
             File.Delete(Journal(live));
             return RecoveryOutcome.OriginalRetained;
         }
-        if(!await ValidExactAsync(state.Rollback,state.OldDigest,live,key,ct)
+        if(!await ValidExactAsync(state.Rollback,state.OldDigest,live,key,ct,allowPreviousSchema:true)
             .ConfigureAwait(false))
             throw new InvalidDataException(
                 "Unknown DB state without a valid rollback; no overwrite performed.");
@@ -300,7 +321,7 @@ public sealed class OfflineRestoreSwitch
                 output.Flush(flushToDisk:true);
             }
             testCheckpoint?.Invoke(RecoveryCheckpoint.AfterReplayCopy);
-            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct)
+            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct,allowPreviousSchema:true)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
                     "Rollback replay copy is not valid; original and intent retained.");
@@ -309,7 +330,7 @@ public sealed class OfflineRestoreSwitch
             else File.Replace(replay,live,
                 live+".failed-restore-"+Guid.NewGuid().ToString("N"));
             testCheckpoint?.Invoke(RecoveryCheckpoint.AfterRecoveryReplace);
-            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct)
+            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct,allowPreviousSchema:true)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
                     "Rollback verification failed; intent and original retained.");
