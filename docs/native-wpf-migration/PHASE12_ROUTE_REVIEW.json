@@ -398,12 +398,17 @@
     {
       "screenId": "screen_036",
       "routeKey": "Rosters",
-      "reviewStatus": "partial",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativeDesktop/Views/NativeExcelPersonnelImportView.xaml",
-        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml"
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+        "src/AlTamam.Application/Bridge/RosterColumnStructureService.cs",
+        "tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
+        "tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs"
       ],
-      "note": "Roster features exist, but exact combined roster management navigation and all functions remain unverified.",
+      "note": "Native Administration groups existing import, import history, general export and layout commands in one management surface, with original command guards. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
@@ -502,21 +507,33 @@
     {
       "screenId": "screen_044",
       "routeKey": "RosterLayout",
-      "reviewStatus": "gap",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativePresentation/NativePersonnelDirectoryContracts.cs"
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+        "src/AlTamam.Application/Bridge/RosterColumnStructureService.cs",
+        "tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
+        "tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs"
       ],
-      "note": "Custom columns are read; no dedicated native reviewed roster layout editor confirmed. Do not equate display with editing.",
+      "note": "Native manager-only canonical layout catalogue includes active/retired definitions, stored value counts, protected positions and contiguous active order. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
       "screenId": "screen_045",
       "routeKey": "AddOrEditColumn",
-      "reviewStatus": "gap",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativePresentation/NativePersonnelDirectoryContracts.cs"
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+        "src/AlTamam.Application/Bridge/RosterColumnStructureService.cs",
+        "tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
+        "tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs"
       ],
-      "note": "Custom columns are read; no dedicated native reviewed roster layout editor confirmed. Do not equate display with editing.",
+      "note": "Native reviewed create/update/deactivate preserves stored values, protects system definitions and matches canonical Arabic caption normalization; original service performs audited writes. Source-level candidate; physical route acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
