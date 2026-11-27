@@ -39,10 +39,14 @@ internal static class EncryptedBackupForwardUpgrade
         if(File.GetAttributes(folder).HasFlag(FileAttributes.ReparsePoint))
             throw new IOException("Forward-upgrade destination is redirected.");
         string id=Guid.NewGuid().ToString("N");
-        string scratch=Path.Combine(folder,".pending-"+id);
+        // Keep the working paths short even under a nested Windows profile.
+        // The final backup stays in the designated output directory; the scratch
+        // directory is a GUID-owned sibling on the same volume.
+        string scratch=Path.Combine(Path.GetDirectoryName(active)!,".bu-"+id);
         Directory.CreateDirectory(scratch);
-        string copy=Path.Combine(scratch,"source-copy.db");
-        string candidate=Path.Combine(scratch,"verified.dbbackup");
+        string copy=Path.Combine(scratch,"s.db");
+        string rescue=Path.Combine(scratch,"r.db");
+        string candidate=Path.Combine(scratch,"v.dbbackup");
         string output=Path.Combine(folder,"forward-upgraded-"+id+".dbbackup");
         try
         {
@@ -75,11 +79,27 @@ internal static class EncryptedBackupForwardUpgrade
             var runner=new SchemaMigrationRunner(AlTamamDbContext.CanonicalMigrations);
             using(var db=new AlTamamDbContext(copy,keyHex,useConnectionPooling:false))
             {
-                // InitializeAsync creates a verified encrypted pre-migration
-                // rescue and applies the canonical hash-pinned migration only.
-                await db.InitializeAsync(ct).ConfigureAwait(false);
+                // This is a private disposable copy, never the active database.
+                // Validate historical pins BEFORE creating a rescue or applying DDL.
                 using(var c=db.CreateOpenConnection())
                 {
+                    if(SchemaMigrationRunner.GetCurrentVersion(c)!=before.SchemaVersion)
+                        throw new InvalidDataException("Unexpected source schema.");
+                    runner.VerifyRecordedHashes(c);
+                }
+                // Reuse the verified encrypted backup writer but avoid the nested
+                // InitializeAsync rescue filename, which exceeded Windows SQLite
+                // path limits. A failed rescue still prevents every migration.
+                await db.CreateVerifiedEncryptedBackupAsync(rescue,ct).ConfigureAwait(false);
+                var rescued=await EncryptedBackupInspector.VerifyAsync(rescue,active,keyHex,ct).ConfigureAwait(false);
+                if(rescued.SchemaVersion!=before.SchemaVersion ||
+                   rescued.PeopleCount!=before.PeopleCount || rescued.AttendanceCount!=before.AttendanceCount ||
+                   rescued.AuditCount!=before.AuditCount || rescued.UserCount!=before.UserCount)
+                    throw new InvalidDataException("Pre-migration rescue verification failed.");
+                using(var c=db.CreateOpenConnection())
+                {
+                    runner.VerifyRecordedHashes(c);
+                    await runner.UpgradeAsync(c,ct).ConfigureAwait(false);
                     if(SchemaMigrationRunner.GetCurrentVersion(c)!=AlTamamDbContext.CurrentSchemaVersion)
                         throw new InvalidDataException("Unexpected migrated schema.");
                     runner.VerifyRecordedHashes(c);
