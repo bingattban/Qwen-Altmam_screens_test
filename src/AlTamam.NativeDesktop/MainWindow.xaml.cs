@@ -220,6 +220,49 @@ public partial class MainWindow : Window
         }
     }
 
+    internal async Task RequestBackupUpgradeAsync(SettingsPageViewModel settings)
+    {
+        if(_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress ||
+            _restoreQuiescing || _closeInProgress || _mayClose || _viewModel.IsBusy ||
+            _backend is not { } backend || !ReferenceEquals(settings,_viewModel.Settings) ||
+            !ReferenceEquals(_viewModel.CurrentPage,settings) ||
+            settings.Inspection.GetUpgradeIntent() is not { } intent) return;
+
+        // Share the existing non-destructive native maintenance exclusion:
+        // logout, close, restore, reset and another export cannot overlap.
+        _recoveryExportInProgress=true;
+        try
+        {
+            string? password=NativeBackupUpgradeDialog.RequestPassword(this,intent);
+            if(password is null || !settings.Inspection.MatchesUpgradeIntent(intent)) return;
+            IsEnabled=false;
+            AlTamam.Infrastructure.Persistence.ForwardUpgradedBackup? result;
+            try { result=await Task.Run(()=>backend.PrepareBackupUpgradeAsync(intent,password)); }
+            finally { password=null; }
+            if(result is null)
+            {
+                MessageBox.Show(this,"لم يتم تجهيز نسخة مترقاة. تحقق من صلاحية الجلسة وكلمة المرور وسلامة النسخة.",
+                    "ترقية النسخة",MessageBoxButton.OK,MessageBoxImage.Warning);
+                return;
+            }
+            MessageBox.Show(this,"تم إنشاء نسخة مشفرة جديدة دون استعادة البيانات. اختر الملف الجديد وافحصه بصورة مستقلة قبل أي استعادة.\n\n"+
+                result.Upgraded.FullPath+"\nSHA-256: "+result.Upgraded.Sha256,
+                "تم تجهيز النسخة",MessageBoxButton.OK,MessageBoxImage.Information);
+        }
+        catch
+        {
+            MessageBox.Show(this,"تعذر تأكيد تجهيز النسخة. أعد الفحص قبل أي استعادة.",
+                "تعذر الترقية",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+        finally
+        {
+            settings.Inspection.ForceClear();
+            _recoveryExportInProgress=false;
+            IsEnabled=true;
+            await _viewModel.VerifyCurrentSessionAsync();
+        }
+    }
+
     internal async Task RequestRecoveryExportAsync(SettingsPageViewModel settings)
     {
         if(_resetInProgress || _resetQuiescing || _recoveryExportInProgress || _restoreInProgress || _restoreQuiescing || _closeInProgress ||
