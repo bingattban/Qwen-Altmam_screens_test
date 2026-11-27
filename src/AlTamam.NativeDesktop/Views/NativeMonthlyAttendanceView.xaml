@@ -302,8 +302,16 @@
                         <StackPanel>
                             <TextBlock Text="المصدر: الأرشيف الشهري المعتمد في SQLCipher"
                                        Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"/>
-                            <ProgressBar Height="5" IsIndeterminate="True"
-                                         Visibility="{Binding Excel.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                            <ProgressBar Height="8" Minimum="0" Maximum="100"
+                                         Value="{Binding Excel.ProgressPercent, Mode=OneWay}"
+                                         IsIndeterminate="{Binding Excel.IsProgressIndeterminate}"
+                                         Visibility="{Binding Excel.IsBusy, Converter={StaticResource VisibilityIfTrue}}"
+                                         AutomationProperties.Name="تقدم إنشاء ملفات Excel"/>
+                            <TextBlock Text="{Binding Excel.ProgressMessage}" Foreground="{DynamicResource NativeText}"
+                                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                            <Button Content="طلب إيقاف التصدير الجاري" Command="{Binding Excel.CancelExportCommand}"
+                                    Style="{StaticResource MonthlyButton}"
+                                    Visibility="{Binding Excel.IsExporting, Converter={StaticResource VisibilityIfTrue}}"/>
                             <TextBlock Text="{Binding Excel.Error}" Foreground="{DynamicResource NativeDangerText}"
                                        FontWeight="SemiBold" TextWrapping="Wrap"
                                        AutomationProperties.LiveSetting="Polite"/>
