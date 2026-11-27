@@ -296,6 +296,8 @@ jobs:
           if ($exportDestination.Count -lt 9 -or @($exportDestination | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Native monthly export destination evidence missing or failed' }
           $exportReceipt = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*NativeMonthlyExportReceiptPhase12Tests*' })
           if ($exportReceipt.Count -lt 15 -or @($exportReceipt | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Native monthly export receipt evidence missing or failed' }
+          $rosterEntry = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*Roster_export_entry_reuses_monthly_scope_without_automatic_preview_or_export*' -or $_.testName -like '*Administration_export_entry_respects_pending_review_and_logout*' })
+          if ($rosterEntry.Count -lt 4 -or @($rosterEntry | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Native roster export navigation evidence missing or failed' }
       # Fast Core: compile all projects and execute representative security checks.
       # Exhaustive native/SQLCipher/performance coverage remains mandatory in Release.
       - name: Run focused security/attendance smoke tests on Windows runner

@@ -79,6 +79,10 @@
                         Command="{Binding OpenProfileCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="فتح تفاصيل فرد بالمعرف الثابت"/>
+                <Button Content="تصدير الكشوفات العامة"
+                        Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
+                        Command="{Binding DataContext.OpenRosterExportCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                        AutomationProperties.Name="فتح تصدير الكشوفات العامة واختيار الشهر والموقع"/>
                 <Button Content="استيراد كشف أفراد Excel"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenExcelImportCommand}"

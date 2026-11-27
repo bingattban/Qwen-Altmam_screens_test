@@ -17,6 +17,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private readonly NativeCommand _navigateCommand;
     private readonly NativeCommand _logoutCommand;
     private readonly NativeCommand _openAdministrativeHistoricalCommand;
+    private readonly NativeCommand _openRosterExportCommand;
     private NativePageViewModel _currentPage;
     private INativeAuthenticationBackend? _backend;
     private NativeIdentity? _active;
@@ -65,6 +66,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     }
                     if (screen != NativeScreen.MonthlyAttendance)
                     {
+                        MonthlyAttendance.SetRosterExportEntry(false);
                         MonthlyAttendance.CloseCellDetails();
                         MonthlyAttendance.Excel.Close();
                     }
@@ -115,9 +117,11 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         _openAdministrativeHistoricalCommand = new NativeCommand(
             _ => OpenAdministrativeHistorical(), _ => CanOpenAdministrativeHistorical());
+        _openRosterExportCommand = new NativeCommand(_ => OpenRosterExport(), _ => CanOpenRosterExport());
         _navigateCommand.CanExecuteChanged += (_, _) =>
         {
             _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+            _openRosterExportCommand.NotifyAvailabilityChanged();
             Reports.NotifyAvailability();
         };
         Administration.PropertyChanged += (_, _) =>
@@ -189,9 +193,11 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         if (reader is INativeHistoricalPeriodReader historicalReader && reader is INativeHistoricalRangeBackend historicalBackend &&
             reader is INativeClosedDayCorrectionBackend historicalCatalogue)
             Settings.AttachHistorical(historicalReader,historicalBackend,historicalCatalogue,() => _active);
+        _openRosterExportCommand.NotifyAvailabilityChanged();
     }
     public ICommand NavigateCommand => _navigateCommand;
     public ICommand OpenAdministrativeHistoricalCommand => _openAdministrativeHistoricalCommand;
+    public ICommand OpenRosterExportCommand => _openRosterExportCommand;
     public ICommand LogoutCommand => _logoutCommand;
     public NativePageViewModel CurrentPage
     {
@@ -203,6 +209,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Changed(nameof(CurrentPage));
             Reports.NotifyAvailability();
             _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+            _openRosterExportCommand.NotifyAvailabilityChanged();
         }
     }
 
@@ -223,6 +230,18 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     {
         if(CanOpenReportDestination(destination))
             _navigateCommand.Execute(destination);
+    }
+
+    private bool CanOpenRosterExport() =>
+        !IsBusy && (ReferenceEquals(CurrentPage,Administration) || ReferenceEquals(CurrentPage,Reports)) &&
+        MonthlyAttendance.CanEnterRosterExport && CanNavigate(NativeScreen.MonthlyAttendance);
+
+    private void OpenRosterExport()
+    {
+        if(!CanOpenRosterExport())return;
+        _navigateCommand.Execute(NativeScreen.MonthlyAttendance);
+        if(ReferenceEquals(CurrentPage,MonthlyAttendance))
+            MonthlyAttendance.SetRosterExportEntry(true);
     }
 
     private bool CanOpenAdministrativeHistorical() =>
@@ -445,6 +464,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Reports.NotifyAvailability();
         _logoutCommand.NotifyAvailabilityChanged();
         _openAdministrativeHistoricalCommand.NotifyAvailabilityChanged();
+        _openRosterExportCommand.NotifyAvailabilityChanged();
     }
 
     private void Changed(params string[] properties)

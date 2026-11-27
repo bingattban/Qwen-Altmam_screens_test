@@ -358,6 +358,10 @@
                     <Button Content="فتح التقارير الشهرية"
                             Command="{Binding OpenMonthlyReportsCommand}" Padding="12,8"
                             HorizontalAlignment="Right"/>
+                    <Button Content="تصدير الكشوفات العامة"
+                            Command="{Binding DataContext.OpenRosterExportCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                            Padding="12,8" Margin="0,6,0,0" HorizontalAlignment="Right"
+                            AutomationProperties.Name="فتح تصدير الكشوفات العامة دون إنشاء ملف"/>
                 </StackPanel>
             </Border>
             <TextBlock Text="الخيارات غير المتاحة تظهر معطلة؛ لا يمنح هذا القسم صلاحيات جديدة."
