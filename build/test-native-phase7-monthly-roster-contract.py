@@ -34,6 +34,9 @@ FILES = {
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
     "progress_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportProgressPhase12Tests.cs",
     "destination_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportDestinationPhase12Tests.cs",
+    "receipt_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportReceiptPhase12Tests.cs",
+    "receipt_evidence": "src/AlTamam.NativePresentation/NativeMonthlyExcelReceiptEvidence.cs",
+    "excel_sql_tests": "tests/AlTamam.Tests/Bridge/MonthlyExcelExportTests.cs",
     "name_policy": "src/AlTamam.Domain/Policies/MonthlyExcelOutputNamePolicy.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
@@ -426,6 +429,29 @@ def problems(content):
                   "Unavailable_default_requires_explicit_selection_and_receipt_path_must_match",
                   "Replaced_session_cannot_edit_destination_or_export"):
         require("destination_tests",token)
+    for token in ("files.Count!=receipt.FileCount", "!sites.Add(row.SiteId)",
+                  "!paths.Add(file)", "row.PersonCount!=receipt.PersonCount",
+                  "Path.GetDirectoryName(file),folder", "Array.AsReadOnly(frozen.ToArray())"):
+        require("receipt_evidence",token)
+    for token in ('RequiredArray(data,"files")', "rows.Count!=fileCount",
+                  "NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(receipt,filter)",
+                  "info.Length<=0", "FileAttributes.ReparsePoint", "return receipt with{Files=verified}"):
+        require("backend",token)
+    require("excel_vm","Files=NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(result,request)")
+    require("excel_vm","ResultFiles => _receipt?.Files ?? []")
+    for token in ("Excel.ResultFiles","Excel.HasResultFiles",'Binding="{Binding SiteName}"',
+                  'Binding="{Binding PersonCount}"','Binding="{Binding FilePath}"'):
+        require("xaml",token)
+    for token in ('page["total"]!.GetValue<long>()!=total', "rowNumber+items.Count>total",
+                  "if(rowNumber!=total)", 'combinedData["personCount"]!.GetValue<long>()!=combined',
+                  'entry["personCount"]!.GetValue<long>()!=plan.Count', "if(!success)foreach(var file in created)"):
+        require("excel_service",token)
+    for token in ("Complete_set_preserves_order_and_counts_without_summing_overlapping_memberships",
+                  "Inconsistent_set_fails_closed","Single_site_receipt_requires_exact_site_and_one_file",
+                  "Frozen_receipt_does_not_alias_mutable_backend_list"):
+        require("receipt_tests",token)
+    require("excel_sql_tests","ChangedRosterCount_RefusesSuccessAndCleansOnlyAttemptFiles")
+    require("excel_sql_tests",'XDocument.Load(sheet).Descendants(ns+"row").Count()-3')
     require("backend","ExportWithProgressAsync(")
     require("backend","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)")
     require("backend",".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)")
@@ -492,6 +518,17 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("receipt_evidence", "files.Count!=receipt.FileCount"),
+        ("receipt_evidence", "!sites.Add(row.SiteId)"),
+        ("receipt_evidence", "!paths.Add(file)"),
+        ("receipt_evidence", "row.PersonCount!=receipt.PersonCount"),
+        ("backend", 'RequiredArray(data,"files")'),
+        ("backend", "NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(receipt,filter)"),
+        ("excel_vm", "Files=NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(result,request)"),
+        ("excel_service", 'page["total"]!.GetValue<long>()!=total'),
+        ("excel_service", "if(rowNumber!=total)"),
+        ("excel_service", 'entry["personCount"]!.GetValue<long>()!=plan.Count'),
+        ("xaml", "Excel.ResultFiles"),
         ("excel_vm", "request=filter with { OutputDirectory=_outputDirectory,OutputFileName=name }"),
         ("excel_vm", "Monthly Excel receipt destination mismatch."),
         ("backend", 'payload["directory"]=filter.OutputDirectory'),
