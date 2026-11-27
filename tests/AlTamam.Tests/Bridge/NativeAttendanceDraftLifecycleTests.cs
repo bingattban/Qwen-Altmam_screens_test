@@ -105,6 +105,54 @@ public sealed class NativeAttendanceDraftLifecycleTests : IAsyncLifetime, IDispo
         Assert.Equal(2,Assert.IsType<JsonArray>((await _svc.ListDraftsAsync(Owner,CancellationToken.None)).Data).Count);
     }
 
+    [Fact]
+    public async Task LegacyJsonFormatting_DoesNotPreventExactNativeDeletion()
+    {
+        var payload=Payload("STS-PRESENT");
+        payload.Remove("rangeStartDate");payload.Remove("rangeEndDate");payload.Remove("rangeIsInitial");
+        Assert.True((await _svc.SaveDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="UPDATE AttendanceDrafts SET SelectedPersonIdsJson=$json WHERE DraftId=$id;";
+            cmd.Parameters.AddWithValue("$json","""[ "TST-P1", "TST-P2" ]""");
+            cmd.Parameters.AddWithValue("$id",payload["draftId"]!.GetValue<string>());
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var row=Assert.IsType<JsonObject>(Assert.Single(await List(Owner)));
+        var stale=(JsonObject)row.DeepClone();
+        stale["selectedPersonIds"]=new JsonArray("TST-P2","TST-P1");
+        Assert.False((await _svc.DeleteNativeReviewedDraftAsync(Owner,stale,CancellationToken.None)).Success);
+        stale["selectedPersonIds"]=new JsonArray("TST-P1","TST-OTHER");
+        Assert.False((await _svc.DeleteNativeReviewedDraftAsync(Owner,stale,CancellationToken.None)).Success);
+        Assert.Single(await List(Owner));
+        Assert.True((await _svc.DeleteNativeReviewedDraftAsync(Owner,row,CancellationToken.None)).Success);
+        Assert.Empty(await List(Owner));
+    }
+
+    [Fact]
+    public async Task OversizedNativeCatalogue_FailsClosedWithoutPartialRows()
+    {
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10001)
+                INSERT INTO AttendanceDrafts(DraftId,BusinessDate,TargetStatusId,
+                    SelectedPersonIdsJson,CreatedByUserId,UpdatedAtUtc)
+                SELECT 'DRF-'||printf('%032x',i),'2026-11-27','STS-PRESENT',
+                    '["TST-P1"]',$owner,'2026-11-27T08:00:00.0000000+00:00' FROM n;
+                """;
+            cmd.Parameters.AddWithValue("$owner",Owner);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var result=await _svc.ListNativeDraftsAsync(Owner,CancellationToken.None);
+        Assert.False(result.Success);
+        Assert.Null(result.Data);
+        Assert.Empty(await List(Other));
+        Assert.Equal(10001L,Count("AttendanceDrafts"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose(){_db?.Dispose();SyntheticFixtures.DeleteTempDatabase(_path);}
 }
