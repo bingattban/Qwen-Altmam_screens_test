@@ -125,6 +125,28 @@ def problems(contents):
                   "ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.MatchesReceipt(result)",
                   "result.Snapshot!=snapshot"):
         need("reader",token)
+    # Check the scoped call chain as well as the private catalogue helper:
+    # moving the read into a helper must not bypass the caller's session or lease.
+    reader_source=contents["reader"]
+    read_start=reader_source.find("public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(")
+    core_start=reader_source.find("private async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutCoreAsync(")
+    write_start=reader_source.find("public async Task<NativeRosterColumn> CommitRosterColumnAsync(")
+    write_end=reader_source.find("public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(",write_start)
+    if not (0<=read_start<core_start<write_start<write_end):
+        errors.append("Missing or reordered native roster catalogue/read/write entry points")
+    else:
+        read=reader_source[read_start:core_start]
+        core=reader_source[core_start:write_start]
+        write=reader_source[write_start:write_end]
+        for entry in (read,write):
+            if entry.count("using var nativeOperation = operations.Enter();")!=1 or "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)" not in entry or "ResolveSitesPrincipalAsync(actor,ct)" not in entry:
+                errors.append("Roster layout entry must own one admission lease and an exact session-linked lifetime")
+        if "operations.Enter()" in core or '.ListAsync(new JsonObject{["includeInactive"]=true},ct)' not in core or "VerifyPersonnelManagerAsync(actor,ct)" not in core:
+            errors.append("Roster layout helper must preserve the caller lifetime and revalidate the session without nested admission")
+        ordered=("var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.CanApply(before)", "BridgeResponse response=change.Operation switch", "var after=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.MatchesReceipt(result)")
+        offsets=[write.find(token) for token in ordered]
+        if min(offsets)<0 or offsets!=sorted(offsets):
+            errors.append("Roster write must validate fresh evidence before mutation and verify read-back afterwards")
     for token in ("_issued is null", "ReferenceEquals(reviewed,_draft)", "Guid.NewGuid().ToString(\"N\")",
                   "result.StoredValueCount!=old.StoredValueCount", "IsSystemProtected:false",
                   "FieldType==old.FieldType || old.StoredValueCount==0"):
@@ -591,8 +613,11 @@ if __name__=="__main__":
         ("layout_vm","_mutation.Take(_liveActor?.Invoke(),_rows)"),
         ("layout_view","Binding ConfirmCommand"),
         ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
-        ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)'),
+        ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},ct)'),
         ("layout_view","Binding StoredValueCount"),
+        ("reader","var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)"),
+        ("reader","var after=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)"),
+        ("reader","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)"),
         ("settings_shell","!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)"),
         ("settings_vm","_personnelAvailable && _canNavigate(NativeScreen.Administration)"),
         ("settings_templates","Binding OpenMonthlyReportsCommand"),
@@ -635,8 +660,13 @@ if __name__=="__main__":
         ("review_xaml","ConfirmCommand"),
         ("release","dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj")
     ):
+        # A stale mutation target is a broken test, not a security regression.
+        if token not in TEXT[key]:
+            raise SystemExit(f"Stale negative-test target in {key}: {token}")
         mutated=TEXT.copy()
         mutated[key]=mutated[key].replace(token,"REMOVED_BY_NEGATIVE_TEST")
+        if mutated[key]==TEXT[key]:
+            raise SystemExit(f"Negative test did not change source in {key}: {token}")
         if not problems(mutated):
             raise SystemExit(f"Unsafe mutation incorrectly passed for {key}:{token}")
     # Theme resources are checked in both mandatory Windows CI workflows.
