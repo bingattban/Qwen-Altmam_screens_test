@@ -121,8 +121,76 @@ public sealed class NativeWpfNavigationTests
         Assert.False(vm.NavigateCommand.CanExecute(NativeScreen.Accounts));
     }
 
-    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader
+    [Fact]
+    public async Task Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload()
     {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend());
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        vm.NavigateCommand.Execute(NativeScreen.Administration);
+        Assert.Same(vm.Administration,vm.CurrentPage);
+        Assert.Equal(1,reader.PersonnelReads);
+        var person=Assert.Single(vm.Administration.Rows);
+        await vm.Administration.OpenProfileAsync(person);
+        Assert.True(vm.Administration.IsProfileOpen);
+        foreach(var section in NativeSections.All.Where(s=>s.Screen!=NativeScreen.Administration))
+        {
+            Assert.False(vm.NavigateCommand.CanExecute(section.Screen));
+            vm.NavigateCommand.Execute(section.Screen);
+            Assert.Same(vm.Administration,vm.CurrentPage);
+            Assert.True(vm.Administration.IsProfileOpen);
+        }
+        vm.NavigateCommand.Execute(NativeScreen.Administration);
+        Assert.Equal(1,reader.PersonnelReads);
+        Assert.True(vm.Administration.IsProfileOpen);
+        vm.Administration.CloseProfile();
+        Assert.True(vm.NavigateCommand.CanExecute(NativeScreen.Dashboard));
+        vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+        Assert.Same(vm.Dashboard,vm.CurrentPage);
+    }
+
+    [Fact]
+    public async Task Repeated_click_on_current_settings_does_not_start_second_read()
+    {
+        var vm=new NativeShellViewModel();
+        var reader=new AuditReader();
+        vm.AttachDashboardReader(reader);
+        await vm.InitializeAuthenticationAsync(new FixedNativeBackend());
+        Assert.True(await vm.LoginAsync("owner","Abc123"));
+        vm.NavigateCommand.Execute(NativeScreen.Settings);
+        Assert.Equal(1,reader.SettingsReads);
+        vm.NavigateCommand.Execute(NativeScreen.Settings);
+        Assert.Equal(1,reader.SettingsReads);
+        vm.NavigateCommand.Execute(NativeScreen.Dashboard);
+        vm.NavigateCommand.Execute(NativeScreen.Settings);
+        Assert.Equal(2,reader.SettingsReads);
+    }
+
+    private sealed class AuditReader : INativeDashboardReader, INativeAuditReader, INativeAccountReader,
+        INativePersonnelDirectoryReader, INativeSettingsOverviewReader
+    {
+        public int PersonnelReads,SettingsReads;
+        public Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default)
+        {
+            SettingsReads++;
+            return Task.FromResult(new NativeSettingsOverview(actor.Username,actor.Role,
+                @"E:\AlTamam",true,"16:00",true,3,"2026-11-25","","light"));
+        }
+        public Task<NativePersonnelCatalogue> ReadPersonnelCatalogueAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Task.FromResult(new NativePersonnelCatalogue([new NativeDashboardSite("SITE-A","المركز")]));
+        public Task<NativePersonnelSnapshot> ReadPageAsync(NativeIdentity actor,NativePersonnelFilter filter,CancellationToken ct=default)
+        {
+            PersonnelReads++;
+            return Task.FromResult(new NativePersonnelSnapshot(filter.SiteId,filter.SearchTerm,
+                filter.OrganizationalStatus,filter.Page,1,false,
+                [new NativeDashboardColumn("rank","الرتبة")],
+                [new NativePersonnelRow("P-1","123","أحمد","المركز",1,true,1,["رقيب"]) {RowNumber=1}]));
+        }
+        public Task<NativePersonnelProfile> ReadProfileAsync(NativeIdentity actor,string personId,CancellationToken ct=default)
+            =>Task.FromResult(new NativePersonnelProfile(personId,"أحمد","123",1,true,1,"2026-01-01",
+                [new NativePersonnelIdentityHistory("أحمد القديم","123","2026-01-01","","تصحيح الاسم","2026-01-02T00:00:00Z")]));
         public Task<NativeDashboardSnapshot> ReadAsync(NativeIdentity principal,NativeDashboardFilter filter,CancellationToken ct=default)
             => Task.FromResult(new NativeDashboardSnapshot(filter.BusinessDate,filter.SiteId,0,0,0,[],[],[],[],0,filter.Page,false));
         public Task<NativeAccountPage> ReadAccountsAsync(NativeIdentity actor,NativeAccountRequest request,CancellationToken ct=default)

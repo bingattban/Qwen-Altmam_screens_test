@@ -35,6 +35,7 @@ FILES={
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
+ "navigation_tests":"tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
  "settings_templates":"src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
  "restore_code":"src/AlTamam.NativeDesktop/Views/NativeManualBackupView.xaml.cs",
  "restore_tests":"tests/AlTamam.UnitTests/NativeBackupInspectionPhase12Tests.cs",
@@ -71,6 +72,10 @@ def problems(contents):
     def need(key, token):
         if token not in contents[key]:
             errors.append(f"Missing {key} invariant: {token}")
+    need("settings_shell","if (CurrentPage.Screen == screen) return;")
+    need("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&")
+    need("navigation_tests","Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload")
+    need("navigation_tests","Repeated_click_on_current_settings_does_not_start_second_read")
     for key in ("register_xaml","review_xaml","project"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
@@ -512,6 +517,8 @@ if __name__=="__main__":
         ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),
         ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
+        ("settings_shell","if (CurrentPage.Screen == screen) return;"),
+        ("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&"),
         ("settings_templates","Binding Diagnostics.CheckCommand"),
         ("reset_preview","consent.Phrase==RequiredPhrase"),
         ("reset_dialog","password.Clear();"),
@@ -557,4 +564,18 @@ if __name__=="__main__":
     # Theme resources are checked in both mandatory Windows CI workflows.
     import subprocess, sys
     subprocess.run([sys.executable, str(ROOT / "build/test-native-theme-palette-contract.py")], check=True)
+    # Source-level route review is not production acceptance.
+    import json
+    canonical=json.loads((ROOT/"docs/native-wpf-migration/SCREEN_MIGRATION_MATRIX.json").read_text(encoding="utf-8"))
+    review=json.loads((ROOT/"docs/native-wpf-migration/PHASE12_ROUTE_REVIEW.json").read_text(encoding="utf-8"))
+    identities=lambda rows:{(r["screenId"],r["routeKey"]) for r in rows}
+    assert len(review["routes"])==len(identities(review["routes"]))==69
+    assert identities(review["routes"])==identities(canonical["routes"])
+    assert review["productionSwitchAllowed"] is False
+    for row in review["routes"]:
+        assert row["reviewStatus"] in ("candidate","partial","gap") and row["functionalParityVerified"] is False
+        assert row["note"].strip()
+        assert row["reviewStatus"]=="gap" or row["evidence"]
+        assert all((ROOT/p).is_file() for p in row["evidence"]), row["screenId"]
+    print("NATIVE ROUTE REVIEW PASS: 69 source-level entries, no false physical acceptance")
     print("NATIVE PHASE 4 PASS: exact durable engine, one-owner scheduler, audited human-preview/confirm/replay and four old customer packages intact")
