@@ -31,7 +31,7 @@ internal static class EncryptedBackupForwardUpgrade
         static void RequireStandalone(string path)
         {
             if(new[]{"-wal","-shm","-journal"}.Any(suffix=>File.Exists(path+suffix)))
-                throw new InvalidDataException("The source backup has SQLite sidecars; a standalone snapshot is required.");
+                throw new InvalidDataException("Backup has SQLite sidecars; a standalone snapshot is required.");
         }
         RequireStandalone(source);
         string folder=Path.Combine(Path.GetDirectoryName(active)!,"backup-forward-upgrades");
@@ -106,6 +106,11 @@ internal static class EncryptedBackupForwardUpgrade
                 }
                 await db.CreateVerifiedEncryptedBackupAsync(candidate,ct).ConfigureAwait(false);
             }
+            // SQLite online backup can retain the source's persistent WAL mode.
+            // Normalize ONLY the private output, before hashing/inspection, so
+            // a read-only verifier cannot recreate WAL/SHM alongside the artifact.
+            await MakeStandaloneAsync(candidate,keyHex,ct).ConfigureAwait(false);
+            RequireStandalone(candidate);
             var after=await EncryptedBackupInspector.VerifyAsync(candidate,active,keyHex,ct).ConfigureAwait(false);
             if(after.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion ||
                after.PeopleCount!=before.PeopleCount || after.AttendanceCount!=before.AttendanceCount ||
@@ -140,5 +145,29 @@ internal static class EncryptedBackupForwardUpgrade
             catch(IOException){}
             catch(UnauthorizedAccessException){}
         }
+    }
+
+    private static async Task MakeStandaloneAsync(string privateBackup,string keyHex,CancellationToken ct)
+    {
+        // ReadWrite (not ReadWriteCreate), no pooling: SQLite owns checkpoint
+        // and journal cleanup. Never manually remove WAL/SHM files.
+        using var connection=new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder{
+                DataSource=privateBackup,Mode=Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite,
+                Password=keyHex,Pooling=false,ForeignKeys=true,DefaultTimeout=15
+            }.ConnectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        using var command=connection.CreateCommand();
+        command.CommandText="PRAGMA wal_checkpoint(TRUNCATE);";
+        using(var checkpoint=await command.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            if(!await checkpoint.ReadAsync(ct).ConfigureAwait(false) ||
+                checkpoint.GetInt64(0)!=0 || checkpoint.GetInt64(1)!=checkpoint.GetInt64(2))
+                throw new InvalidDataException("Private backup WAL checkpoint did not complete.");
+        }
+        command.CommandText="PRAGMA journal_mode=DELETE;";
+        if(!string.Equals((await command.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString(),
+            "delete",StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Private backup could not enter standalone DELETE journal mode.");
     }
 }
