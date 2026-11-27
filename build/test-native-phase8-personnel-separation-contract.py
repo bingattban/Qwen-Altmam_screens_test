@@ -13,6 +13,11 @@ PATHS = {
     "vm": "src/AlTamam.NativePresentation/NativePersonnelSeparationViewModel.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
     "canonical": "src/AlTamam.Application/Bridge/PersonnelSeparationService.cs",
+    "removal": "src/AlTamam.NativePresentation/NativeRosterRemovalEvidence.cs",
+    "removal_tests": "tests/AlTamam.UnitTests/NativeRosterRemovalPreviewPhase12Tests.cs",
+    "roster_service": "src/AlTamam.Application/Bridge/PersonRosterService.cs",
+    "removal_sql_tests": "tests/AlTamam.Tests/Bridge/Section02RosterLifecycleTests.cs",
+    "removal_gateway": "src/AlTamam.Application/Roster/RosterAuthorizedCommands.cs",
     "tests": "tests/AlTamam.UnitTests/NativePersonnelSeparationPhase8Tests.cs",
     "canonicaltests": "tests/AlTamam.Tests/Bridge/PersonnelSeparationIntegrationTests.cs",
     "admin": "src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
@@ -139,6 +144,38 @@ def problems(files):
     if files["tests"].count("[Fact]") < 6:
         errors.append("tests: six test-first regressions are mandatory")
 
+    # Removal from force is archival, not the independent separation action.
+    begin=files["backend"].find("public async Task<NativeRosterRemovalPreview> PreviewRosterRemovalAsync(")
+    end=files["backend"].find("public async Task<NativePersonnelSeparationPreview> PreviewSeparationAsync(",begin)
+    if not (0<=begin<end):
+        errors.append("Native removal preview boundary missing.")
+    else:
+        entry=files["backend"][begin:end]
+        for token in ("using var nativeOperation = operations.Enter();",
+                      "RoleAuthorizationPolicy.CanArchivePersonsFromActiveForce(actor.Role)",
+                      "Array.AsReadOnly(members.ToArray())",
+                      "ResolveSitesPrincipalAsync(actor,ct)",
+                      "principal.SessionRevocation",
+                      ".PreviewRemovalAsync(principal,",
+                      'RequiredArray(data,"expectedVersions")',
+                      'RequiredText(version,"personId")!=id',
+                      "NativeRosterRemovalEvidence.ValidateAndFreeze(selection,"):
+            if token not in entry:
+                errors.append("Native removal preview missing: "+token)
+        if any(token in entry for token in (".RemoveAsync(", ".ArchivePersonsAsync(", ".CommitAsync(", "PersonnelSeparationService")):
+            errors.append("Removal preview must not commit, separate or bypass canonical gateway.")
+    for token in ("CanApprove=>Candidates.Count>0", "x.Blocker is null",
+                  "preview.BaseRevision!=members.Sum(x=>x.Revision)", "row.Member!=members[i]",
+                  "Array.AsReadOnly(preview.Candidates.ToArray())"):
+        require("removal",token)
+    require("roster_service",'row.Org != 1 ? "الفرد ليس على القوة الفعالة"')
+    require("roster_service","!row.Eligible ?")
+    require("removal_gateway","CanArchivePersonsFromActiveForce(actor.Role)")
+    require("removal_sql_tests","ArchivePreview_ReportsCanonicalCommitBlockersWithoutRosterWrites")
+    for token in ("Exact_order_identity_version_and_aggregate_are_required",
+                  "Any_blocker_disables_entire_batch_and_freezes_evidence",
+                  "Reject_duplicate_or_unbounded_selection_and_invalid_receipt_fields"):
+        require("removal_tests",token)
     for key in ("core", "release"):
         lines = files[key].splitlines()
         call = "python build/test-native-phase8-personnel-separation-contract.py"
@@ -164,6 +201,12 @@ if __name__ == "__main__":
     if issues:
         raise SystemExit("PHASE8 PERSONNEL SEPARATION FAIL:\n" + "\n".join(issues))
     for key, token in (
+        ("backend", ".PreviewRemovalAsync(principal,"),
+        ("backend", 'RequiredArray(data,"expectedVersions")'),
+        ("backend", "NativeRosterRemovalEvidence.ValidateAndFreeze(selection,"),
+        ("removal", "row.Member!=members[i]"),
+        ("removal", "x.Blocker is null"),
+        ("roster_service", "!row.Eligible ?"),
         ("backend", "new PersonnelSeparationService(database)"),
         ("backend", '["operationId"] = operationId'),
         ("backend", "minimumSeconds != 5"),
