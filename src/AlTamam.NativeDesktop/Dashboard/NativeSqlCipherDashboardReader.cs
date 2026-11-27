@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -1613,6 +1613,32 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8 status definitions: original SQLCipher read and audited
     // AdminConfigurationService create/update/deactivate; never write SQL here.
+    public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(
+        NativeIdentity actor,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var principal=await ResolveSitesPrincipalAsync(actor,ct).ConfigureAwait(false);
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var response=await new RosterColumnStructureService(database,services.Time)
+            .ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token).ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"GetCustomFieldDefinitions(native)");
+        var rows=RequiredArray(data,"items").Select(node=>
+        {
+            var item=RequireObject(node);
+            return new NativeRosterColumn(RequiredText(item,"columnId"),RequiredText(item,"technicalKey"),
+                RequiredText(item,"caption"),checked((int)RequiredNumber(item,"fieldType")),
+                checked((int)RequiredNumber(item,"displayOrder")),RequiredBoolean(item,"isSystemProtected"),
+                RequiredBoolean(item,"visible"),RequiredBoolean(item,"active"),
+                RequiredNumber(item,"storedValueCount"),RequiredText(item,"snapshot"));
+        }).ToArray();
+        if(RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows))
+            throw new InvalidDataException("Invalid canonical roster layout catalogue.");
+        return Array.AsReadOnly(rows);
+    }
+
     public async Task<IReadOnlyList<NativeStatusRow>> ReadActiveStatusesAsync(
         NativeIdentity actor, CancellationToken ct = default)
     {
