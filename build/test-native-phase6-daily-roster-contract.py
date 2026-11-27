@@ -14,6 +14,8 @@ FILES = {
     "drafts": "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
     "draft_intent": "src/AlTamam.NativePresentation/NativeAttendanceDraftIntent.cs",
     "draft_save_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftSavePhase12Tests.cs",
+    "draft_delete_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftDeletePhase12Tests.cs",
+    "shared": "src/AlTamam.Application/Bridge/BridgeSharedServices.cs",
     "draft_restore_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftRestorePhase12Tests.cs",
     "review_xaml": "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
     "draft_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftPhase12Tests.cs",
@@ -246,6 +248,45 @@ def check(content):
                   "Logout_cancels_restore_and_discards_delayed_owner_read",
                   "Cancellation_during_canonical_preview_cannot_leave_an_approved_intent"):
         needs("draft_restore_tests",token)
+    for token in ("_deleteSelection=row", "_rows.Any(r=>ReferenceEquals(r,row))",
+                  "if(!CanConfirmDelete", "deleter.DeleteAttendanceDraftAsync(actor,row,linked.Token)",
+                  "remaining.Any(r=>r.DraftId==row.DraftId)", "_deleteSelection=null",
+                  "!IsDeleteReviewOpen", "if(version!=_generation)return;"):
+        needs("drafts",token)
+    for token in ("Binding BeginDeleteCommand","Binding ConfirmDeleteCommand",
+                  "Binding CancelDeleteCommand","Binding DeleteReviewLabel"):
+        needs("xaml",token)
+    for token in ("Delete_requires_live_selection_and_explicit_confirmation",
+                  "Cancel_never_calls_delete_and_preserves_catalogue",
+                  "Ambiguous_or_stale_receipt_never_claims_success_or_retries",
+                  "Logout_scrubs_delayed_delete_result"):
+        needs("draft_delete_tests",token)
+    delete_start=source.find("public async Task<IReadOnlyList<NativeAttendanceDraft>> DeleteAttendanceDraftAsync(")
+    if not (0<=delete_start<save_start):
+        issues.append("Missing reviewed native draft delete adapter")
+    else:
+        deletion=source[delete_start:save_start]
+        order=[deletion.find(t) for t in (
+            "using var nativeOperation = operations.Enter();",
+            "services.ResolveSessionAsync(actor.SessionNonce,ct)",
+            "principal.UserId!=actor.UserId",
+            "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
+            "VerifyContinuationIdentityAsync(actor,lifetime.Token)",
+            "services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject",
+            'RequiredText(receipt,"draftId")!=expected.DraftId',
+            "services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+            "remaining.Any(row=>row.DraftId==expected.DraftId)")]
+        if min(order)<0 or order!=sorted(order) or any(t in deletion for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+            issues.append("Reviewed delete must use live owner, conditional canonical delete and exact read-back")
+    shared=content["shared"]
+    method=shared[shared.find("public async Task<BridgeResponse> DeleteReviewedDraftAsync("):]
+    for token in ("ExecuteInWriteTransactionAsync(", "ct.ThrowIfCancellationRequested();",
+                  "DELETE FROM AttendanceDrafts", "DraftId = $id AND CreatedByUserId = $user",
+                  "BusinessDate = $date AND SiteId IS $site",
+                  "TargetStatusId = $status AND UpdatedAtUtc = $updated",
+                  "SelectedPersonIdsJson = $json", "return removed == 1"):
+        if token not in method:
+            issues.append("Missing atomic reviewed draft condition: "+token)
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
     for forbidden in ("new AttendanceCommitService(", "RunPendingAsync(",
@@ -260,6 +301,14 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("drafts", "deleter.DeleteAttendanceDraftAsync(actor,row,linked.Token)"),
+        ("drafts", "remaining.Any(r=>r.DraftId==row.DraftId)"),
+        ("xaml", "Binding ConfirmDeleteCommand"),
+        ("xaml", "Binding CancelDeleteCommand"),
+        ("reader", "services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject"),
+        ("reader", "remaining.Any(row=>row.DraftId==expected.DraftId)"),
+        ("shared", "TargetStatusId = $status AND UpdatedAtUtc = $updated"),
+        ("shared", "SelectedPersonIdsJson = $json"),
         ("drafts", "!SameEvidence(row,current)"),
         ("drafts", "a.UpdatedAtUtc==b.UpdatedAtUtc"),
         ("drafts", "_rows.Any(r=>ReferenceEquals(r,row))"),

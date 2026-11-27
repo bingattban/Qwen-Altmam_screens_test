@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -1613,6 +1613,42 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8 status definitions: original SQLCipher read and audited
     // AdminConfigurationService create/update/deactivate; never write SQL here.
+    public async Task<IReadOnlyList<NativeAttendanceDraft>> DeleteAttendanceDraftAsync(
+        NativeIdentity actor,NativeAttendanceDraft expected,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(expected is null || !expected.IsValid)
+            throw new InvalidDataException("Invalid reviewed draft evidence.");
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !RoleAuthorizationPolicy.CanPerformStandardOperations(principal.Role))
+            throw new UnauthorizedAccessException("Draft deletion session changed.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var response=await services.DeleteReviewedDraftAsync(principal.UserId,new JsonObject
+        {
+            ["draftId"]=expected.DraftId,
+            ["businessDate"]=expected.BusinessDate.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            ["siteId"]=expected.SiteId==""?null:JsonValue.Create(expected.SiteId),
+            ["targetStatusId"]=expected.TargetStatusId,
+            ["updatedAtUtc"]=expected.UpdatedAtUtc.ToString("O",CultureInfo.InvariantCulture),
+            ["selectedPersonIds"]=new JsonArray(expected.PersonIds.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
+        },lifetime.Token).ConfigureAwait(false);
+        var receipt=RequiredObject(response,"DeleteAttendanceDraft(native)");
+        if(RequiredText(receipt,"draftId")!=expected.DraftId)
+            throw new InvalidDataException("Draft deletion receipt mismatch.");
+        var after=await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var remaining=ParseNativeDraftCatalogue(after);
+        if(remaining.Any(row=>row.DraftId==expected.DraftId))
+            throw new InvalidDataException("Deleted draft remains in owner catalogue.");
+        return remaining;
+    }
+
     public async Task<NativeAttendanceDraft> SaveAttendanceDraftAsync(
         NativeIdentity actor,NativeAttendanceDraftIntent intent,CancellationToken ct=default)
     {
@@ -1676,6 +1712,11 @@ public sealed class NativeSqlCipherDashboardReader(
         var response=await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
         await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();
+        return ParseNativeDraftCatalogue(response);
+    }
+
+    private static IReadOnlyList<NativeAttendanceDraft> ParseNativeDraftCatalogue(BridgeResponse response)
+    {
         var items=RequiredArray(response,"ListAttendanceDrafts(native)");
         if(items.Count>10000)throw new InvalidDataException("Draft catalogue exceeds native bound.");
         var rows=items.Select(node=>
