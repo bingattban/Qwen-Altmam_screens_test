@@ -126,6 +126,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             _navigateCommand.NotifyAvailabilityChanged();
         };
         DailyAttendance.Drafts.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        DailyAttendance.Review.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
@@ -249,6 +250,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
            (screen == NativeScreen.DailyAttendance ||
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
            (screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&
+           (screen == NativeScreen.DailyAttendance || !DailyAttendance.Review.IsSavingDraft) &&
            (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
            (screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&
            !Audit.Edit.IsOpen && !Accounts.Create.IsOpen && !Accounts.Lifecycle.IsOpen;
