@@ -22,7 +22,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativeMonthlyAttendanceReader, INativeMonthlyCellDetailsReader, INativeClosedDayCorrectionBackend, INativeHistoricalRangeBackend, INativeAdministrativeCatchUpBackend, INativeClosedDayPolicyBackend,
       INativeMonthlyExcelExportBackend, INativeMonthlyExcelProgressBackend, INativePersonnelDirectoryReader,
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
-      INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
+      INativeRosterRemovalPreviewBackend, INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
       INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
 {
@@ -2447,6 +2447,49 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8: original canonical PersonnelSeparationService owns all
     // dismissal previews, five-second approval delays, transactions and audit.
+    public async Task<NativeRosterRemovalPreview> PreviewRosterRemovalAsync(
+        NativeIdentity actor,IReadOnlyList<NativeRosterRemovalMember> members,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(!RoleAuthorizationPolicy.CanArchivePersonsFromActiveForce(actor.Role))
+            throw new UnauthorizedAccessException("Roster removal permission denied.");
+        if(!NativeRosterRemovalEvidence.ValidSelection(members))
+            throw new InvalidDataException("Invalid roster removal selection.");
+        var selection=Array.AsReadOnly(members.ToArray());
+        await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
+        var principal=await ResolveSitesPrincipalAsync(actor,ct).ConfigureAwait(false);
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        string today=LocalPersonDay();
+        var ids=new JsonArray(selection.Select(x=>(JsonNode?)JsonValue.Create(x.PersonId)).ToArray());
+        var response=await new AlTamam.Application.Roster.RosterAuthorizedCommands(database)
+            .PreviewRemovalAsync(principal,new JsonObject{["personIds"]=ids,["effectiveLocalDate"]=today},lifetime.Token)
+            .ConfigureAwait(false);
+        await VerifyPersonnelManagerAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var data=RequiredObject(response,"PreviewArchivePersons(native)");
+        var candidates=RequiredArray(data,"candidates");
+        var versions=RequiredArray(data,"expectedVersions");
+        if(candidates.Count!=selection.Count || versions.Count!=selection.Count ||
+           !RequiredBoolean(data,"reversible") || today!=LocalPersonDay())
+            throw new InvalidDataException("Invalid canonical roster removal scope.");
+        var rows=new List<NativeRosterRemovalCandidate>(selection.Count);
+        for(int i=0;i<selection.Count;i++)
+        {
+            var row=RequireObject(candidates[i]);var version=RequireObject(versions[i]);
+            string id=RequiredText(row,"personId");
+            if(RequiredText(version,"personId")!=id || !row.ContainsKey("blocker"))
+                throw new InvalidDataException("Missing exact removal evidence.");
+            string? blocker=row["blocker"]?.GetValue<string>();
+            var member=new NativeRosterRemovalMember(id,RequiredText(row,"displayName"),
+                RequiredText(row,"serviceNumberA"),RequiredText(row,"currentSiteName"),RequiredNumber(version,"rowVersion"));
+            rows.Add(new NativeRosterRemovalCandidate(member,checked((int)RequiredNumber(row,"organizationalStatus")),
+                RequiredNumber(row,"attendanceDays"),blocker));
+        }
+        return NativeRosterRemovalEvidence.ValidateAndFreeze(selection,new NativeRosterRemovalPreview(
+            RequiredText(data,"effectiveLocalDate"),RequiredText(data,"previewToken"),
+            RequiredNumber(data,"baseRevision"),rows),today);
+    }
+
     public async Task<NativePersonnelSeparationPreview> PreviewSeparationAsync(
         NativeIdentity actor, NativePersonnelSeparationDraft draft,
         CancellationToken ct = default)
