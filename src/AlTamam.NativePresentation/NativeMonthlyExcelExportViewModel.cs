@@ -93,10 +93,12 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
         _liveActor?.Invoke() == _previewActor;
     public NativeMonthlyExcelPreview? Preview => _preview;
     public NativeMonthlyExcelReceipt? Receipt => _receipt;
+    public IReadOnlyList<NativeMonthlyExcelFile> ResultFiles => _receipt?.Files ?? [];
+    public bool HasResultFiles => ResultFiles.Count>0;
     public string Error => _error;
     public string PeriodLabel => _preview?.Period ?? "";
     public string CompletionMessage => _receipt is null ? "" :
-        $"نجح تصدير {_receipt.FileCount} ملف Excel؛ عدد الأفراد في الكشف الموحد: {_receipt.PersonCount}.";
+        $"نجح تصدير {_receipt.FileCount} ملف Excel؛ عدد الأفراد في الكشف الرئيسي: {_receipt.PersonCount}.";
     public ICommand OpenPreviewCommand { get; }
     public ICommand ConfirmCommand { get; }
     public ICommand CloseCommand { get; }
@@ -237,7 +239,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
                 return;
             }
             ValidateReceipt(result, request);
-            _receipt = result;
+            _receipt = result with { Files=NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(result,request) };
             _hasProgress = true;
             _progressPercent = 100;
             _preview = null; // the same preview cannot authorize another write
@@ -326,7 +328,7 @@ public sealed class NativeMonthlyExcelExportViewModel : INotifyPropertyChanged
     private void Notify()
     {
         foreach (string prop in new[] { nameof(IsOpen), nameof(IsBusy),
-                     nameof(CanConfirm), nameof(Preview), nameof(Receipt),
+                     nameof(CanConfirm), nameof(Preview), nameof(Receipt),nameof(ResultFiles),nameof(HasResultFiles),
                      nameof(Error), nameof(PeriodLabel),
                      nameof(CompletionMessage), nameof(IsExporting), nameof(IsCancelRequested),
                      nameof(ProgressPercent), nameof(IsProgressIndeterminate), nameof(ProgressMessage),

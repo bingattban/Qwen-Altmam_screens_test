@@ -3721,9 +3721,34 @@ public sealed class NativeSqlCipherDashboardReader(
            !string.Equals(Path.GetFullPath(filePath),Path.GetFullPath(Path.Combine(destination,fileName)),
                StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Monthly Excel receipt does not match reviewed destination.");
-        return new NativeMonthlyExcelReceipt(
-            filter.Period, filter.SiteId, filter.SearchTerm,
-            filePath, fileCount, total);
+        var files=new List<NativeMonthlyExcelFile>();
+        if(filter.SiteId.Length==0)
+        {
+            var rows=RequiredArray(data,"files");
+            if(rows.Count!=fileCount || rows.Count>10001)
+                throw new InvalidDataException("Incomplete monthly workbook set.");
+            foreach(var item in rows)
+            {
+                var row=RequireObject(item);
+                files.Add(new NativeMonthlyExcelFile(RequiredText(row,"siteId"),RequiredText(row,"siteName"),
+                    RequiredText(row,"filePath"),RequiredNumber(row,"personCount")));
+            }
+        }
+        else
+            files.Add(new NativeMonthlyExcelFile(filter.SiteId,RequiredText(data,"siteName"),filePath,total));
+        var receipt=new NativeMonthlyExcelReceipt(filter.Period,filter.SiteId,filter.SearchTerm,
+            filePath,fileCount,total){Files=files};
+        var verified=NativeMonthlyExcelReceiptEvidence.ValidateAndFreeze(receipt,filter);
+        // Only paths returned by the canonical writer are checked. No directory
+        // scanning, file opening, or inferred success from an existing filename.
+        foreach(var file in verified)
+        {
+            var info=new FileInfo(file.FilePath);
+            if(!info.Exists || info.Length<=0 || (info.Attributes & FileAttributes.ReparsePoint)!=0)
+                throw new InvalidDataException("Published monthly workbook is missing or invalid.");
+        }
+        await VerifyContinuationIdentityAsync(actor,principal.SessionRevocation).ConfigureAwait(false);
+        return receipt with{Files=verified};
     }
 
     public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(

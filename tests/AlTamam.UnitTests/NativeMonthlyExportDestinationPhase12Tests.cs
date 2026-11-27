@@ -95,6 +95,7 @@ public sealed class NativeMonthlyExportDestinationPhase12Tests
             =>throw new InvalidOperationException();
         public Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,CancellationToken ct=default)
         { Exported=filter;return Pending.Task; }
-        public NativeMonthlyExcelReceipt Receipt()=>new(Filter.Period,Filter.SiteId,Filter.SearchTerm,Path.Combine(Exported!.OutputDirectory!,Exported.OutputFileName!),1,3);
+        public NativeMonthlyExcelReceipt Receipt()=>new(Filter.Period,Filter.SiteId,Filter.SearchTerm,Path.Combine(Exported!.OutputDirectory!,Exported.OutputFileName!),1,3)
+        {Files=[new(Filter.SiteId,"الموقع",Path.Combine(Exported!.OutputDirectory!,Exported.OutputFileName!),3)]};
     }
 }

@@ -234,8 +234,11 @@ public sealed class MonthlyExcelExportService
                         ["term"] = term, ["archiveMode"] = true, ["page"] = pageNumber, ["pageSize"] = 500
                     }, ct).ConfigureAwait(false);
                     if (!data.Success) throw new IOException("تعذر قراءة الصفحة المطلوبة من سجل التمام.");
-                    var items = (JsonArray)((JsonObject)data.Data!)["items"]!;
-                    if (items.Count == 0) throw new IOException("تغير مصدر البيانات أثناء إنشاء الكشف.");
+                    var page = (JsonObject)data.Data!;
+                    var items = (JsonArray)page["items"]!;
+                    if (page["total"]!.GetValue<long>()!=total || items.Count==0 ||
+                        rowNumber+items.Count>total)
+                        throw new InvalidDataException("تغير عدد الأفراد أثناء إنشاء الكشف.");
                     foreach (JsonNode? item in items)
                     {
                         var person = (JsonObject)item!;
@@ -259,6 +262,8 @@ public sealed class MonthlyExcelExportService
                     }
                     progress?.Invoke(checked((int)rowNumber),checked((int)total));
                 }
+                if(rowNumber!=total)
+                    throw new InvalidDataException("عدد الصفوف المكتوبة لا يطابق نتيجة التصدير.");
                 writer.WriteEndElement();
                 ExcelReportLayout.FinishSheet(writer,headings.Count,checked((int)rowNumber+3),3);
                 writer.WriteEndElement();
@@ -348,6 +353,8 @@ public sealed class MonthlyExcelExportService
             var combinedData=(JsonObject)all.Data!;
             string combinedPath=combinedData["filePath"]!.GetValue<string>();
             created.Add(combinedPath);
+            if(combinedData["personCount"]!.GetValue<long>()!=combined)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير عدد الأفراد أثناء التصدير الجماعي؛ أعد المعاينة.");
             files.Add(new JsonObject{["siteId"]="",["siteName"]="جميع المواقع",
                 ["filePath"]=combinedPath,["personCount"]=combined});
             completed=checked((int)combined);
@@ -360,7 +367,10 @@ public sealed class MonthlyExcelExportService
                 var entry=(JsonObject)individual.Data!;
                 string file=entry["filePath"]!.GetValue<string>();
                 created.Add(file);
-                files.Add(new JsonObject{["siteId"]=plan.SiteId,["siteName"]=plan.Name,
+                if(entry["personCount"]!.GetValue<long>()!=plan.Count ||
+                   entry["siteId"]!.GetValue<string>()!=plan.SiteId)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير نطاق الموقع أثناء التصدير الجماعي؛ أعد المعاينة.");
+                files.Add(new JsonObject{["siteId"]=plan.SiteId,["siteName"]=entry["siteName"]!.GetValue<string>(),
                     ["filePath"]=file,["personCount"]=plan.Count});
                 completed=checked(completed+(int)plan.Count);
             }
