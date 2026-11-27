@@ -119,6 +119,7 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         if (reader is INativeAttendanceReviewBackend backend)
         {
             Review.AttachBackend(backend, principal);
+            if(reader is INativeAttendanceDraftWriter writer) Review.AttachDraftWriter(writer);
             _reviewAttached = true;
         }
     }
