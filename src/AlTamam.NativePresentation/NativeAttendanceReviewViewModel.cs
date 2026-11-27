@@ -14,6 +14,9 @@ namespace AlTamam.NativePresentation;
 public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 {
     private INativeAttendanceReviewBackend? _backend;
+    private INativeAttendanceDraftWriter? _draftWriter;
+    private bool _savingDraft,_draftAttempted;
+    private string _savedDraftId="",_draftMessage="";
     private Func<NativeIdentity?>? _liveActor;
     private NativeIdentity? _actor;
     private DateOnly _businessDate;
@@ -39,10 +42,63 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         ConfirmCommand = new NativeCommand(_ => _ = ConfirmAsync(),
             _ => IsOpen && HasPreview && !IsBusy && !IsCompleted);
         CancelCommand = new NativeCommand(_ => Cancel(),
-            _ => IsOpen && !IsCommitting && !HasUnverifiedCommit);
+            _ => IsOpen && !IsCommitting && !HasUnverifiedCommit && !IsSavingDraft);
+        SaveDraftCommand=new NativeCommand(_=>_ = SaveDraftAsync(),_=>CanSaveDraft);
     }
 
     public bool IsOpen => _open;
+    public bool DraftSaveAvailable=>_draftWriter is not null;
+    public bool IsSavingDraft=>_savingDraft;
+    public string SavedDraftId=>_savedDraftId;
+    public string DraftMessage=>_draftMessage;
+    public bool CanSaveDraft=>_draftWriter is not null && _open && !_busy &&
+        !_committing && !_completed && !_unverifiedCommit && !_draftAttempted &&
+        _actor is { } actor && HasValidActor(actor) &&
+        _choices.Any(x=>x.StatusId==_selectedStatusId) && !RequiresDateRange &&
+        _personIds.Length is >=1 and <=100;
+    public ICommand SaveDraftCommand {get;}
+    public void AttachDraftWriter(INativeAttendanceDraftWriter writer)
+    {
+        if(_draftWriter is not null)throw new InvalidOperationException("Draft writer already attached.");
+        _draftWriter=writer??throw new ArgumentNullException(nameof(writer));
+        Update();
+    }
+
+    public async Task SaveDraftAsync(CancellationToken ct=default)
+    {
+        if(!CanSaveDraft || _draftWriter is not { } writer || _actor is not { } actor)return;
+        var intent=new NativeAttendanceDraftIntent("DRF-"+Guid.NewGuid().ToString("N"),
+            _businessDate,_site,_selectedStatusId,Array.AsReadOnly(_personIds.ToArray()));
+        if(!intent.IsValid(DateOnly.FromDateTime(DateTime.Now)))return;
+        int version=++_generation;
+        _pending?.Cancel();
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _pending=linked;_draftAttempted=true;_savingDraft=true;_busy=true;
+        _savedDraftId="";_draftMessage="";Update();
+        try
+        {
+            var receipt=await writer.SaveAttendanceDraftAsync(actor,intent,linked.Token);
+            if(version!=_generation)return;
+            if(!HasValidActor(actor)){ForceCancel();return;}
+            if(linked.IsCancellationRequested || !intent.Matches(receipt))
+                throw new InvalidDataException("Unverified draft save.");
+            _savedDraftId=receipt.DraftId;
+            _draftMessage="تم حفظ المسودة والتحقق منها. لم يعتمد أي حضور؛ يمكنك إغلاق المراجعة ثم فتح المسودات.";
+        }
+        catch
+        {
+            if(version==_generation)
+            {
+                if(!HasValidActor(actor)){ForceCancel();return;}
+                _draftMessage="لم يتم التحقق من حفظ المسودة. راجع قائمة المسودات بعد إغلاق المراجعة؛ لا إعادة إرسال تلقائية.";
+            }
+        }
+        finally
+        {
+            if(version==_generation){_pending=null;_savingDraft=false;_busy=false;Update();}
+        }
+    }
+
     public bool IsInitial => _initial;
     public string ReviewTitle => _initial ? "اعتماد التحضير الأولي" : "تعديل حالة التحضير";
     public bool IsBusy => _busy;
@@ -134,7 +190,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         IReadOnlyList<string> personIds, bool initial, CancellationToken ct)
     {
         // Never replace an approved intent after a possibly lost commit reply.
-        if (_committing || _unverifiedCommit) { Cancel(); return; }
+        if (_committing || _unverifiedCommit || _savingDraft) { Cancel(); return; }
         Cancel();
         var actor = _liveActor?.Invoke();
         if (actor is null || _backend is null || personIds is null ||
@@ -324,6 +380,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
 
     public void Cancel()
     {
+        if (_savingDraft) return;
         if (_unverifiedCommit)
         {
             _error = "عملية الاعتماد غير مؤكدة؛ لا يمكن إلغاء المعاينة أو إصدار عملية جديدة. تحقق من السجل أو أعد تأكيد نفس العملية.";
@@ -345,6 +402,7 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
         _pending?.Cancel();
         _pending = null;
         _actor = null;
+        _savingDraft=false;_draftAttempted=false;_savedDraftId="";_draftMessage="";
         _businessDate = default;
         _site = "";
         _personIds = [];
@@ -390,10 +448,11 @@ public sealed class NativeAttendanceReviewViewModel : INotifyPropertyChanged
             nameof(RequiresDateRange), nameof(CanEditSelection), nameof(CanEditRange),
             nameof(RangeStartDate), nameof(RangeEndDate),
             nameof(PreviewMessage), nameof(StatusChoices), nameof(PreviewPersons),
-            nameof(ConfirmButtonText)
+            nameof(ConfirmButtonText), nameof(DraftSaveAvailable), nameof(IsSavingDraft),
+            nameof(SavedDraftId), nameof(DraftMessage), nameof(CanSaveDraft)
         })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        foreach (ICommand cmd in new[] { PreviewCommand, ConfirmCommand, CancelCommand })
+        foreach (ICommand cmd in new[] { PreviewCommand, ConfirmCommand, CancelCommand, SaveDraftCommand })
             if (cmd is NativeCommand native) native.NotifyAvailabilityChanged();
     }
 }
