@@ -43,14 +43,15 @@ def validate():
                       ("NativeOnStrong","NativeAccentFill"),("NativeOnStrong","NativeDangerFill"),
                       ("NativeHeaderMuted","NativeHeader"),("NativeHeaderAccent","NativeHeaderCard"),
                       ("NativeWarningText","NativeWarningSurface"),("NativeWarningText","NativeWarmSurface"),
-                      ("NativeText","NativeInfoSurface")):
+                      ("NativeText","NativeInfoSurface"),("NativeText","NativePaleWarning"),
+                      ("NativeText","NativeNavSurface")):
             assert contrast(colors[fg],colors[bg])>=4.5, f"{name}: insufficient contrast {fg}/{bg}"
     for path in [NATIVE/"MainWindow.xaml",*sorted((NATIVE/"Views").glob("*.xaml"))]:
         text=path.read_text(encoding="utf-8-sig")
         ET.fromstring(text)
         for key in re.findall(r"\{DynamicResource (Native\w+)\}",text):
             assert key in light, f"Unknown palette brush {path.name}: {key}"
-        assert not re.search(r'(?:Background|Foreground|BorderBrush)="(?:#FFFFFF|#F1F5F9|#F8FAFC|#0F2942|#475569|#CBD5E1)"',text,re.I), f"Unconverted surface or text brush: {path.name}"
+        assert not re.search(r'(?:Background|Foreground|BorderBrush|RowBackground|AlternatingRowBackground)="(?:White|#FFFFFF|#F1F5F9|#F8FAFC|#FFFBEB|#0F2942|#475569|#CBD5E1)"',text,re.I), f"Unconverted surface or text brush: {path.name}"
     app=(NATIVE/"App.xaml").read_text(encoding="utf-8-sig")
     assert 'Source="Themes/Light.xaml"' in app
     assert 'Source="Themes/Controls.xaml"' in app
