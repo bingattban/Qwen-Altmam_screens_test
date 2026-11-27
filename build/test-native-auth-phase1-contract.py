@@ -92,11 +92,11 @@ if __name__ == "__main__":
         ("vm", "IsAuthenticated && _pages.ContainsKey"),
         ("backend", "ProvisionFirstAdministratorAsync("),
         ("backend", "RevokeOrphanedSessionsOnStartupAsync("),
-        ("native_app", 'Local\AlTamamDaily_DesktopHost'),
+        ("native_app", r'Local\AlTamamDaily_DesktopHost'),
         ("host", 'Binding="{Binding IsAuthenticated}"'),
         ("release", "dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj"),
     ):
         changed=files.copy()
-        changed[key]=changed[key].replace(term,"INTENTIONALLY_REMOVED",1)
+        changed[key]=changed[key].replace(term,"INTENTIONALLY_REMOVED")
         assert check(changed),f"Negative-path regression was bypassed for {key}: {term}"
     print("NATIVE AUTH PHASE1 CONTRACT PASS: RTL parity, live SQLCipher, native RBAC, login/expiry/logout and unchanged production gates")
