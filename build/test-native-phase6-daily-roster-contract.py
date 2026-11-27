@@ -165,7 +165,7 @@ def check(content):
             "services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)",
             "VerifyContinuationIdentityAsync(actor,lifetime.Token)",
             "NativeAttendanceDraft.ValidCatalogue(rows)")]
-        if min(order)<0 or order!=sorted(order) or any(t in method for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+        if min(order)<0 or order!=sorted(order) or any(t in method for t in ("SaveDraftAsync(","SaveNativeDraftAsync(","DeleteDraftAsync(","DeleteNativeReviewedDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Draft read must use exact live owner, linked cancellation and no write")
     for token in ("Drafts.Attach(draftReader, principal)", "Drafts.Clear();", "!Drafts.IsOpen",
                   "if (Drafts.IsOpen || Review.IsOpen", "OpenDraftsCommand"):
@@ -210,7 +210,7 @@ def check(content):
             "services.SaveNativeDraftAsync(principal.UserId,new JsonObject",
             "var after=RequiredArray(await services.ListNativeDraftsAsync",
             "if(!intent.Matches(result) || result.UpdatedAtUtc!=saved)")]
-        if min(order)<0 or order!=sorted(order) or any(t in save for t in ("DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+        if min(order)<0 or order!=sorted(order) or any(t in save for t in ("DeleteDraftAsync(","DeleteNativeReviewedDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Draft save must use exact owner, one lease, fresh ID and canonical read-back without attendance write")
     for token in ("_rows.Any(r=>ReferenceEquals(r,row))",
                   "row.BusinessDate==DateOnly.FromDateTime(DateTime.Now)",
@@ -278,7 +278,7 @@ def check(content):
             'RequiredText(receipt,"draftId")!=expected.DraftId',
             "services.ListNativeDraftsAsync(principal.UserId,lifetime.Token)",
             "remaining.Any(row=>row.DraftId==expected.DraftId)")]
-        if min(order)<0 or order!=sorted(order) or any(t in deletion for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+        if min(order)<0 or order!=sorted(order) or any(t in deletion for t in ("SaveDraftAsync(","SaveNativeDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Reviewed delete must use live owner, conditional canonical delete and exact read-back")
     shared=content["shared"]
     method=shared[shared.find("private async Task<BridgeResponse> DeleteReviewedDraftCoreAsync("):]
