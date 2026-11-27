@@ -16,14 +16,16 @@ class PhaseGateTests(unittest.TestCase):
     def test_manifest_and_database_drift(self):
         f=gate.collect(ROOT)
         for key,bad in [("screen_count",68),("action_count",102),
-                        ("registered_migrations",[1,2,4]),("embedded_migrations",[1]),
-                        ("schema_version",15)]:
+                        ("registered_migrations",[1,2,4]),("embedded_migrations",[1]),("declared_migrations",[1]),
+                        ("schema_version",16)]:
             self.assertTrue(gate.verify(dict(f,**{key:bad})),key)
     def test_sqlcipher_and_destructive_restore_gates(self):
         f=gate.collect(ROOT)
         self.assertTrue(gate.verify(dict(f,sqlcipher_version="unapproved")))
         self.assertTrue(gate.verify(dict(f,destructive_restore_wired=True)))
         self.assertTrue(gate.verify(dict(f,v013_storage_constraints=False)))
+        self.assertTrue(gate.verify(dict(f,v017_range_constraints=False)))
+        self.assertTrue(gate.verify(dict(f,legacy_range_protection=False)))
         self.assertTrue(gate.verify(dict(f,current_schema_pin_verified=False)))
     def test_test_first_and_four_artifacts(self):
         f=gate.collect(ROOT)

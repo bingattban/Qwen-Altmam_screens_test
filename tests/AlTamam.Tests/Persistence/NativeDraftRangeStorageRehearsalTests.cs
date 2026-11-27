@@ -7,8 +7,8 @@ using Xunit;
 namespace AlTamam.Tests.Persistence;
 
 /// <summary>
-/// Test-only V017 candidate DDL. No live schema registration or restore activation.
-/// Rehearse on disposable SQLCipher copies before changing the production version.
+/// Verify the registered V017 migration on disposable real SQLCipher databases.
+/// Exercise fresh initialization and migration of actual V016 encrypted copies.
 /// </summary>
 public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
 {
@@ -17,20 +17,14 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
     private const string Owner = "TST-DRAFT-OWNER";
     private const string Day = "2026-11-27";
 
-    private static async Task ApplyCandidateAsync(AlTamamDbContext db)
+    // Historical source is created from the released canonical V001–V016,
+    // not from the current database and not by downgrading a newer file.
+    private static async Task InitializeV016Async(AlTamamDbContext db)
     {
-        using var resource = typeof(NativeDraftRangeStorageRehearsalTests).Assembly
-            .GetManifestResourceStream("AlTamam.Tests.Persistence.Fixtures.V017_AttendanceDraftRangeEvidence.sql")
-            ?? throw new InvalidOperationException("Missing draft migration rehearsal resource.");
-        using var reader = new StreamReader(resource);
-        string sql = await reader.ReadToEndAsync();
-        await db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
-        {
-            using var command = connection.CreateCommand();
-            command.Transaction = tx;
-            command.CommandText = sql;
-            return await command.ExecuteNonQueryAsync();
-        });
+        using var c=db.CreateOpenConnection();
+        await new SchemaMigrationRunner(AlTamamDbContext.CanonicalMigrations.Take(16).ToArray())
+            .UpgradeAsync(c);
+        Assert.Equal(16,SchemaMigrationRunner.GetCurrentVersion(c));
     }
 
     private static async Task InsertAsync(AlTamamDbContext db, string id, string status,
@@ -67,7 +61,7 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
     public async Task EncryptedCopy_UpgradePreservesLegacyAndLeavesOriginalSchemaUntouched()
     {
         using var original = new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
-        await original.InitializeAsync();
+        await InitializeV016Async(original);
         using(var c=original.CreateOpenConnection())
         using(var q=c.CreateCommand())
         {
@@ -89,7 +83,16 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
         string copy=Path.Combine(Path.GetDirectoryName(_path)!,"v017-rehearsal.db");
         File.Copy(backup,copy);
         using var staged=new AlTamamDbContext(copy,SyntheticFixtures.TestKeyHex,false);
-        await ApplyCandidateAsync(staged);
+        await staged.InitializeAsync();
+        Assert.Equal(17,AlTamamDbContext.CurrentSchemaVersion);
+        using(var migrated=staged.CreateOpenConnection())
+        {
+            Assert.Equal(17,SchemaMigrationRunner.GetCurrentVersion(migrated));
+            new SchemaMigrationRunner(AlTamamDbContext.CanonicalMigrations).VerifyRecordedHashes(migrated);
+        }
+        string rescueFolder=copy+".migration-backups";
+        string rescue=Assert.Single(Directory.GetFiles(rescueFolder,"pre-migration-v016-to-v017-*.db"));
+        Assert.Equal(16,(await staged.InspectEncryptedBackupAsync(rescue)).SchemaVersion);
         Assert.Equal(1L,Count(staged,"""
             SELECT COUNT(*) FROM AttendanceDrafts WHERE DraftId='TST-LEGACY-DRAFT'
               AND CreatedByUserId='TST-DRAFT-OWNER' AND BusinessDate='2026-11-27'
@@ -117,13 +120,13 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
     [InlineData("STS-LEAVE","2026-11-26","2026-12-01",1)]
     [InlineData("STS-LEAVE","2026-11-27","2027-11-28",1)]
     [InlineData("STS-LEAVE","2026-11-27","2027-02-30",1)]
+    [InlineData("STS-LEAVE","0000-11-27","0000-12-01",1)]
     [InlineData("STS-PERMISSION","2026-11-27","2026-12-01",2)]
     [InlineData("STS-PRESENT","2026-11-27","2026-12-01",1)]
     public async Task IncompleteOrInvalidRange_IsRejected(string status,string? start,string? end,int? initial)
     {
         using var db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
         await db.InitializeAsync();
-        await ApplyCandidateAsync(db);
         await Assert.ThrowsAsync<SqliteException>(()=>InsertAsync(db,DraftId,status,start,end,initial));
         Assert.Equal(0L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts;"));
     }
@@ -135,7 +138,6 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
     {
         using var db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
         await db.InitializeAsync();
-        await ApplyCandidateAsync(db);
         await InsertAsync(db,DraftId,status,Day,end,initial);
         using var c=db.CreateOpenConnection();
         using var q=c.CreateCommand();
@@ -155,6 +157,49 @@ public sealed class NativeDraftRangeStorageRehearsalTests : IDisposable
         await InsertAsync(db,"TST-LEGACY-NEW","STS-PRESENT",null,null,null);
         Assert.Equal(2L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts;"));
         Assert.Equal(0L,Count(db,"SELECT COUNT(*) FROM AttendanceDateRanges;"));
+    }
+
+    [Fact]
+    public async Task YearZeroWithMatchingBusinessDate_IsRejected()
+    {
+        using var db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
+        await db.InitializeAsync();
+        using var c=db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            INSERT INTO AttendanceDrafts(DraftId,BusinessDate,SiteId,TargetStatusId,SelectedPersonIdsJson,
+              CreatedByUserId,UpdatedAtUtc,RangeStartDate,RangeEndDate,RangeIsInitial)
+            VALUES('TST-ZERO','0000-01-01',NULL,'STS-LEAVE','["TST-P1"]','TST-DRAFT-OWNER',
+              '2026-11-27T08:00:00Z','0000-01-01','0000-01-02',1);
+            """;
+        await Assert.ThrowsAsync<SqliteException>(()=>q.ExecuteNonQueryAsync());
+        Assert.Equal(0L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts;"));
+    }
+
+    [Fact]
+    public async Task LegacyDraftEndpoints_CannotReadModifyOrDeleteCompleteRangeEvidence()
+    {
+        using var db=new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex,false);
+        await db.InitializeAsync();
+        await InsertAsync(db,DraftId,"STS-LEAVE",Day,"2026-12-01",1);
+        var services=new AlTamam.Application.Bridge.BridgeSharedServices(db);
+        var payload=new System.Text.Json.Nodes.JsonObject
+        {
+            ["draftId"]=DraftId,["businessDate"]=Day,["targetStatusId"]="STS-LEAVE",
+            ["siteId"]=null,["selectedPersonIds"]=System.Text.Json.Nodes.JsonNode.Parse("[\"TST-P1\"]"),
+            ["updatedAtUtc"]="2026-11-27T08:00:00.0000000+00:00"
+        };
+        var listed=await services.ListDraftsAsync(Owner,CancellationToken.None);
+        Assert.True(listed.Success);
+        Assert.Empty(Assert.IsType<System.Text.Json.Nodes.JsonArray>(listed.Data));
+        Assert.False((await services.SaveDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.False((await services.DeleteDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.False((await services.DeleteReviewedDraftAsync(Owner,payload,CancellationToken.None)).Success);
+        Assert.Equal(1L,Count(db,"SELECT COUNT(*) FROM AttendanceDrafts WHERE RangeIsInitial=1 AND RangeEndDate='2026-12-01';"));
+        await InsertAsync(db,"TST-LEGACY-NEW","STS-PRESENT",null,null,null);
+        var legacy=Assert.IsType<System.Text.Json.Nodes.JsonArray>((await services.ListDraftsAsync(Owner,CancellationToken.None)).Data);
+        Assert.Single(legacy);
+        Assert.Equal(6,Assert.IsType<System.Text.Json.Nodes.JsonObject>(legacy[0]).Count);
     }
 
     public void Dispose()=>SyntheticFixtures.DeleteTempDatabase(_path);

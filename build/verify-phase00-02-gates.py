@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_SCHEMA_VERSION = 16
+EXPECTED_SCHEMA_VERSION = 17
 EXPECTED_PROJECTS = {
     "src/AlTamam.Domain/AlTamam.Domain.csproj",
     "src/AlTamam.Contracts/AlTamam.Contracts.csproj",
@@ -39,6 +39,10 @@ def collect(root: Path) -> dict:
     release = read(".github/workflows/windows-release.yml")
     v012 = read("src/AlTamam.Infrastructure/Persistence/Migrations/V012_AutoAttendanceOutcomeCounts.sql")
     v013 = read("src/AlTamam.Infrastructure/Persistence/Migrations/V013_MovementAttendanceImmutableKeys.sql")
+    v017 = read("src/AlTamam.Infrastructure/Persistence/Migrations/V017_AttendanceDraftRangeEvidence.sql")
+    infrastructure = read("src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj")
+    declared_resources = [int(v) for v in re.findall(r'EmbeddedResource Include="Persistence/Migrations/V(\d{3})_', infrastructure)]
+    drafts = read("src/AlTamam.Application/Bridge/BridgeSharedServices.cs")
     slnx = read("AlTamam.slnx")
     schema_match = re.search(r"CurrentSchemaVersion\s*=\s*(\d+)", db)
     provider_match = re.search(
@@ -61,6 +65,9 @@ def collect(root: Path) -> dict:
         "unique_actions": len({x["action"] for x in actions["actions"]}),
         "registered_migrations": migrations,
         "embedded_migrations": embedded,
+        "declared_migrations": declared_resources,
+        "v017_range_constraints": all(token in v017 for token in ("RangeStartDate TEXT NULL", "RangeEndDate TEXT NULL", "RangeIsInitial INTEGER NULL", "TR_AttendanceDrafts_CompleteRangeImmutable", "substr(RangeStartDate,1,4) <> '0000'", "julianday(RangeEndDate) - julianday(RangeStartDate) <= 365")),
+        "legacy_range_protection": drafts.count("RangeIsInitial IS NULL") == 4,
         "schema_version": int(schema_match.group(1)) if schema_match else None,
         "sqlcipher_version": provider_match.group(1) if provider_match else None,
         "two_workflows": workflows == {"windows-ci.yml", "windows-release.yml"},
@@ -110,11 +117,15 @@ def verify(f: dict) -> list[str]:
     if f["action_count"] != 105 or f["unique_actions"] != 105:
         errors.append("action inventory: expected 105 unique canonical actions")
     if f["registered_migrations"] != list(range(1, EXPECTED_SCHEMA_VERSION + 1)):
-        errors.append("migration registration: expected contiguous V001–V016")
+        errors.append("migration registration: expected contiguous V001–V017")
     if sorted(f["embedded_migrations"]) != list(range(1, EXPECTED_SCHEMA_VERSION + 1)):
-        errors.append("migration resources: every V001–V016 SQL file must ship")
+        errors.append("migration resources: every V001–V017 SQL file must ship")
+    if sorted(f["declared_migrations"]) != list(range(1, EXPECTED_SCHEMA_VERSION + 1)):
+        errors.append("migration embedded resource declarations do not match registered versions")
+    if not f["v017_range_constraints"] or not f["legacy_range_protection"]:
+        errors.append("V017 native range evidence storage or legacy isolation contract drift")
     if f["schema_version"] != EXPECTED_SCHEMA_VERSION:
-        errors.append("migration current schema version must match V016")
+        errors.append("migration current schema version must match V017")
     if f["sqlcipher_version"] != "2.1.10":
         errors.append("SQLCipher provider changed without approved migration")
     if f["destructive_restore_wired"]:
@@ -156,7 +167,7 @@ def main() -> int:
         for error in errors:
             print(" -", error)
         return 1
-    print("PHASE 00–02 GUARD PASS: 69 routes, 105 actions, 8 projects, 2 gated Windows workflows, V001–V016, SQLCipher pinned, restore disabled.")
+    print("PHASE 00–02 GUARD PASS: 69 routes, 105 actions, 8 projects, 2 gated Windows workflows, V001–V017, SQLCipher pinned, restore disabled.")
     print("This is a source/CI invariant check, NOT clean-machine or destructive restore acceptance.")
     return 0
 

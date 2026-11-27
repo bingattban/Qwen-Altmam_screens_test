@@ -15,8 +15,7 @@ public sealed record EncryptedBackupInspection(
 
 internal static class EncryptedBackupInspector
 {
-    internal static async Task<EncryptedBackupInspection> VerifyAsync(
-        string backupPath,string activePath,string keyHex,CancellationToken ct)
+    private static FileInfo ValidateBackupFile(string backupPath,string activePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupPath);
         if(!Path.IsPathFullyQualified(backupPath) ||
@@ -33,6 +32,63 @@ internal static class EncryptedBackupInspector
         var file=new FileInfo(path);
         if(!file.Exists || file.Length<1024 || file.Attributes.HasFlag(FileAttributes.ReparsePoint))
             throw new IOException("Backup missing, too small or redirected.");
+        return file;
+    }
+
+    // A native upgrade inspection must not open the original backup through
+    // SQLite. Read-only WAL databases may still create -wal and -shm files.
+    internal static async Task<EncryptedBackupInspection> VerifyStandaloneCopyAsync(
+        string backupPath,string activePath,string keyHex,CancellationToken ct)
+    {
+        var file=ValidateBackupFile(backupPath,activePath);
+        string source=file.FullName;
+        static void RequireStandalone(string path)
+        {
+            if(new[]{"-wal","-shm","-journal"}.Any(suffix=>File.Exists(path+suffix)))
+                throw new InvalidDataException("A standalone encrypted backup is required; existing sidecars are preserved.");
+        }
+        RequireStandalone(source);
+        string scratch=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(activePath))!,
+            ".bi-"+Guid.NewGuid().ToString("N")+".db");
+        try
+        {
+            await using var input=new FileStream(source,FileMode.Open,FileAccess.Read,
+                FileShare.Read,81920,FileOptions.SequentialScan);
+            RequireStandalone(source);
+            string digest=Convert.ToHexString(await SHA256.HashDataAsync(input,ct).ConfigureAwait(false));
+            input.Position=0;
+            await using(var output=new FileStream(scratch,FileMode.CreateNew,FileAccess.Write,
+                FileShare.None,81920,FileOptions.WriteThrough))
+            {
+                await input.CopyToAsync(output,ct).ConfigureAwait(false);
+                output.Flush(flushToDisk:true);
+            }
+            RequireStandalone(source);
+            var inspected=await VerifyAsync(scratch,activePath,keyHex,ct).ConfigureAwait(false);
+            if(!string.Equals(inspected.Sha256,digest,StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Backup inspection copy digest mismatch.");
+            RequireStandalone(source);
+            ct.ThrowIfCancellationRequested();
+            return inspected with { FullPath=source };
+        }
+        finally
+        {
+            // Dispose of the GUID-owned private inspection copy only. Never
+            // delete or checkpoint the source or its SQLite sidecars.
+            foreach(string suffix in new[]{"-wal","-shm","-journal",""})
+            {
+                try{if(File.Exists(scratch+suffix))File.Delete(scratch+suffix);}
+                catch(IOException){}
+                catch(UnauthorizedAccessException){}
+            }
+        }
+    }
+
+    internal static async Task<EncryptedBackupInspection> VerifyAsync(
+        string backupPath,string activePath,string keyHex,CancellationToken ct)
+    {
+        var file=ValidateBackupFile(backupPath,activePath);
+        string path=file.FullName;
         // Reject the SQLite plaintext magic even before opening the cipher.
         await using(var raw=new FileStream(path,FileMode.Open,FileAccess.Read,
             FileShare.Read,bufferSize:4096,options:FileOptions.SequentialScan))

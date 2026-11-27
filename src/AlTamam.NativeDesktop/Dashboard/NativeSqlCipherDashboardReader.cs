@@ -619,7 +619,7 @@ public sealed class NativeSqlCipherDashboardReader(
             throw new InvalidDataException("Invalid backup path.");
         await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
         var data=RequiredObject(await new BackupInspectionService(database)
-            .VerifyAsync(path,ct).ConfigureAwait(false),"VerifyBackup");
+            .VerifyNativeAsync(path,ct).ConfigureAwait(false),"VerifyBackup");
         var result=new NativeBackupInspection(RequiredText(data,"path"),RequiredText(data,"sha256"),
             RequiredNumber(data,"fileSizeBytes"),checked((int)RequiredNumber(data,"schemaVersion")),
             RequiredBoolean(data,"schemaCompatible"),RequiredBoolean(data,"registeredInCurrentCatalog"),

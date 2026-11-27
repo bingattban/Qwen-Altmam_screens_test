@@ -49,6 +49,37 @@ public sealed class NativeBackupForwardUpgradeAuthorizationTests : IAsyncLifetim
     }
 
     [Fact]
+    public async Task NativeInspection_ThenAuthorizedUpgrade_PreservesOldBackupBytesAndNoSidecars()
+    {
+        var inspected=await new BackupInspectionService(_db).VerifyNativeAsync(Source,CancellationToken.None);
+        Assert.True(inspected.Success,inspected.UserMessage);
+        var evidence=Assert.IsType<System.Text.Json.Nodes.JsonObject>(inspected.Data);
+        Assert.Equal(_sha,evidence["sha256"]!.GetValue<string>());
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion-1,evidence["schemaVersion"]!.GetValue<int>());
+        Assert.False(evidence["schemaCompatible"]!.GetValue<bool>());
+        foreach(string suffix in new[]{"-wal","-shm","-journal"}) Assert.False(File.Exists(Source+suffix));
+        var result=await new NativeBackupForwardUpgradeService(_db,_sessions)
+            .PrepareAsync(_actor,Password,Source,evidence["sha256"]!.GetValue<string>());
+        Assert.NotNull(result);
+        Assert.Equal(_sha,Digest(Source));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,result!.Upgraded.SchemaVersion);
+        Assert.Empty(Directory.GetFiles(Folder,".bi-*"));
+        foreach(string suffix in new[]{"-wal","-shm","-journal"}) Assert.False(File.Exists(Source+suffix));
+    }
+
+    [Fact]
+    public async Task NativeInspection_RejectsExistingSidecarsWithoutDeletingThem()
+    {
+        string sidecar=Source+"-wal";
+        await File.WriteAllTextAsync(sidecar,"synthetic");
+        var inspected=await new BackupInspectionService(_db).VerifyNativeAsync(Source,CancellationToken.None);
+        Assert.False(inspected.Success);
+        Assert.Equal("synthetic",await File.ReadAllTextAsync(sidecar));
+        Assert.Equal(_sha,Digest(Source));
+        Assert.Empty(Directory.GetFiles(Folder,".bi-*"));
+    }
+
+    [Fact]
     public async Task FreshGeneralAdmin_PreparesNewBackupWithoutRestoreActivation()
     {
         var service=new NativeBackupForwardUpgradeService(_db,_sessions);

@@ -1,5 +1,5 @@
--- V017 candidate: test-only until schema registration and restore compatibility
--- are independently accepted. Never apply this file to an active database.
+-- V017 additive native attendance draft evidence. Applied only by the canonical
+-- hash-pinned migration runner after the mandatory encrypted rescue.
 -- Existing draft rows deliberately retain NULL evidence; do not invent dates/mode.
 ALTER TABLE AttendanceDrafts ADD COLUMN RangeStartDate TEXT NULL;
 ALTER TABLE AttendanceDrafts ADD COLUMN RangeEndDate TEXT NULL;
@@ -13,6 +13,7 @@ CHECK (
       AND length(RangeStartDate) = 10 AND length(RangeEndDate) = 10
       AND RangeStartDate GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
       AND RangeEndDate GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+      AND substr(RangeStartDate,1,4) <> '0000' AND substr(RangeEndDate,1,4) <> '0000'
       AND date(RangeStartDate,'+0 days') IS RangeStartDate
       AND date(RangeEndDate,'+0 days') IS RangeEndDate
       AND RangeStartDate = BusinessDate

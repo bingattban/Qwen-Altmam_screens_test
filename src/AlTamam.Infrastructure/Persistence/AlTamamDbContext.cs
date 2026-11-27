@@ -7,8 +7,8 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    /// <summary>Highest known schema (V016 adds audited first-day separation and identity corrections).</summary>
-    public const int CurrentSchemaVersion = 16;
+    /// <summary>Highest known schema (V017 adds immutable native attendance draft range evidence).</summary>
+    public const int CurrentSchemaVersion = 17;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -29,6 +29,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(14, "V014_AttendanceDateRanges", "AlTamam.Infrastructure.Persistence.Migrations.V014_AttendanceDateRanges.sql"),
         new(15, "V015_SameDayFirstAssignmentTransfer", "AlTamam.Infrastructure.Persistence.Migrations.V015_SameDayFirstAssignmentTransfer.sql"),
         new(16, "V016_SameDaySeparationAndIdentity", "AlTamam.Infrastructure.Persistence.Migrations.V016_SameDaySeparationAndIdentity.sql"),
+        new(17, "V017_AttendanceDraftRangeEvidence", "AlTamam.Infrastructure.Persistence.Migrations.V017_AttendanceDraftRangeEvidence.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
@@ -285,6 +286,12 @@ public sealed class AlTamamDbContext : IDisposable
     public Task<EncryptedBackupInspection> InspectEncryptedBackupAsync(string path,
         CancellationToken ct=default)
         => EncryptedBackupInspector.VerifyAsync(path,_databasePath,_databaseKey,ct);
+
+    /// <summary>Native inspection of standalone backup bytes without creating
+    /// SQLite sidecars beside the original file.</summary>
+    public Task<EncryptedBackupInspection> InspectStandaloneEncryptedBackupAsync(string path,
+        CancellationToken ct=default)
+        => EncryptedBackupInspector.VerifyStandaloneCopyAsync(path,_databasePath,_databaseKey,ct);
 
     /// <summary>
     /// Prepare a separate, verified forward-upgraded backup for explicit later

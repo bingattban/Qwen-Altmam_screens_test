@@ -541,7 +541,7 @@ public sealed class BridgeSharedServices
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;";
+        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u AND RangeIsInitial IS NULL ORDER BY UpdatedAtUtc DESC;";
         cmd.Parameters.AddWithValue("$u", userId);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -581,7 +581,7 @@ public sealed class BridgeSharedServices
                                 VALUES ($id, $date, $site, $status, $json, $user, $now)
                                 ON CONFLICT(DraftId) DO UPDATE SET BusinessDate=$date, SiteId=$site, TargetStatusId=$status,
                                                                    SelectedPersonIdsJson=$json, UpdatedAtUtc=$now
-                                WHERE AttendanceDrafts.CreatedByUserId = $user;";
+                                WHERE AttendanceDrafts.CreatedByUserId = $user AND AttendanceDrafts.RangeIsInitial IS NULL;";
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$date", businessDate);
             cmd.Parameters.AddWithValue("$site", payload["siteId"]?.GetValue<string>() ?? (object)DBNull.Value);
@@ -603,7 +603,7 @@ public sealed class BridgeSharedServices
         {
             using var cmd = connection.CreateCommand();
             cmd.Transaction = tx;
-            cmd.CommandText = "DELETE FROM AttendanceDrafts WHERE DraftId = $id AND CreatedByUserId = $user;";
+            cmd.CommandText = "DELETE FROM AttendanceDrafts WHERE DraftId = $id AND CreatedByUserId = $user AND RangeIsInitial IS NULL;";
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$user", userId);
             int removed = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -637,7 +637,7 @@ public sealed class BridgeSharedServices
                                 WHERE DraftId = $id AND CreatedByUserId = $user
                                 AND BusinessDate = $date AND SiteId IS $site
                                 AND TargetStatusId = $status AND UpdatedAtUtc = $updated
-                                AND SelectedPersonIdsJson = $json;";
+                                AND SelectedPersonIdsJson = $json AND RangeIsInitial IS NULL;";
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$user", userId);
             cmd.Parameters.AddWithValue("$date", businessDate);
