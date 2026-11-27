@@ -613,6 +613,45 @@ public sealed class BridgeSharedServices
         }, ct).ConfigureAwait(false);
     }
 
+    // Native reviewed deletion compares the exact saved evidence within the same
+    // write transaction. Keep the legacy DeleteDraftAsync contract unchanged.
+    public async Task<BridgeResponse> DeleteReviewedDraftAsync(string userId, JsonObject expected, CancellationToken ct)
+    {
+        string draftId = GetRequired(expected, "draftId");
+        string businessDate = GetRequired(expected, "businessDate");
+        string status = GetRequired(expected, "targetStatusId");
+        string updated = GetRequired(expected, "updatedAtUtc");
+        var selected = expected["selectedPersonIds"] as JsonArray
+            ?? throw new BridgeProtocolException(BridgeErrorCodes.ValidationError, "قائمة أفراد المسودة مفقودة.");
+        if (selected.Count is < 1 or > 100 || selected.Any(p => p is null ||
+                p.GetValueKind() != System.Text.Json.JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(p.GetValue<string>())) ||
+            selected.Select(p => p!.GetValue<string>()).Distinct(StringComparer.Ordinal).Count() != selected.Count)
+            return Error(BridgeErrorCodes.ValidationError, "بيانات المسودة غير صالحة.");
+        return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            using var cmd = connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = @"DELETE FROM AttendanceDrafts
+                                WHERE DraftId = $id AND CreatedByUserId = $user
+                                AND BusinessDate = $date AND SiteId IS $site
+                                AND TargetStatusId = $status AND UpdatedAtUtc = $updated
+                                AND SelectedPersonIdsJson = $json;";
+            cmd.Parameters.AddWithValue("$id", draftId);
+            cmd.Parameters.AddWithValue("$user", userId);
+            cmd.Parameters.AddWithValue("$date", businessDate);
+            cmd.Parameters.AddWithValue("$site", expected["siteId"]?.GetValue<string>() ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$status", status);
+            cmd.Parameters.AddWithValue("$updated", updated);
+            cmd.Parameters.AddWithValue("$json", selected.ToJsonString());
+            int removed = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return removed == 1
+                ? Ok(new JsonObject { ["draftId"] = draftId })
+                : Error(BridgeErrorCodes.ConflictStale, "تغيرت المسودة أو لم تعد تتبع المستخدم الحالي.");
+        }, ct).ConfigureAwait(false);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     internal ExportJobCoordinator ExportJobs { get; } = new();
