@@ -312,7 +312,7 @@ jobs:
           $rehearsal = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*NativeDraftRangeStorageRehearsalTests*' })
           if ($rehearsal.Count -lt 12 -or @($rehearsal | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Draft range SQLCipher rehearsal evidence missing or failed' }
           $upgrade = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*EncryptedBackupForwardUpgradeTests*' })
-          if ($upgrade.Count -lt 6 -or @($upgrade | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Encrypted backup forward-upgrade evidence missing or failed' }
+          if ($upgrade.Count -lt 7 -or @($upgrade | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Encrypted backup forward-upgrade evidence missing or failed' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:
