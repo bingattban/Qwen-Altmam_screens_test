@@ -161,7 +161,7 @@ public sealed class AdministrationPageViewModel : NativePageViewModel, INotifyPr
     }
 
     // The historical shortcut must not discard a live personnel workflow.
-    public bool CanLeaveForHistoricalReview => !ColumnLayout.IsOpen && !_loading && !_profileOpen && !_profileLoading &&
+    public bool CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen && !_profileOpen && !_profileLoading &&
         !Mutation.IsOpen && !Mutation.HasUnverifiedCommit && !Movement.IsOpen &&
         !BulkMovement.IsOpen && !BulkExternalMovement.IsOpen && !Archive.IsOpen &&
         !Separation.IsOpen && !SeparationArchive.IsOpen && !Return.IsOpen &&

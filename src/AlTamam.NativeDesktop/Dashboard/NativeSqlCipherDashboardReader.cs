@@ -1620,7 +1620,7 @@ public sealed class NativeSqlCipherDashboardReader(
         await VerifyPersonnelManagerAsync(actor,ct).ConfigureAwait(false);
         var principal=await ResolveSitesPrincipalAsync(actor,ct).ConfigureAwait(false);
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
-        var response=await new RosterColumnStructureService(database,services.Time)
+        var response=await new RosterColumnStructureService(database)
             .ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token).ConfigureAwait(false);
         await VerifyPersonnelManagerAsync(actor,lifetime.Token).ConfigureAwait(false);
         lifetime.Token.ThrowIfCancellationRequested();

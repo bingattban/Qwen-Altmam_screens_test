@@ -102,11 +102,11 @@ def problems(contents):
                   "version!=_generation || linked.IsCancellationRequested",
                   "if(!CanRead){Clear();return;}", "_pending?.Cancel()"):
         need("layout_vm",token)
-    for token in ("ReadRosterLayoutAsync(", "new RosterColumnStructureService(database,services.Time)",
+    for token in ("ReadRosterLayoutAsync(", "new RosterColumnStructureService(database)",
                   '.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)',
                   'RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows)'):
         need("reader",token)
-    for token in ("CanLeaveForHistoricalReview => !ColumnLayout.IsOpen",
+    for token in ("CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen",
                   "ColumnLayout.Clear();","ColumnLayout.Attach(layoutReader,()=>_liveActor?.Invoke());",
                   "if(ColumnLayout.IsOpen)return;"):
         need("layout_admin",token)
@@ -559,7 +559,7 @@ if __name__=="__main__":
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_shell","if (CurrentPage.Screen == screen) return;"),
         ("layout_vm","Snapshot.All(Uri.IsHexDigit)"),
-        ("layout_admin","CanLeaveForHistoricalReview => !ColumnLayout.IsOpen"),
+        ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
         ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)'),
         ("layout_view","Binding StoredValueCount"),
         ("settings_shell","!IsBusy && ReferenceEquals(CurrentPage,Reports) && CanNavigate(destination)"),
