@@ -243,7 +243,8 @@ def check(content):
                   "Forged_or_changed_draft_cannot_open_review",
                   "Old_or_incomplete_range_draft_cannot_be_restored",
                   "Wrong_mode_or_inactive_status_is_rejected_without_automatic_fallback",
-                  "Logout_cancels_restore_and_discards_delayed_owner_read"):
+                  "Logout_cancels_restore_and_discards_delayed_owner_read",
+                  "Cancellation_during_canonical_preview_cannot_leave_an_approved_intent"):
         needs("draft_restore_tests",token)
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
