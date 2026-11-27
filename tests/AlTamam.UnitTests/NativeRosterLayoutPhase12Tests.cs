@@ -9,8 +9,12 @@ public sealed class NativeRosterLayoutPhase12Tests
     private static readonly NativeIdentity Manager=new("USR-1","owner",UserRole.GeneralAdministration,"NONCE-A");
     private static NativeRosterColumn Column(string id="FLD-1",bool system=false,int order=5)
         =>new(id,"key-"+id,"عنوان العمود",1,order,system,true,true,0,new string('A',64));
-    private static NativeRosterColumn[] Rows()=>[Column("SYS-1",true,1),Column("SYS-2",true,2),
-        Column("SYS-3",true,3),Column("SYS-4",true,4),Column()];
+    private static NativeRosterColumn[] Rows()=>[
+        new("FLD-SYS-ROWNUM","sys_row_number","الرقم",2,1,true,true,true,0,new string('A',64)),
+        new("FLD-SYS-SVC-NUM","sys_service_number_a","الرقم (ع)",1,2,true,true,true,0,new string('B',64)),
+        new("FLD-SYS-NAME","sys_person_name","الاسم",1,3,true,true,true,0,new string('C',64)),
+        new("FLD-SYS-SITE","sys_site_name","الموقع",1,4,true,true,true,0,new string('D',64)),
+        Column()];
     [Fact]
     public void Metadata_denies_duplicate_identity_bad_snapshot_and_unprotected_system_positions()
     {
@@ -19,6 +23,9 @@ public sealed class NativeRosterLayoutPhase12Tests
         Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(4),Column() with {Snapshot="bad"}]));
         Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(4),Column(order:4)]));
         Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(3),Column()]));
+        Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(2),Rows()[2] with { Visible=false },..Rows().Skip(3)]));
+        Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(4),Column() with {TechnicalKey="sys_person_name"}]));
+        Assert.True(NativeRosterColumn.ValidCatalogue([..Rows(),Column("FLD-RETIRED") with {Active=false,Visible=false,StoredValueCount=8}]));
         Assert.False(NativeRosterColumn.ValidCatalogue([..Rows().Take(4),Column() with {StoredValueCount=-1}]));
     }
     [Fact]
