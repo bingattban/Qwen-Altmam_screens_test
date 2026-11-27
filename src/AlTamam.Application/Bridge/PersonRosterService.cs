@@ -693,7 +693,7 @@ public sealed class PersonRosterService
         // Reconstruct the preview in the caller's original order, including its
         // revisions and first-missing-person error semantics.
         var details = new Dictionary<string,
-            (string Name, string Number, int Org, bool Active, long Revision, string Site, long Days)>(
+            (string Name, string Number, int Org, bool Active, long Revision, string Site, long Days, bool Eligible)>(
                 StringComparer.Ordinal);
         const int batchSize = 400; // Safely below SQLite's legacy parameter limit.
         for (int offset = 0; offset < ids.Count; offset += batchSize)
@@ -706,13 +706,17 @@ public sealed class PersonRosterService
                 placeholders[i] = "$person" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 cmd.Parameters.Add(placeholders[i], SqliteType.Text).Value = batch[i];
             }
+            cmd.Parameters.AddWithValue("$date",effectiveDate);
             cmd.CommandText = $"""
                 SELECT p.PersonId, p.CurrentVisibleName, p.CurrentServiceNumberA,
                        p.OrganizationalStatus, p.ActiveFlag, p.RowVersion,
                        COALESCE((SELECT s.VisibleName
                                  FROM PersonAssignments a JOIN Sites s ON s.SiteId=a.SiteId
                                  WHERE a.PersonId=p.PersonId AND a.ValidToLocalDate IS NULL), 'غير محدد'),
-                       (SELECT COUNT(*) FROM AttendanceRecords r WHERE r.PersonId=p.PersonId)
+                       (SELECT COUNT(*) FROM AttendanceRecords r WHERE r.PersonId=p.PersonId),
+                       EXISTS(SELECT 1 FROM PersonAssignments a
+                         WHERE a.PersonId=p.PersonId AND a.ValidToLocalDate IS NULL
+                           AND a.ValidFromLocalDate < $date)
                 FROM Persons p WHERE p.PersonId IN ({string.Join(",", placeholders)});
                 """;
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -720,7 +724,7 @@ public sealed class PersonRosterService
                 details.Add(reader.GetString(0),
                     (reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
                      Convert.ToInt32(reader.GetValue(4)) == 1, reader.GetInt64(5),
-                     reader.GetString(6), reader.GetInt64(7)));
+                     reader.GetString(6), reader.GetInt64(7), reader.GetInt32(8)==1));
         }
         foreach (string id in ids)
         {
@@ -736,7 +740,9 @@ public sealed class PersonRosterService
                 ["organizationalStatus"] = row.Org,
                 ["currentSiteName"] = row.Site,
                 ["attendanceDays"] = row.Days,
-                ["blocker"] = !row.Active ? "محفوظ مسبقاً" : row.Org == 4 ? "مؤرشف سابقاً" : null
+                ["blocker"] = !row.Active ? "محفوظ مسبقاً" : row.Org == 4 ? "مؤرشف سابقاً" :
+                    row.Org != 1 ? "الفرد ليس على القوة الفعالة" :
+                    !row.Eligible ? "لا يوجد انتساب مفتوح بدأ قبل اليوم؛ لا يمكن الأرشفة بهذا التاريخ" : null
             });
         }
 
