@@ -318,7 +318,7 @@ jobs:
           $previousRecovery = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*PreviousSchemaRestoreRecoveryTests*' })
           if ($previousRecovery.Count -lt 8 -or @($previousRecovery | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Previous schema pending restore recovery evidence missing or failed' }
           $nativeDraftLifecycle = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*NativeAttendanceDraftLifecycleTests*' })
-          if ($nativeDraftLifecycle.Count -lt 9 -or @($nativeDraftLifecycle | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Native V017 draft lifecycle evidence missing or failed' }
+          if ($nativeDraftLifecycle.Count -lt 11 -or @($nativeDraftLifecycle | Where-Object { $_.outcome -ne 'Passed' }).Count -gt 0) { throw 'Native V017 draft lifecycle evidence missing or failed' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:
