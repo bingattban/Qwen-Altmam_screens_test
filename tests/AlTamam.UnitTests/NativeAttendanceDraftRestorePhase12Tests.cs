@@ -113,12 +113,35 @@ public sealed class NativeAttendanceDraftRestorePhase12Tests
         Assert.Equal(0,backend.Previews+backend.Commits);
     }
 
+    [Fact]
+    public async Task Cancellation_during_canonical_preview_cannot_leave_an_approved_intent()
+    {
+        var backend=new Probe{PreviewPending=new(TaskCreationOptions.RunContinuationsAsynchronously)};
+        var vm=new DailyAttendancePageViewModel();
+        vm.AttachReader(backend,()=>Actor);
+        await vm.Drafts.OpenAsync();
+        using var cts=new CancellationTokenSource();
+        var work=vm.Drafts.RestoreAsync(Assert.Single(vm.Drafts.Rows),false,cts.Token);
+        Assert.True(vm.Drafts.IsRestoring);
+        Assert.True(vm.Review.IsBusy);
+        cts.Cancel();
+        backend.PreviewPending.SetResult(new NativeAttendanceRevisionPreview(new string('a',64),Today,
+            "STS-PRESENT","موجود",[]));
+        await work;
+        Assert.True(vm.Drafts.IsOpen);
+        Assert.False(vm.Drafts.IsRestoring);
+        Assert.False(vm.Review.IsOpen);
+        Assert.False(vm.Review.HasPreview);
+        Assert.Equal(0,backend.Commits);
+    }
+
     private sealed class Probe:INativeDashboardReader,INativeAttendanceDraftReader,INativeAttendanceReviewBackend
     {
         public NativeAttendanceDraft Current=Draft();
         public int Reads,Previews,Commits;
         public bool Initial,NoStatus;
         public TaskCompletionSource<IReadOnlyList<NativeAttendanceDraft>>? Pending;
+        public TaskCompletionSource<NativeAttendanceRevisionPreview>? PreviewPending;
         public Task<NativeDashboardSnapshot> ReadAsync(NativeIdentity actor,NativeDashboardFilter filter,CancellationToken ct=default)
             =>Task.FromResult(new NativeDashboardSnapshot(filter.BusinessDate,filter.SiteId,0,0,0,[],[],[],[],0,filter.Page,false));
         public Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(NativeIdentity actor,CancellationToken ct=default)
@@ -134,6 +157,7 @@ public sealed class NativeAttendanceDraftRestorePhase12Tests
             Previews++;
             Assert.Equal(Current.SiteId,site);
             if(initial!=Initial)throw new InvalidOperationException("Canonical mode conflict.");
+            if(PreviewPending is not null)return PreviewPending.Task;
             return Task.FromResult(new NativeAttendanceRevisionPreview(new string('a',64),date,statusId,"موجود",
                 ids.Select(id=>new NativeAttendancePreviewPerson(id,"اسم الفرد","123","الموقع",initial?"":"غياب",initial?"":"STS-ABSENT")).ToArray()){IsInitial=initial});
         }
