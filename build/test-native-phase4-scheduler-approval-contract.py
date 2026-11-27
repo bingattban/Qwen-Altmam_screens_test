@@ -564,4 +564,18 @@ if __name__=="__main__":
     # Theme resources are checked in both mandatory Windows CI workflows.
     import subprocess, sys
     subprocess.run([sys.executable, str(ROOT / "build/test-native-theme-palette-contract.py")], check=True)
+    # Source-level route review is not production acceptance.
+    import json
+    canonical=json.loads((ROOT/"docs/native-wpf-migration/SCREEN_MIGRATION_MATRIX.json").read_text(encoding="utf-8"))
+    review=json.loads((ROOT/"docs/native-wpf-migration/PHASE12_ROUTE_REVIEW.json").read_text(encoding="utf-8"))
+    identities=lambda rows:{(r["screenId"],r["routeKey"]) for r in rows}
+    assert len(review["routes"])==len(identities(review["routes"]))==69
+    assert identities(review["routes"])==identities(canonical["routes"])
+    assert review["productionSwitchAllowed"] is False
+    for row in review["routes"]:
+        assert row["reviewStatus"] in ("candidate","partial","gap") and row["functionalParityVerified"] is False
+        assert row["note"].strip()
+        assert row["reviewStatus"]=="gap" or row["evidence"]
+        assert all((ROOT/p).is_file() for p in row["evidence"]), row["screenId"]
+    print("NATIVE ROUTE REVIEW PASS: 69 source-level entries, no false physical acceptance")
     print("NATIVE PHASE 4 PASS: exact durable engine, one-owner scheduler, audited human-preview/confirm/replay and four old customer packages intact")
