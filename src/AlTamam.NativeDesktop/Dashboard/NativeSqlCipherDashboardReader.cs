@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -1613,6 +1613,40 @@ public sealed class NativeSqlCipherDashboardReader(
 
     // Phase 8 status definitions: original SQLCipher read and audited
     // AdminConfigurationService create/update/deactivate; never write SQL here.
+    public async Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(
+        NativeIdentity actor,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+        var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce ||
+            !RoleAuthorizationPolicy.CanPerformStandardOperations(principal.Role))
+            throw new UnauthorizedAccessException("Draft session changed.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var response=await services.ListDraftsAsync(principal.UserId,lifetime.Token).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var items=RequiredArray(response,"ListAttendanceDrafts(native)");
+        if(items.Count>10000)throw new InvalidDataException("Draft catalogue exceeds native bound.");
+        var rows=items.Select(node=>
+        {
+            var row=RequireObject(node);
+            if(!DateOnly.TryParseExact(RequiredText(row,"businessDate"),"yyyy-MM-dd",CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,out var date) ||
+                !DateTimeOffset.TryParseExact(RequiredText(row,"updatedAtUtc"),"O",CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,out var updated))
+                throw new InvalidDataException("Malformed canonical draft date.");
+            var ids=RequiredArray(row,"selectedPersonIds").Select(id=>
+                id?.GetValue<string>()??throw new InvalidDataException("Missing draft person identity.")).ToArray();
+            return new NativeAttendanceDraft(RequiredText(row,"draftId"),date,
+                row["siteId"]?.GetValue<string>()??"",RequiredText(row,"targetStatusId"),updated,Array.AsReadOnly(ids));
+        }).ToArray();
+        if(!NativeAttendanceDraft.ValidCatalogue(rows))
+            throw new InvalidDataException("Invalid canonical owner draft catalogue.");
+        return Array.AsReadOnly(rows);
+    }
+
     public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(
         NativeIdentity actor,CancellationToken ct=default)
     {
