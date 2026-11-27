@@ -30,6 +30,11 @@ public interface INativeSettingsOverviewReader
     Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default);
 }
 
+public interface INativeThemeBackend
+{
+    Task<NativeSettingsOverview> SaveThemeAsync(NativeIdentity actor,string theme,CancellationToken ct=default);
+}
+
 public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
 {
     private INativeSettingsOverviewReader? _reader;
@@ -40,10 +45,15 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     private CancellationTokenSource? _pending;
     private long _generation;
     private bool _loading;
+    private bool _savingTheme;
+    private INativeThemeBackend? _themeBackend;
+    private Func<bool>? _canSaveTheme;
     private string _error="";
     public NativeSettingsOverviewViewModel()
     {
-        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !IsLoading && (_canRefresh?.Invoke()??true));
+        RefreshCommand=new NativeCommand(_=>_ = RefreshAsync(),_=>CanRead && !IsLoading && !IsSavingTheme && (_canRefresh?.Invoke()??true));
+        SaveLightCommand=new NativeCommand(_=>_ = SaveThemeAsync("light"),_=>CanSaveTheme("light"));
+        SaveDarkCommand=new NativeCommand(_=>_ = SaveThemeAsync("dark"),_=>CanSaveTheme("dark"));
     }
     private NativeIdentity? Authorized=>_actor?.Invoke() is { } actor &&
         RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role)?actor:null;
@@ -51,6 +61,49 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     public NativeSettingsOverview? Snapshot=>_bound is not null && _bound==Authorized?_snapshot:null;
     public bool HasSnapshot=>Snapshot is not null;
     public bool IsLoading=>_loading;
+    public bool IsSavingTheme=>_savingTheme;
+    public NativeCommand SaveLightCommand { get; }
+    public NativeCommand SaveDarkCommand { get; }
+    public void AttachTheme(INativeThemeBackend backend,Func<bool> canSave)
+    {
+        if(_themeBackend is not null) throw new InvalidOperationException("Theme backend already attached.");
+        _themeBackend=backend; _canSaveTheme=canSave; Notify();
+    }
+    private bool CanSaveTheme(string theme)=>theme is "light" or "dark" &&
+        _themeBackend is not null && !IsLoading && !IsSavingTheme &&
+        (_canSaveTheme?.Invoke()??false) && Snapshot is { } snapshot && snapshot.Theme!=theme;
+
+    public async Task SaveThemeAsync(string theme,CancellationToken ct=default)
+    {
+        if(!CanSaveTheme(theme) || _themeBackend is not { } backend || Authorized is not { } actor) return;
+        long generation=++_generation;
+        using var pending=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _pending=pending; _savingTheme=true; _error=""; Notify();
+        try
+        {
+            var result=await backend.SaveThemeAsync(actor,theme,pending.Token);
+            if(generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
+            if(result is null || !result.Matches(actor) || result.Theme!=theme)
+                throw new InvalidOperationException("Invalid canonical theme receipt.");
+            _snapshot=result; _bound=actor;
+        }
+        catch
+        {
+            if(generation==_generation && Authorized==actor)
+            {
+                _snapshot=null; _bound=null;
+                _error="تعذر تأكيد حفظ المظهر. حدّث الإعدادات قبل إعادة المحاولة.";
+            }
+        }
+        finally
+        {
+            if(generation==_generation)
+            {
+                if(pending.IsCancellationRequested) { _snapshot=null; _bound=null; }
+                _pending=null; _savingTheme=false; Notify();
+            }
+        }
+    }
     public string Error=>CanRead?_error:"";
     public NativeCommand RefreshCommand { get; }
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -61,7 +114,7 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     }
     public async Task RefreshAsync(CancellationToken ct=default)
     {
-        if(_canRefresh?.Invoke()==false) return;
+        if(IsSavingTheme || _canRefresh?.Invoke()==false) return;
         Clear();
         if(_reader is null || Authorized is not { } actor) return;
         long generation=_generation;
@@ -92,11 +145,12 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     public void Clear()
     {
         ++_generation; _pending?.Cancel(); _pending=null;
-        _snapshot=null; _bound=null; _loading=false; _error=""; Notify();
+        _snapshot=null; _bound=null; _loading=false; _savingTheme=false; _error=""; Notify();
     }
     public void Notify()
     {
         PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(string.Empty));
         RefreshCommand.NotifyAvailabilityChanged();
+        SaveLightCommand.NotifyAvailabilityChanged(); SaveDarkCommand.NotifyAvailabilityChanged();
     }
 }
