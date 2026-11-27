@@ -3643,16 +3643,28 @@ public sealed class NativeSqlCipherDashboardReader(
             DateTime.DaysInMonth(year, month));
     }
 
-    public Task<NativeMonthlyExcelReceipt> ExportExcelAsync(
+    public async Task<NativeMonthlyExcelReceipt> ExportExcelAsync(
         NativeIdentity actor, NativeMonthlyExcelFilter filter,
         CancellationToken ct = default)
-        => ExportWithProgressAsync(actor,filter,(_,_)=>{},ct);
+    {
+        using var nativeOperation = operations.Enter();
+        return await ExportMonthlyExcelCoreAsync(actor,filter,(_,_)=>{},ct).ConfigureAwait(false);
+    }
 
     public async Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(
         NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,
         CancellationToken ct=default)
     {
         using var nativeOperation = operations.Enter();
+        return await ExportMonthlyExcelCoreAsync(actor,filter,progress,ct).ConfigureAwait(false);
+    }
+
+    // Both public entrypoints admit exactly one operation and keep that
+    // lease across the entire private shared export, including receipt checks.
+    private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync(
+        NativeIdentity actor,NativeMonthlyExcelFilter filter,Action<int,int> progress,
+        CancellationToken ct)
+    {
         var (year, month) = ValidateMonthlyExcelFilter(filter);
         await VerifyContinuationIdentityAsync(actor, ct).ConfigureAwait(false);
         var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
