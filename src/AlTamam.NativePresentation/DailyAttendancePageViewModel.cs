@@ -120,7 +120,47 @@ public sealed class DailyAttendancePageViewModel : NativePageViewModel, INotifyP
         {
             Review.AttachBackend(backend, principal);
             if(reader is INativeAttendanceDraftWriter writer) Review.AttachDraftWriter(writer);
+            if(reader is INativeAttendanceDraftReader) Drafts.AttachRestore(RestoreDraftReviewAsync);
             _reviewAttached = true;
+        }
+    }
+
+    private async Task<bool> RestoreDraftReviewAsync(NativeIdentity actor,NativeAttendanceDraft draft,
+        bool initial,CancellationToken ct)
+    {
+        if(!_reviewAttached || !Drafts.IsRestoring || Review.IsOpen || Review.IsBusy ||
+            Review.HasUnverifiedCommit || _currentPrincipal?.Invoke()!=actor ||
+            (_boundPrincipal is not null && _boundPrincipal!=actor) ||
+            ct.IsCancellationRequested || !draft.IsValid ||
+            draft.BusinessDate!=DateOnly.FromDateTime(DateTime.Now) ||
+            NativeAttendanceDateRange.RequiresRange(draft.TargetStatusId))return false;
+        bool accepted=false;
+        try
+        {
+            // Legacy drafts have no persisted mode. Only the explicitly selected mode
+            // is tried; the canonical preview checks all current people, site, status,
+            // date, cutoff and previous attendance. No local inference or fallback.
+            if(initial)
+                await Review.OpenInitialPersonsAsync(draft.BusinessDate,draft.SiteId,draft.PersonIds,ct);
+            else
+                await Review.OpenPersonsAsync(draft.BusinessDate,draft.SiteId,draft.PersonIds,ct);
+            if(ct.IsCancellationRequested || _currentPrincipal?.Invoke()!=actor ||
+                !Drafts.IsRestoring || !Review.IsOpen || Review.IsInitial!=initial ||
+                !Review.StatusChoices.Any(choice=>choice.StatusId==draft.TargetStatusId))return false;
+            Review.ChooseStatus(draft.TargetStatusId);
+            await Review.PreviewAsync(ct);
+            accepted=!ct.IsCancellationRequested && _currentPrincipal?.Invoke()==actor &&
+                Drafts.IsRestoring && Review.IsOpen && Review.HasPreview &&
+                Review.IsInitial==initial && Review.SelectedStatusId==draft.TargetStatusId &&
+                !Review.IsCompleted && !Review.HasUnverifiedCommit;
+            if(accepted)ResetSelection("");
+            return accepted;
+        }
+        finally
+        {
+            if(!accepted && _currentPrincipal?.Invoke()==actor && Review.IsOpen &&
+                !Review.IsCommitting && !Review.HasUnverifiedCommit)
+                Review.Cancel();
         }
     }
 
