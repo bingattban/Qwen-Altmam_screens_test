@@ -28,6 +28,13 @@ public partial class NativeManualBackupView : UserControl
             settings.OpenInspection(picker.FileName);
     }
 
+    private async void OnBackupUpgradeClick(object sender,RoutedEventArgs e)
+    {
+        if(DataContext is SettingsPageViewModel settings && settings.Inspection.CanRequestUpgrade &&
+            Window.GetWindow(this) is MainWindow host)
+            await host.RequestBackupUpgradeAsync(settings);
+    }
+
     private async void OnRestoreClick(object sender,RoutedEventArgs e)
     {
         if(DataContext is SettingsPageViewModel settings && settings.Inspection.CanRequestRestore &&

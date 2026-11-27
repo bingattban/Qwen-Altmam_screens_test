@@ -623,7 +623,8 @@ public sealed class NativeSqlCipherDashboardReader(
         var result=new NativeBackupInspection(RequiredText(data,"path"),RequiredText(data,"sha256"),
             RequiredNumber(data,"fileSizeBytes"),checked((int)RequiredNumber(data,"schemaVersion")),
             RequiredBoolean(data,"schemaCompatible"),RequiredBoolean(data,"registeredInCurrentCatalog"),
-            ReadBackupCounts(data));
+            ReadBackupCounts(data))
+        { CurrentSchemaVersion=AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion };
         if(!RequiredBoolean(data,"verified") || RequiredBoolean(data,"restoreEnabled") ||
             !result.Matches(path) || RequiredText(data,"fileName")!=Path.GetFileName(result.Path) ||
             result.Compatible!=(result.SchemaVersion==AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion))
