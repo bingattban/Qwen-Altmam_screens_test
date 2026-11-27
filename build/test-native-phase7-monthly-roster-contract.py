@@ -32,6 +32,7 @@ FILES = {
     "catchup_service": "src/AlTamam.Application/Bridge/AdministrativeAttendanceCatchUpService.cs",
     "catchup_sql_tests": "tests/AlTamam.Tests/Bridge/AdministrativeAttendanceCatchUpTests.cs",
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
+    "progress_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportProgressPhase12Tests.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
@@ -374,6 +375,28 @@ def problems(content):
         require("excel_tests", token)
     if content["excel_tests"].count("[Fact]") < 5:
         errors.append("Missing monthly Excel preview/confirm negative-path tests.")
+    require("contracts","interface INativeMonthlyExcelProgressBackend")
+    for token in ("progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)",
+                  "context.Post(_ => Apply(), null)", "Math.Min(99, (int)((long)processed * 100 / total))",
+                  "version != _generation || !_exporting", "_progressPercent = 100;",
+                  "if (!_exporting || _cancelRequested) return;", "_pending?.Cancel();",
+                  "IsOpen && !IsExporting"):
+        require("excel_vm",token)
+    require("backend","ExportWithProgressAsync(")
+    require("backend","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)")
+    require("backend",".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)")
+    require("backend","VerifyContinuationIdentityAsync(actor, principal.SessionRevocation)")
+    require("vm","CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting")
+    require("shell","!MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting")
+    for token in ("Excel.ProgressPercent", "Excel.IsProgressIndeterminate", "Excel.CancelExportCommand",
+                  "Excel.ProgressMessage", "Excel.IsExporting"):
+        require("xaml",token)
+    for token in ("Progress_never_claims_completion_before_receipt",
+                  "Cancellation_requests_stop_and_never_retries_unverified_result",
+                  "Cancellation_after_publication_does_not_hide_verified_receipt",
+                  "Revoked_session_ignores_late_progress_and_receipt",
+                  "Monthly_scope_is_frozen_until_canonical_export_finishes"):
+        require("progress_tests",token)
     for k in ("core", "release"):
         require(k, "python build/test-native-phase7-monthly-roster-contract.py")
     for token in ("RunPendingAsync(", "ExecuteInWriteTransactionAsync(",
@@ -425,6 +448,14 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("excel_vm", "progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)"),
+        ("excel_vm", "Math.Min(99, (int)((long)processed * 100 / total))"),
+        ("excel_vm", "_progressPercent = 100;"),
+        ("excel_vm", "version != _generation || !_exporting"),
+        ("backend", ".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)"),
+        ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting"),
+        ("shell", "!MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting"),
+        ("xaml", "Excel.CancelExportCommand"),
         ("excel_vm", "ExportExcelAsync(actor, filter, linked.Token)"),
         ("excel_vm", "_currentFilter?.Invoke() != filter"),
         ("backend", "new MonthlyExcelExportService(database)"),
