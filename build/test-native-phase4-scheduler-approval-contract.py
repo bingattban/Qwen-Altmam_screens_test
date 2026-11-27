@@ -30,6 +30,8 @@ FILES={
  "recovery_intent":"src/AlTamam.NativePresentation/NativeRecoveryExportIntent.cs",
  "recovery_tests":"tests/AlTamam.UnitTests/NativeRecoveryExportPhase12Tests.cs",
  "settings_vm":"src/AlTamam.NativePresentation/NativePageViewModels.cs",
+ "theme_vm":"src/AlTamam.NativePresentation/NativeSettingsOverview.cs",
+ "theme_tests":"tests/AlTamam.UnitTests/NativeThemePhase12Tests.cs",
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
@@ -226,7 +228,7 @@ def problems(contents):
                   "if(!CanRun || (check && Information is null)",
                   "_pending?.Cancel()", "NotifyAvailability()"):
         need("diagnostics_vm",token)
-    for token in ("Diagnostics.IsBusy || Inspection.IsOpen",
+    for token in ("Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen",
                   "Diagnostics.Clear();","Diagnostics.NotifyAvailability();"):
         need("settings_vm",token)
     for token in ("Settings.Diagnostics.Clear();","Settings.Diagnostics.Attach(diagnosticsBackend, () => _active,",
@@ -241,6 +243,35 @@ def problems(contents):
                   "Invalid_metadata_and_blocked_review_do_not_allow_check",
                   "Diagnostics_busy_blocks_settings_reviews_and_clear_releases_guard"):
         need("diagnostics_tests",token)
+    for token in ("INativeThemeBackend","IsSavingTheme","Snapshot is { } snapshot && snapshot.Theme!=theme",
+                  "generation!=_generation || pending.IsCancellationRequested || Authorized!=actor",
+                  "result.Theme!=theme","_snapshot=null; _bound=null;",
+                  "SaveLightCommand.NotifyAvailabilityChanged(); SaveDarkCommand.NotifyAvailabilityChanged();"):
+        need("theme_vm",token)
+    need("settings_vm","Overview.PropertyChanged+=(_,_)=>NotifySettingsAvailability();")
+    need("settings_shell","Settings.Overview.AttachTheme(themeBackend, () => !Settings.IsReviewOpen &&")
+    need("settings_templates","Binding Overview.SaveLightCommand")
+    need("settings_templates","Binding Overview.SaveDarkCommand")
+    for token in ("Save_uses_canonical_receipt_for_each_authorized_role",
+                  "Invalid_same_or_disallowed_theme_is_never_sent",
+                  "Invalid_receipt_clears_uncertain_snapshot",
+                  "Late_save_never_repaints_new_session_or_cleared_view"):
+        need("theme_tests",token)
+    theme=reader.split("public async Task<NativeSettingsOverview> SaveThemeAsync(",1)
+    if len(theme)!=2:
+        errors.append("Missing native theme adapter")
+    else:
+        adapter=theme[1].split("private async Task<NativeSettingsOverview> ReadSettingsOverviewCoreAsync",1)[0]
+        order=[adapter.find(t) for t in ("using var nativeOperation = operations.Enter();",
+                 "ResolveBackupPrincipalAsync(actor,ct)",
+                 "CreateLinkedTokenSource(ct,principal.SessionRevocation)",
+                 '.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)',
+                 'RequiredText(receipt,"theme")!=theme',
+                 "ReadSettingsOverviewCoreAsync(actor,lifetime.Token)",
+                 "saved.Theme!=theme")]
+        if min(order)<0 or order!=sorted(order) or "ReadSettingsOverviewAsync(" in adapter:
+            errors.append("Theme save requires one lease, real principal, canonical audit and verified readback")
+
 
     need("reset_tests","NativeReset_ChangedDataFromAdmittedWorkDuringDrainRejectsPreviewWithoutRescue")
     need("restore_view",'Click="OnFullResetClick"')
@@ -477,6 +508,9 @@ if __name__=="__main__":
         ("reset_service","IsNativeSessionLiveAsync(c,t,actor,ct)"),
         ("reader","new SettingsReadBackupService(database).Integrity()"),
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
+        ("theme_vm","result.Theme!=theme"),
+        ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),
+        ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_templates","Binding Diagnostics.CheckCommand"),
         ("reset_preview","consent.Phrase==RequiredPhrase"),
