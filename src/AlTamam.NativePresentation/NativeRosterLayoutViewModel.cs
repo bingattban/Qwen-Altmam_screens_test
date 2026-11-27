@@ -32,7 +32,8 @@ public sealed record NativeRosterColumn(string ColumnId,string TechnicalKey,stri
             .SequenceEqual(new[]{"FLD-SYS-ROWNUM","FLD-SYS-SVC-NUM","FLD-SYS-NAME","FLD-SYS-SITE"}) &&
         rows.Where(x=>x.IsSystemProtected).OrderBy(x=>x.DisplayOrder).Select(x=>x.TechnicalKey)
             .SequenceEqual(new[]{"sys_row_number","sys_service_number_a","sys_person_name","sys_site_name"}) &&
-        rows.Where(x=>x.Active).Select(x=>x.DisplayOrder).Distinct().Count()==rows.Count(x=>x.Active) &&
+        rows.Where(x=>x.Active).Select(x=>x.DisplayOrder).OrderBy(x=>x)
+            .SequenceEqual(Enumerable.Range(1,rows.Count(x=>x.Active))) &&
         rows.Count(x=>x.Active && !x.IsSystemProtected)<=64;
 }
 
