@@ -129,6 +129,10 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         DailyAttendance.Review.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.Correction.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         MonthlyAttendance.RangeCorrection.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
+        MonthlyAttendance.Excel.PropertyChanged += (_, e) =>
+        {
+            if(e.PropertyName==nameof(MonthlyAttendance.Excel.IsExporting))_navigateCommand.NotifyAvailabilityChanged();
+        };
         Settings.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Audit.Edit.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
         Accounts.Create.PropertyChanged += (_, _) => _navigateCommand.NotifyAvailabilityChanged();
@@ -251,7 +255,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             (!DailyAttendance.Review.IsCommitting && !DailyAttendance.Review.HasUnverifiedCommit)) &&
            (screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&
            (screen == NativeScreen.DailyAttendance || !DailyAttendance.Review.IsSavingDraft) &&
-           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen) &&
+           (screen == NativeScreen.MonthlyAttendance || !MonthlyAttendance.Correction.IsOpen && !MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting) &&
            (screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&
            !Audit.Edit.IsOpen && !Accounts.Create.IsOpen && !Accounts.Lifecycle.IsOpen;
 
