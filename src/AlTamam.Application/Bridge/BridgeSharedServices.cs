@@ -569,6 +569,8 @@ public sealed class BridgeSharedServices
             {
                 row["rangeStartDate"]=reader.IsDBNull(6)?null:JsonValue.Create(reader.GetString(6));
                 row["rangeEndDate"]=reader.IsDBNull(7)?null:JsonValue.Create(reader.GetString(7));
+                if(!reader.IsDBNull(8) && reader.GetInt64(8) is not (0 or 1))
+                    throw new InvalidDataException("Invalid stored draft mode.");
                 row["rangeIsInitial"]=reader.IsDBNull(8)?null:JsonValue.Create(reader.GetInt64(8)==1);
             }
             rows.Add(row);
@@ -634,7 +636,7 @@ public sealed class BridgeSharedServices
             return Error(BridgeErrorCodes.ValidationError,"بيانات المسودة غير صالحة.");
         if(!AlTamam.Application.Attendance.AttendanceDateRangePolicy.TryParse(payload,status,date,out var from,out var to,out var error))
             return Error(BridgeErrorCodes.ValidationError,error);
-        bool ranged=Attendance.AttendanceDateRangePolicy.RequiresRange(status);
+        bool ranged=AlTamam.Application.Attendance.AttendanceDateRangePolicy.RequiresRange(status);
         var mode=payload["rangeIsInitial"];
         if(ranged ? (mode is null || mode.GetValueKind() is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) ||
                      payload["rangeStartDate"]?.GetValue<string>()!=from || payload["rangeEndDate"]?.GetValue<string>()!=to)
