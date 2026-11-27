@@ -128,6 +128,24 @@
                     </DataGrid.Columns>
                 </DataGrid>
                 <StackPanel Grid.Row="4" Margin="0,10,0,4">
+                    <StackPanel Margin="0,0,0,5">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DraftSaveAvailable}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Button Content="حفظ مسودة دون اعتماد الحضور" Command="{Binding SaveDraftCommand}"
+                                HorizontalAlignment="Right" Padding="12,6"
+                                AutomationProperties.Name="حفظ مؤقت دون اعتماد التمام"/>
+                        <TextBlock Text="حفظ مؤقت للحالات التي لا تتطلب مدة؛ الإجازة والإذن غير متاحين للحفظ المؤقت حاليا."
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,4"/>
+                        <TextBlock Text="{Binding DraftMessage}" Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
+                    </StackPanel>
                     <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource NativeDangerText}"
                                FontWeight="SemiBold" FontSize="13"
                                TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive"/>
