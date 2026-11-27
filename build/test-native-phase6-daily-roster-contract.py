@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     "vm": "src/AlTamam.NativePresentation/DailyAttendancePageViewModel.cs",
     "drafts": "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
+    "draft_intent": "src/AlTamam.NativePresentation/NativeAttendanceDraftIntent.cs",
+    "draft_save_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftSavePhase12Tests.cs",
+    "review_xaml": "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
     "draft_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftPhase12Tests.cs",
     "navigation_tests": "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
     "tests": "tests/AlTamam.UnitTests/NativeDailyAttendancePhase6Tests.cs",
@@ -171,6 +174,39 @@ def check(content):
                   "Malformed_catalogue_is_hidden_and_refresh_recovers"):
         needs("draft_tests",token)
     needs("navigation_tests","Draft_catalogue_freezes_daily_scope_and_navigation_and_logout_scrubs_rows")
+    for token in ("BusinessDate==today", "!NativeAttendanceDateRange.RequiresRange(TargetStatusId)",
+                  "receipt.DraftId==DraftId", "receipt.PersonIds.Order"):
+        needs("draft_intent",token)
+    for token in ("_draftAttempted=true", "if(_savingDraft) return;",
+                  "writer.SaveAttendanceDraftAsync(actor,intent,linked.Token)",
+                  "!intent.Matches(receipt)", "if(version!=_generation)return;",
+                  "_savedDraftId=receipt.DraftId", "if(!HasValidActor(actor)){ForceCancel();return;}"):
+        # Preserve source formatting for the prior cancellation guard.
+        needs("review", token.replace("if(_savingDraft) return;", "if (_savingDraft) return;"))
+    needs("vm","Review.AttachDraftWriter(writer)")
+    needs("shell","(screen == NativeScreen.DailyAttendance || !DailyAttendance.Review.IsSavingDraft) &&")
+    needs("review_xaml","Binding SaveDraftCommand")
+    for token in ("Draft_intent_requires_today_unique_ids_and_no_unstored_range",
+                  "Save_is_explicit_verified_once_and_never_previews_or_commits_attendance",
+                  "Missing_or_forged_receipt_never_claims_success_or_retries",
+                  "Logout_discards_late_save_receipt_and_blocks_close_during_write"):
+        needs("draft_save_tests",token)
+    save_start=source.find("public async Task<NativeAttendanceDraft> SaveAttendanceDraftAsync(")
+    if not (0<=save_start<start):
+        issues.append("Missing canonical native draft save entry")
+    else:
+        save=source[save_start:start]
+        order=[save.find(t) for t in ("using var nativeOperation = operations.Enter();",
+            "intent.IsValid(DateOnly.FromDateTime(DateTime.Now))",
+            "services.ResolveSessionAsync(actor.SessionNonce,ct)",
+            "principal.UserId!=actor.UserId",
+            "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
+            "var before=RequiredArray(await services.ListDraftsAsync",
+            "services.SaveDraftAsync(principal.UserId,new JsonObject",
+            "var after=RequiredArray(await services.ListDraftsAsync",
+            "if(!intent.Matches(result) || updated>saved)")]
+        if min(order)<0 or order!=sorted(order) or any(t in save for t in ("DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+            issues.append("Draft save must use exact owner, one lease, fresh ID and canonical read-back without attendance write")
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
     for forbidden in ("new AttendanceCommitService(", "RunPendingAsync(",
@@ -185,6 +221,13 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("draft_intent", "!NativeAttendanceDateRange.RequiresRange(TargetStatusId)"),
+        ("review", "_draftAttempted=true"),
+        ("review", "!intent.Matches(receipt)"),
+        ("reader", "services.SaveDraftAsync(principal.UserId,new JsonObject"),
+        ("reader", "if(!intent.Matches(result) || updated>saved)"),
+        ("shell", "(screen == NativeScreen.DailyAttendance || !DailyAttendance.Review.IsSavingDraft) &&"),
+        ("review_xaml", "Binding SaveDraftCommand"),
         ("drafts", "Guid.TryParseExact(DraftId[4..]"),
         ("drafts", "if(!CanRead){Clear();return;}"),
         ("reader", "services.ListDraftsAsync(principal.UserId,lifetime.Token)"),
