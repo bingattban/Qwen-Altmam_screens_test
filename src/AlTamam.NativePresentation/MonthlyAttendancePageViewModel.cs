@@ -60,13 +60,22 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         CloseRangeCorrectionCommand = new NativeCommand(_ => _ = CloseRangeCorrectionAsync(), _ => RangeCorrection.CanClose);
         Correction.PropertyChanged += (_, _) => NotifyCorrection();
         RangeCorrection.PropertyChanged += (_, _) => NotifyCorrection();
+        bool exporting=false;
+        Excel.PropertyChanged += (_, e) =>
+        {
+            // NotifyCorrection itself refreshes Excel command availability.
+            // Only a real state transition may trigger that refresh.
+            if(e.PropertyName!=nameof(Excel.IsExporting) || exporting==Excel.IsExporting)return;
+            exporting=Excel.IsExporting;
+            NotifyCorrection();
+        };
     }
 
     private bool CanRead => _reader is not null && _liveActor?.Invoke() is not null;
     public NativeClosedDayCorrectionReview Correction { get; }
     public ICommand OpenCorrectionCommand { get; }
     public ICommand CloseCorrectionCommand { get; }
-    public bool CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen;
+    public bool CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting;
     public NativeHistoricalRangeReview RangeCorrection { get; }
     public ICommand OpenRangeCorrectionCommand { get; }
     public ICommand CloseRangeCorrectionCommand { get; }
@@ -195,7 +204,7 @@ public sealed class MonthlyAttendancePageViewModel : NativePageViewModel, INotif
         if (reader is INativeMonthlyExcelExportBackend exportBackend)
             Excel.Attach(exportBackend, () => _liveActor?.Invoke(), () =>
             {
-                if (!CanChangeMonthlyScope || !_connected || _loading || _boundActor is null ||
+                if (Correction.IsOpen || RangeCorrection.IsOpen || !_connected || _loading || _boundActor is null ||
                     _liveActor?.Invoke() != _boundActor ||
                     !string.Equals(_searchDraft.Trim(), _term, StringComparison.Ordinal) ||
                     !ValidPeriod(_period) ||
