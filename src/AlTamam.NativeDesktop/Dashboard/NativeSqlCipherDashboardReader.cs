@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -472,6 +472,27 @@ public sealed class NativeSqlCipherDashboardReader(
         CancellationToken ct=default)
     {
         using var nativeOperation = operations.Enter();
+        return await ReadSettingsOverviewCoreAsync(actor,ct).ConfigureAwait(false);
+    }
+
+    public async Task<NativeSettingsOverview> SaveThemeAsync(NativeIdentity actor,string theme,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(theme is not ("light" or "dark")) throw new ArgumentException("Invalid theme.",nameof(theme));
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        lifetime.Token.ThrowIfCancellationRequested();
+        var response=await new SettingsReadBackupService(database)
+            .SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal).ConfigureAwait(false);
+        var receipt=RequiredObject(response,"SetTheme");
+        if(RequiredText(receipt,"theme")!=theme) throw new InvalidDataException("Invalid theme receipt.");
+        var saved=await ReadSettingsOverviewCoreAsync(actor,lifetime.Token).ConfigureAwait(false);
+        if(saved.Theme!=theme) throw new InvalidDataException("Stored theme differs from receipt.");
+        return saved;
+    }
+
+    private async Task<NativeSettingsOverview> ReadSettingsOverviewCoreAsync(NativeIdentity actor,CancellationToken ct)
+    {
         if(!RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role))
             throw new UnauthorizedAccessException("Settings overview denied.");
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
