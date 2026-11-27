@@ -14,6 +14,8 @@ FILES = {
     "drafts": "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
     "draft_intent": "src/AlTamam.NativePresentation/NativeAttendanceDraftIntent.cs",
     "draft_save_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftSavePhase12Tests.cs",
+    "draft_range": "src/AlTamam.NativePresentation/NativeAttendanceDraftRangeEvidence.cs",
+    "draft_range_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftRangePhase12Tests.cs",
     "draft_delete_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftDeletePhase12Tests.cs",
     "shared": "src/AlTamam.Application/Bridge/BridgeSharedServices.cs",
     "draft_restore_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftRestorePhase12Tests.cs",
@@ -287,6 +289,26 @@ def check(content):
                   "SelectedPersonIdsJson = $json", "return removed == 1"):
         if token not in method:
             issues.append("Missing atomic reviewed draft condition: "+token)
+    for token in ("NativeAttendanceDateRange.RequiresRange(statusId)",
+                  "NativeAttendanceDateRange.TryCreate(statusId,businessDate,StartDate,EndDate",
+                  "range.StartDate==StartDate && range.EndDate==EndDate",
+                  "IsInitial==other.IsInitial"):
+        needs("draft_range",token)
+    for token in ("RangeEvidence is null || HasCompleteRangeEvidence",
+                  "a.RangeEvidence.Matches(b.RangeEvidence)",
+                  "row.RangeEvidence is null",
+                  "a.SameSavedEvidence(b)",
+                  "!NativeAttendanceDateRange.RequiresRange(row.TargetStatusId)"):
+        needs("drafts",token)
+    needs("reader","!expected.IsValid || expected.RangeEvidence is not null")
+    needs("draft_intent","!NativeAttendanceDateRange.RequiresRange(TargetStatusId)")
+    needs("xaml","Binding RangeLabel")
+    for token in ("Complete_range_preserves_exact_dates_and_explicit_mode",
+                  "Invalid_or_noncanonical_range_is_rejected",
+                  "Legacy_incomplete_range_remains_visible_but_not_restorable",
+                  "Range_evidence_cannot_be_attached_to_an_ordinary_status",
+                  "Exact_saved_evidence_includes_range_and_mode"):
+        needs("draft_range_tests",token)
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
     for forbidden in ("new AttendanceCommitService(", "RunPendingAsync(",
@@ -301,6 +323,12 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("draft_range", "range.StartDate==StartDate && range.EndDate==EndDate"),
+        ("draft_range", "IsInitial==other.IsInitial"),
+        ("drafts", "RangeEvidence is null || HasCompleteRangeEvidence"),
+        ("drafts", "a.RangeEvidence.Matches(b.RangeEvidence)"),
+        ("reader", "!expected.IsValid || expected.RangeEvidence is not null"),
+        ("xaml", "Binding RangeLabel"),
         ("drafts", "deleter.DeleteAttendanceDraftAsync(actor,row,linked.Token)"),
         ("drafts", "remaining.Any(r=>r.DraftId==row.DraftId)"),
         ("xaml", "Binding ConfirmDeleteCommand"),
