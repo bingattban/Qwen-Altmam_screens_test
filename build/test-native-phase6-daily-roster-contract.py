@@ -14,6 +14,7 @@ FILES = {
     "drafts": "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
     "draft_intent": "src/AlTamam.NativePresentation/NativeAttendanceDraftIntent.cs",
     "draft_save_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftSavePhase12Tests.cs",
+    "draft_restore_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftRestorePhase12Tests.cs",
     "review_xaml": "src/AlTamam.NativeDesktop/Views/NativeAttendanceReviewView.xaml",
     "draft_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftPhase12Tests.cs",
     "navigation_tests": "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
@@ -207,6 +208,44 @@ def check(content):
             "if(!intent.Matches(result) || updated>saved)")]
         if min(order)<0 or order!=sorted(order) or any(t in save for t in ("DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
             issues.append("Draft save must use exact owner, one lease, fresh ID and canonical read-back without attendance write")
+    for token in ("_rows.Any(r=>ReferenceEquals(r,row))",
+                  "row.BusinessDate==DateOnly.FromDateTime(DateTime.Now)",
+                  "!NativeAttendanceDateRange.RequiresRange(row.TargetStatusId)",
+                  "a.UpdatedAtUtc==b.UpdatedAtUtc", "!SameEvidence(row,current)",
+                  "bool restored=await restore(actor,row,initial,linked.Token)",
+                  "if(restored){Clear();return;}", "_open && !_restoring",
+                  "RestoreInitialCommand", "RestoreRevisionCommand"):
+        needs("drafts",token)
+    needs("vm","Drafts.AttachRestore(RestoreDraftReviewAsync)")
+    vm=content["vm"]
+    restore_start=vm.find("private async Task<bool> RestoreDraftReviewAsync(")
+    restore_end=vm.find("private bool CanReviewPerson(",restore_start)
+    if not (0<=restore_start<restore_end):
+        issues.append("Missing native draft restore review entry")
+    else:
+        restore=vm[restore_start:restore_end]
+        order=[restore.find(t) for t in (
+            "_currentPrincipal?.Invoke()!=actor",
+            "draft.BusinessDate!=DateOnly.FromDateTime(DateTime.Now)",
+            "if(initial)",
+            "await Review.OpenInitialPersonsAsync(draft.BusinessDate,draft.SiteId,draft.PersonIds,ct)",
+            "await Review.OpenPersonsAsync(draft.BusinessDate,draft.SiteId,draft.PersonIds,ct)",
+            "Review.StatusChoices.Any(choice=>choice.StatusId==draft.TargetStatusId)",
+            "Review.ChooseStatus(draft.TargetStatusId)",
+            "await Review.PreviewAsync(ct)",
+            "Drafts.IsRestoring && Review.IsOpen && Review.HasPreview",
+            "Review.IsInitial==initial && Review.SelectedStatusId==draft.TargetStatusId")]
+        if min(order)<0 or order!=sorted(order) or any(t in restore for t in ("ConfirmAsync(","CommitAsync(","SaveDraftAsync(","DeleteDraftAsync(","ConfirmCommand.Execute")):
+            issues.append("Restore requires explicit mode, fresh canonical preview, live actor and no automatic attendance/draft write")
+    for token in ("Binding RestoreInitialCommand","Binding RestoreRevisionCommand","ElementName=AttendanceDraftGrid"):
+        needs("xaml",token)
+    for token in ("Restore_uses_explicit_mode_and_fresh_preview_never_commits",
+                  "Forged_or_changed_draft_cannot_open_review",
+                  "Old_or_incomplete_range_draft_cannot_be_restored",
+                  "Wrong_mode_or_inactive_status_is_rejected_without_automatic_fallback",
+                  "Logout_cancels_restore_and_discards_delayed_owner_read",
+                  "Cancellation_during_canonical_preview_cannot_leave_an_approved_intent"):
+        needs("draft_restore_tests",token)
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
     for forbidden in ("new AttendanceCommitService(", "RunPendingAsync(",
@@ -221,6 +260,13 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("drafts", "!SameEvidence(row,current)"),
+        ("drafts", "a.UpdatedAtUtc==b.UpdatedAtUtc"),
+        ("drafts", "_rows.Any(r=>ReferenceEquals(r,row))"),
+        ("vm", "await Review.PreviewAsync(ct)"),
+        ("vm", "Drafts.IsRestoring && Review.IsOpen && Review.HasPreview"),
+        ("xaml", "Binding RestoreInitialCommand"),
+        ("xaml", "Binding RestoreRevisionCommand"),
         ("draft_intent", "!NativeAttendanceDateRange.RequiresRange(TargetStatusId)"),
         ("review", "_draftAttempted=true"),
         ("review", "!intent.Matches(receipt)"),

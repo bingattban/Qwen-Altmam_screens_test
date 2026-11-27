@@ -147,12 +147,12 @@
                                    Foreground="{DynamicResource NativeHeading}"/>
                     </DockPanel>
                     <StackPanel Grid.Row="1" Margin="0,10">
-                        <TextBlock Text="عرض المسودات الخاصة بحسابك فقط. لا يعتمد العرض أي حضور. معرّفات الموقع والحالة مأخوذة من المسودة الأصلية دون تخمين أسماء أو حالات حالية." TextWrapping="Wrap"/>
+                        <TextBlock Text="اختر مسودة اليوم ثم نوع التحضير صراحة. المسودة القديمة لا تحفظ نوع العملية أو مدة الإجازة والإذن. الاستعادة تنشئ معاينة جديدة فقط؛ لا تعتمد الحضور." TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding CountLabel}" FontWeight="Bold" Margin="0,4"/>
                         <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy,Converter={StaticResource VisibleIfTrue}}"/>
                         <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     </StackPanel>
-                    <DataGrid Grid.Row="2" ItemsSource="{Binding Rows}" AutoGenerateColumns="False" IsReadOnly="True"
+                    <DataGrid x:Name="AttendanceDraftGrid" Grid.Row="2" ItemsSource="{Binding Rows}" AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               AlternatingRowBackground="{DynamicResource NativeSubtle}">
                         <DataGrid.Columns>
@@ -164,8 +164,13 @@
                             <DataGridTextColumn Header="معرّف المسودة" Binding="{Binding DraftId}" Width="2*"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <Button Grid.Row="3" Content="تحديث المسودات" Command="{Binding RefreshCommand}"
-                            HorizontalAlignment="Right" Padding="14,7" Margin="0,10,0,0"/>
+                    <WrapPanel Grid.Row="3" Margin="0,10,0,0">
+                        <Button Content="تحديث المسودات" Command="{Binding RefreshCommand}" Padding="14,7" Margin="3"/>
+                        <Button Content="استعادة كتحضير أولي" Command="{Binding RestoreInitialCommand}"
+                                CommandParameter="{Binding SelectedItem,ElementName=AttendanceDraftGrid}" Padding="14,7" Margin="3"/>
+                        <Button Content="استعادة كتعديل حالة" Command="{Binding RestoreRevisionCommand}"
+                                CommandParameter="{Binding SelectedItem,ElementName=AttendanceDraftGrid}" Padding="14,7" Margin="3"/>
+                    </WrapPanel>
                 </Grid>
             </Border>
         </Grid>
