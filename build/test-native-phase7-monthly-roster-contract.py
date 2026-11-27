@@ -382,6 +382,26 @@ def problems(content):
                   "if (!_exporting || _cancelRequested) return;", "_pending?.Cancel();",
                   "IsOpen && !IsExporting"):
         require("excel_vm",token)
+    # Each public export entrypoint must admit its own operation exactly once.
+    # The private core is shared but must not acquire a second lease during drain.
+    source = content["backend"]
+    export_start = source.find("public async Task<NativeMonthlyExcelReceipt> ExportExcelAsync(")
+    progress_start = source.find("public async Task<NativeMonthlyExcelReceipt> ExportWithProgressAsync(")
+    core_start = source.find("private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync(")
+    core_end = source.find("public Task<IReadOnlyList<NativeAttendanceStatusChoice>> ReadChoicesAsync(",core_start)
+    if not (0 <= export_start < progress_start < core_start < core_end):
+        errors.append("Native monthly export entrypoint boundaries missing")
+    else:
+        for entry in (source[export_start:progress_start],source[progress_start:core_start]):
+            if (entry.count("using var nativeOperation = operations.Enter();") != 1 or
+                entry.count("return await ExportMonthlyExcelCoreAsync(") != 1 or
+                entry.find("using var nativeOperation = operations.Enter();") >
+                entry.find("return await ExportMonthlyExcelCoreAsync(")):
+                errors.append("Monthly export must hold exactly one lease before calling the shared core")
+        core = source[core_start:core_end]
+        if ("operations.Enter(" in core or "operations.RunAsync(" in core or
+            "new MonthlyExcelExportService(database)" not in core):
+            errors.append("Monthly export core must reuse the writer without nested operation admission")
     require("backend","ExportWithProgressAsync(")
     require("backend","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)")
     require("backend",".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)")
@@ -448,6 +468,9 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,(_,_)=>{},ct)"),
+        ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,progress,ct)"),
+        ("backend", "private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync("),
         ("excel_vm", "progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)"),
         ("excel_vm", "Math.Min(99, (int)((long)processed * 100 / total))"),
         ("excel_vm", "_progressPercent = 100;"),
