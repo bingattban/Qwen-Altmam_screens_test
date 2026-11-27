@@ -3606,11 +3606,20 @@ public sealed class NativeSqlCipherDashboardReader(
     }
 
     private static JsonObject MonthlyExcelPayload(
-        NativeMonthlyExcelFilter filter, int year, int month) => new()
+        NativeMonthlyExcelFilter filter, int year, int month)
+    {
+        var payload=new JsonObject
         {
             ["year"] = year, ["month"] = month,
             ["siteId"] = filter.SiteId, ["term"] = filter.SearchTerm
         };
+        if(filter.OutputDirectory is not null && filter.OutputFileName is not null)
+        {
+            payload["directory"]=filter.OutputDirectory;
+            payload["fileName"]=filter.OutputFileName;
+        }
+        return payload;
+    }
 
     public async Task<NativeMonthlyExcelPreview> PreviewExcelAsync(
         NativeIdentity actor, NativeMonthlyExcelFilter filter,
@@ -3637,10 +3646,13 @@ public sealed class NativeSqlCipherDashboardReader(
         if (!name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
             name.Contains('/') || name.Contains('\\'))
             throw new InvalidDataException("Unsafe monthly Excel filename.");
+        string configured=await new OutputDirectorySettings(database).GetAsync(ct).ConfigureAwait(false);
+        string directory=OutputDirectorySettings.IsSafeDirectory(configured,database.DatabasePath,out var safe)?safe:"";
+        await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
         return new NativeMonthlyExcelPreview(
             filter.Period, filter.SiteId, filter.SearchTerm,
             RequiredText(data, "siteName"), name, total,
-            DateTime.DaysInMonth(year, month));
+            DateTime.DaysInMonth(year, month)){OutputDirectory=directory};
     }
 
     public async Task<NativeMonthlyExcelReceipt> ExportExcelAsync(
@@ -3672,6 +3684,14 @@ public sealed class NativeSqlCipherDashboardReader(
             principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce)
             throw new UnauthorizedAccessException("Monthly export session changed.");
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        if(filter.OutputDirectory is not null || filter.OutputFileName is not null)
+        {
+            if(!OutputDirectorySettings.IsSafeDirectory(filter.OutputDirectory,database.DatabasePath,out var folder) ||
+               !MonthlyExcelOutputNamePolicy.TryNormalize(filter.OutputFileName,out var name) ||
+               name.Length==0 || filter.OutputFileName!=name)
+                throw new InvalidDataException("Unsafe monthly Excel destination.");
+            filter=filter with {OutputDirectory=folder,OutputFileName=name};
+        }
         BridgeResponse response = await new MonthlyExcelExportService(database)
             .ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)
             .ConfigureAwait(false);
@@ -3697,6 +3717,10 @@ public sealed class NativeSqlCipherDashboardReader(
                 (RequiredText(data, "siteId") != filter.SiteId ||
                  RequiredText(data, "term") != filter.SearchTerm)))
             throw new InvalidDataException("Monthly Excel export receipt mismatch.");
+        if(filter.OutputDirectory is { } destination && filter.OutputFileName is { } fileName &&
+           !string.Equals(Path.GetFullPath(filePath),Path.GetFullPath(Path.Combine(destination,fileName)),
+               StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Monthly Excel receipt does not match reviewed destination.");
         return new NativeMonthlyExcelReceipt(
             filter.Period, filter.SiteId, filter.SearchTerm,
             filePath, fileCount, total);

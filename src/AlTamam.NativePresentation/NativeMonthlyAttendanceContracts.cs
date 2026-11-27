@@ -151,11 +151,22 @@ public interface INativeMonthlyExcelProgressBackend
 }
 
 public sealed record NativeMonthlyExcelFilter(
-    string Period, string SiteId, string SearchTerm);
+    string Period, string SiteId, string SearchTerm)
+{
+    // Populated only by explicit export confirmation; monthly scope remains
+    // the original period/site/search triple.
+    public string? OutputDirectory {get;init;}
+    public string? OutputFileName {get;init;}
+}
 
 public sealed record NativeMonthlyExcelPreview(
     string Period, string SiteId, string SearchTerm, string SiteName,
-    string SuggestedFileName, long PersonCount, int DaysInMonth);
+    string SuggestedFileName, long PersonCount, int DaysInMonth)
+{
+    // Null denotes legacy callers. Empty denotes an unavailable configured
+    // folder; a native operator must explicitly select a local directory.
+    public string? OutputDirectory {get;init;}
+}
 
 public sealed record NativeMonthlyExcelReceipt(
     string Period, string SiteId, string SearchTerm,

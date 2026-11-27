@@ -33,6 +33,8 @@ FILES = {
     "catchup_sql_tests": "tests/AlTamam.Tests/Bridge/AdministrativeAttendanceCatchUpTests.cs",
     "excel_tests": "tests/AlTamam.UnitTests/NativeMonthlyExcelExportPhase7Tests.cs",
     "progress_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportProgressPhase12Tests.cs",
+    "destination_tests": "tests/AlTamam.UnitTests/NativeMonthlyExportDestinationPhase12Tests.cs",
+    "name_policy": "src/AlTamam.Domain/Policies/MonthlyExcelOutputNamePolicy.cs",
     "excel_vm": "src/AlTamam.NativePresentation/NativeMonthlyExcelExportViewModel.cs",
     "excel_service": "src/AlTamam.Application/Bridge/MonthlyExcelExportService.cs",
     "backend": "src/AlTamam.NativeDesktop/Dashboard/NativeSqlCipherDashboardReader.cs",
@@ -362,8 +364,8 @@ def problems(content):
         require("excel_service", token)
     for token in ("OpenPreviewAsync(", "ConfirmAsync(", "Close()",
                   "PreviewExcelAsync(actor, filter, linked.Token)",
-                  "ExportExcelAsync(actor, filter, linked.Token)",
-                  "ValidatePreview(result, filter)", "ValidateReceipt(result, filter)",
+                  "ExportExcelAsync(actor, request, linked.Token)",
+                  "ValidatePreview(result, filter)", "ValidateReceipt(result, request)",
                   "_currentFilter?.Invoke() != filter",
                   "_liveActor?.Invoke() != actor"):
         require("excel_vm", token)
@@ -376,7 +378,7 @@ def problems(content):
     if content["excel_tests"].count("[Fact]") < 5:
         errors.append("Missing monthly Excel preview/confirm negative-path tests.")
     require("contracts","interface INativeMonthlyExcelProgressBackend")
-    for token in ("progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)",
+    for token in ("progressBackend.ExportWithProgressAsync(actor, request, Report, linked.Token)",
                   "context.Post(_ => Apply(), null)", "Math.Min(99, (int)((long)processed * 100 / total))",
                   "version != _generation || !_exporting", "_progressPercent = 100;",
                   "if (!_exporting || _cancelRequested) return;", "_pending?.Cancel();",
@@ -402,6 +404,28 @@ def problems(content):
         if ("operations.Enter(" in core or "operations.RunAsync(" in core or
             "new MonthlyExcelExportService(database)" not in core):
             errors.append("Monthly export core must reuse the writer without nested operation admission")
+    for token in ("request=filter with { OutputDirectory=_outputDirectory,OutputFileName=name }",
+                  "MonthlyExcelOutputNamePolicy.TryNormalize(_outputFileName", "ValidDestination",
+                  "TrySelectOutputDirectory", "Monthly Excel receipt destination mismatch."):
+        require("excel_vm",token)
+    for token in ('payload["directory"]=filter.OutputDirectory',
+                  'payload["fileName"]=filter.OutputFileName',
+                  "OutputDirectorySettings.IsSafeDirectory(filter.OutputDirectory,database.DatabasePath",
+                  "MonthlyExcelOutputNamePolicy.TryNormalize(filter.OutputFileName",
+                  "Monthly Excel receipt does not match reviewed destination."):
+        require("backend",token)
+    require("excel_service","MonthlyExcelOutputNamePolicy.TryNormalize(input,out name)")
+    for token in ('stem.Equals("CON"', 'stem.StartsWith("COM"', 'stem.StartsWith("LPT"', "stem[3] is >= '1' and <= '9'"):
+        require("name_policy",token)
+    for token in ("Excel.HasDestinationReview", "Excel.OutputFileName", "Excel.OutputDirectory",
+                  "Excel.CanEditDestination", 'Click="OnChooseExportFolder"'):
+        require("xaml",token)
+    for token in ("new OpenFolderDialog", "ReferenceEquals(export.Preview,preview)", "export.TrySelectOutputDirectory"):
+        require("view",token)
+    for token in ("Unsafe_filename_blocks_confirmation","Selected_destination_and_safe_name_are_frozen_for_confirm",
+                  "Unavailable_default_requires_explicit_selection_and_receipt_path_must_match",
+                  "Replaced_session_cannot_edit_destination_or_export"):
+        require("destination_tests",token)
     require("backend","ExportWithProgressAsync(")
     require("backend","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)")
     require("backend",".ExportAsync(MonthlyExcelPayload(filter, year, month), lifetime.Token, progress)")
@@ -468,10 +492,18 @@ if __name__ == "__main__":
         ("vm", "row.DayCells.Select"),
         ("vm", "version != _detailGeneration"),
         ("backend", "MonthlyCellDetailsAsync(new JsonObject"),
+        ("excel_vm", "request=filter with { OutputDirectory=_outputDirectory,OutputFileName=name }"),
+        ("excel_vm", "Monthly Excel receipt destination mismatch."),
+        ("backend", 'payload["directory"]=filter.OutputDirectory'),
+        ("backend", 'payload["fileName"]=filter.OutputFileName'),
+        ("backend", "Monthly Excel receipt does not match reviewed destination."),
+        ("excel_service", "MonthlyExcelOutputNamePolicy.TryNormalize(input,out name)"),
+        ("view", "ReferenceEquals(export.Preview,preview)"),
+        ("xaml", 'Click="OnChooseExportFolder"'),
         ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,(_,_)=>{},ct)"),
         ("backend", "return await ExportMonthlyExcelCoreAsync(actor,filter,progress,ct)"),
         ("backend", "private async Task<NativeMonthlyExcelReceipt> ExportMonthlyExcelCoreAsync("),
-        ("excel_vm", "progressBackend.ExportWithProgressAsync(actor, filter, Report, linked.Token)"),
+        ("excel_vm", "progressBackend.ExportWithProgressAsync(actor, request, Report, linked.Token)"),
         ("excel_vm", "Math.Min(99, (int)((long)processed * 100 / total))"),
         ("excel_vm", "_progressPercent = 100;"),
         ("excel_vm", "version != _generation || !_exporting"),
@@ -479,7 +511,7 @@ if __name__ == "__main__":
         ("vm", "CanChangeMonthlyScope => !Correction.IsOpen && !RangeCorrection.IsOpen && !Excel.IsExporting"),
         ("shell", "!MonthlyAttendance.RangeCorrection.IsOpen && !MonthlyAttendance.Excel.IsExporting"),
         ("xaml", "Excel.CancelExportCommand"),
-        ("excel_vm", "ExportExcelAsync(actor, filter, linked.Token)"),
+        ("excel_vm", "ExportExcelAsync(actor, request, linked.Token)"),
         ("excel_vm", "_currentFilter?.Invoke() != filter"),
         ("backend", "new MonthlyExcelExportService(database)"),
         ("excel_tests", "Forged_preview_or_export_receipt_is_rejected"),
