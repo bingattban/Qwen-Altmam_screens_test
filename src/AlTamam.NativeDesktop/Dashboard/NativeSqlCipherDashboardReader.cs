@@ -1617,7 +1617,7 @@ public sealed class NativeSqlCipherDashboardReader(
         NativeIdentity actor,NativeAttendanceDraft expected,CancellationToken ct=default)
     {
         using var nativeOperation = operations.Enter();
-        if(expected is null || !expected.IsValid)
+        if(expected is null || !expected.IsValid || expected.RangeEvidence is not null)
             throw new InvalidDataException("Invalid reviewed draft evidence.");
         await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
         var principal=await services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
