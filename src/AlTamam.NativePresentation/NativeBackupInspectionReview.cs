@@ -12,6 +12,9 @@ public sealed record NativeBackupCounts(long People,long Attendance,long AuditEv
 public sealed record NativeBackupInspection(string Path,string Sha256,long FileSize,int SchemaVersion,
     bool Compatible,bool Registered,NativeBackupCounts Counts)
 {
+    public int CurrentSchemaVersion { get; init; }
+    public bool CanForwardUpgrade=>!Compatible && CurrentSchemaVersion>1 &&
+        SchemaVersion==CurrentSchemaVersion-1 && Matches(Path);
     public static bool ValidPath(string? path)
     {
         if(path is not { Length:>0 and <=1024 } || path.Any(char.IsControl) ||
@@ -51,6 +54,12 @@ public sealed record NativeRestoreIntent(NativeIdentity Actor,NativeBackupInspec
         Comparison is not null && Comparison.Matches(Evidence);
 }
 
+public sealed record NativeBackupUpgradeIntent(NativeIdentity Actor,NativeBackupInspection Evidence)
+{
+    public bool IsValid=>Actor is { Role:UserRole.GeneralAdministration } &&
+        !string.IsNullOrWhiteSpace(Actor.SessionNonce) && Evidence is { CanForwardUpgrade:true };
+}
+
 public interface INativeBackupInspectionBackend
 {
     Task<NativeBackupInspection> InspectBackupAsync(NativeIdentity actor,string path,CancellationToken ct=default);
@@ -78,6 +87,12 @@ public sealed class NativeBackupInspectionReview:INotifyPropertyChanged
     public bool CanInspect=>IsOpen && !_busy;
     public bool CanPreview=>CanInspect && Evidence is { Compatible:true } &&
         RoleAuthorizationPolicy.CanAccessUsersManagement(_actor!.Role);
+    public bool CanRequestUpgrade=>CanInspect && _actor?.Role==UserRole.GeneralAdministration &&
+        Evidence is { CanForwardUpgrade:true };
+    public NativeBackupUpgradeIntent? GetUpgradeIntent()=>CanRequestUpgrade
+        ?new(_actor!,Evidence!):null;
+    public bool MatchesUpgradeIntent(NativeBackupUpgradeIntent intent)=>CanRequestUpgrade &&
+        intent.IsValid && _actor==intent.Actor && ReferenceEquals(Evidence,intent.Evidence);
     public bool CanRequestRestore=>CanInspect && _actor?.Role==UserRole.GeneralAdministration &&
         Evidence is { } evidence && Comparison is { } comparison && comparison.Matches(evidence);
     public NativeRestoreIntent? GetRestoreIntent()=>CanRequestRestore
