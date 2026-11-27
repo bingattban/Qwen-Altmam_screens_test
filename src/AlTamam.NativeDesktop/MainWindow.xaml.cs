@@ -91,7 +91,7 @@ public partial class MainWindow : Window
         Dispatcher.VerifyAccess();
         try
         {
-            var dictionaries=Application.Current.Resources.MergedDictionaries;
+            var dictionaries=System.Windows.Application.Current.Resources.MergedDictionaries;
             string name=theme=="dark"?"Dark":"Light";
             var next=new ResourceDictionary
             {
