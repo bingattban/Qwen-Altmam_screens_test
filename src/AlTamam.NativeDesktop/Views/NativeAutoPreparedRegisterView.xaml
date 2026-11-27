@@ -116,7 +116,7 @@
                           CanUserAddRows="False" CanUserDeleteRows="False"
                           CanUserSortColumns="False" AutoGenerateColumns="False"
                           HeadersVisibility="Column" FlowDirection="RightToLeft"
-                          AlternatingRowBackground="#F8FAFC"
+                          AlternatingRowBackground="{DynamicResource NativeSubtle}"
                           BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                           GridLinesVisibility="Horizontal" RowHeight="36"
                           ColumnHeaderHeight="39" MinHeight="210">

@@ -16,7 +16,7 @@
     </UserControl.Resources>
     <Grid Background="#CF0F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource BulkVisible}}">
-        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
+        <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="9" Padding="16" Width="870" MaxHeight="730"
                 Margin="12" HorizontalAlignment="Center" VerticalAlignment="Center">
             <DockPanel LastChildFill="True">
@@ -47,7 +47,7 @@
                                   SelectionMode="Single" SelectionUnit="FullRow"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" RowHeight="32"
-                                  AlternatingRowBackground="#F8FAFC"
+                                  AlternatingRowBackground="{DynamicResource NativeSubtle}"
                                   AutomationProperties.Name="اختر الأفراد الذين تريد نقلهم من الصفحة الحالية فقط">
                             <DataGrid.Columns>
                                 <DataGridCheckBoxColumn Header="اختر" Width="65"

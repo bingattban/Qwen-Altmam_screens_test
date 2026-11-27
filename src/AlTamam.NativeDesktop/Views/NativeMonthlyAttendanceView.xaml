@@ -31,7 +31,7 @@
                            Foreground="{DynamicResource NativeMuted}" Text="{Binding SelectedPeriod}"/>
             </DockPanel>
         </Border>
-        <Border Grid.Row="1" IsEnabled="{Binding CanChangeMonthlyScope}" Background="White" BorderBrush="{DynamicResource NativeSubtleBorder}"
+        <Border Grid.Row="1" IsEnabled="{Binding CanChangeMonthlyScope}" Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeSubtleBorder}"
                 BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
             <WrapPanel>
                 <StackPanel Margin="4" MinWidth="140">
@@ -88,7 +88,7 @@
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   CanUserSortColumns="False" HeadersVisibility="Column"
                   SelectionMode="Single" RowHeight="35" ColumnHeaderHeight="38"
-                  AlternatingRowBackground="#F8FAFC" GridLinesVisibility="Horizontal"
+                  AlternatingRowBackground="{DynamicResource NativeSubtle}" GridLinesVisibility="Horizontal"
                   BorderThickness="1" BorderBrush="{DynamicResource NativeBorder}" MinHeight="190"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>

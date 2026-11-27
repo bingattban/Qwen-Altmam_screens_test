@@ -101,7 +101,7 @@
                   SelectionUnit="FullRow" SelectionChanged="OnDailySelectionChanged"
                   IsEnabled="{Binding CanChangeRosterScope}"
                   HeadersVisibility="Column" RowHeight="35" ColumnHeaderHeight="38"
-                  GridLinesVisibility="Horizontal" AlternatingRowBackground="#F8FAFC"
+                  GridLinesVisibility="Horizontal" AlternatingRowBackground="{DynamicResource NativeSubtle}"
                   BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" MinHeight="190">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="الرقم" Binding="{Binding RowNumber}" Width="62"/>
