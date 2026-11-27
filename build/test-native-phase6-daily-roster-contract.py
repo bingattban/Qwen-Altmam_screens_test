@@ -11,6 +11,9 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     "vm": "src/AlTamam.NativePresentation/DailyAttendancePageViewModel.cs",
+    "drafts": "src/AlTamam.NativePresentation/NativeAttendanceDraftsViewModel.cs",
+    "draft_tests": "tests/AlTamam.UnitTests/NativeAttendanceDraftPhase12Tests.cs",
+    "navigation_tests": "tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
     "tests": "tests/AlTamam.UnitTests/NativeDailyAttendancePhase6Tests.cs",
     "review_tests": "tests/AlTamam.UnitTests/NativeDailyReviewedStatusPhase6Tests.cs",
     "bulk_tests": "tests/AlTamam.UnitTests/NativeDailyBulkReviewPhase6Tests.cs",
@@ -131,6 +134,43 @@ def check(content):
                   "Native_daily_screen_uses_existing_typed_roster_with_actual_rank",
                   "Logout_or_replaced_nonce_revokes_all_daily_personnel"):
         needs("tests", token)
+    for token in ("NativeAttendanceDraft.ValidCatalogue(rows)", "Guid.TryParseExact(DraftId[4..]",
+                  "PersonIds.Distinct(StringComparer.Ordinal).Count()==PersonIds.Count",
+                  "_liveActor?.Invoke()==actor", "version!=_generation || linked.IsCancellationRequested",
+                  "if(!CanRead){Clear();return;}", "Array.AsReadOnly(row.PersonIds.ToArray())"):
+        needs("drafts", token)
+    for token in ("services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+                  "Draft session changed.", "NativeAttendanceDraft.ValidCatalogue(rows)"):
+        needs("reader", token)
+    source=content["reader"]
+    start=source.find("public async Task<IReadOnlyList<NativeAttendanceDraft>> ReadAttendanceDraftsAsync(")
+    end=source.find("public async Task<IReadOnlyList<NativeRosterColumn>> ReadRosterLayoutAsync(",start)
+    if not (0<=start<end):
+        issues.append("Missing native owner draft read entry")
+    else:
+        method=source[start:end]
+        order=[method.find(t) for t in (
+            "using var nativeOperation = operations.Enter();",
+            "services.ResolveSessionAsync(actor.SessionNonce,ct)",
+            "principal.UserId!=actor.UserId",
+            "CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)",
+            "services.ListDraftsAsync(principal.UserId,lifetime.Token)",
+            "VerifyContinuationIdentityAsync(actor,lifetime.Token)",
+            "NativeAttendanceDraft.ValidCatalogue(rows)")]
+        if min(order)<0 or order!=sorted(order) or any(t in method for t in ("SaveDraftAsync(","DeleteDraftAsync(","CommitAsync(","ExecuteInWriteTransactionAsync(")):
+            issues.append("Draft read must use exact live owner, linked cancellation and no write")
+    for token in ("Drafts.Attach(draftReader, principal)", "Drafts.Clear();", "!Drafts.IsOpen",
+                  "if (Drafts.IsOpen || Review.IsOpen", "OpenDraftsCommand"):
+        needs("vm",token)
+    needs("shell","(screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&")
+    for token in ("Binding OpenDraftsCommand", "Binding Drafts", "Binding PersonCount"):
+        needs("xaml",token)
+    for token in ("Catalogue_validates_identity_bounds_and_unique_selection",
+                  "All_standard_roles_read_only_their_own_draft_catalogue",
+                  "Closed_or_replaced_session_cannot_receive_late_draft_rows",
+                  "Malformed_catalogue_is_hidden_and_refresh_recovers"):
+        needs("draft_tests",token)
+    needs("navigation_tests","Draft_catalogue_freezes_daily_scope_and_navigation_and_logout_scrubs_rows")
     for name in ("core", "release"):
         needs(name, "python build/test-native-phase6-daily-roster-contract.py")
     for forbidden in ("new AttendanceCommitService(", "RunPendingAsync(",
@@ -145,6 +185,12 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("drafts", "Guid.TryParseExact(DraftId[4..]"),
+        ("drafts", "if(!CanRead){Clear();return;}"),
+        ("reader", "services.ListDraftsAsync(principal.UserId,lifetime.Token)"),
+        ("vm", "Drafts.Clear();"),
+        ("shell", "(screen == NativeScreen.DailyAttendance || !DailyAttendance.Drafts.IsOpen) &&"),
+        ("xaml", "Binding OpenDraftsCommand"),
         ("vm", "request != _version"),
         ("vm", "_boundPrincipal != principal"),
         ("vm", "snapshot.HasNext !="),
@@ -171,6 +217,8 @@ if __name__ == "__main__":
         ("core", "python build/test-native-phase6-daily-roster-contract.py"),
         ("release", "python build/test-native-phase6-daily-roster-contract.py"),
     ):
+        if text not in TEXT[key]:
+            raise SystemExit(f"Stale negative-test target in {key}: {text}")
         altered = TEXT.copy()
         altered[key] = altered[key].replace(text, "REMOVED_BY_NEGATIVE_TEST")
         if not check(altered):
