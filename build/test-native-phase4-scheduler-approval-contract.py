@@ -37,6 +37,8 @@ FILES={
  "settings_shell":"src/AlTamam.NativePresentation/NativeShellViewModel.cs",
  "navigation_tests":"tests/AlTamam.UnitTests/NativeWpfNavigationTests.cs",
  "layout_vm":"src/AlTamam.NativePresentation/NativeRosterLayoutViewModel.cs",
+ "layout_mutation":"src/AlTamam.NativePresentation/NativeRosterColumnMutationReview.cs",
+ "layout_mutation_tests":"tests/AlTamam.UnitTests/NativeRosterColumnMutationPhase12Tests.cs",
  "layout_tests":"tests/AlTamam.UnitTests/NativeRosterLayoutPhase12Tests.cs",
  "layout_admin":"src/AlTamam.NativePresentation/AdministrationPageViewModel.cs",
  "layout_view":"src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
@@ -103,7 +105,7 @@ def problems(contents):
                   "if(!CanRead){Clear();return;}", "_pending?.Cancel()"):
         need("layout_vm",token)
     for token in ("ReadRosterLayoutAsync(", "new RosterColumnStructureService(database)",
-                  '.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)',
+                  '.ListAsync(new JsonObject{["includeInactive"]=true},ct)',
                   'RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows)'):
         need("reader",token)
     for token in ("CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen",
@@ -116,6 +118,30 @@ def problems(contents):
                   "Catalogue_is_read_only_and_denies_supervisor_or_missing_session",
                   "Late_catalogue_is_discarded_after_close_or_session_change"):
         need("layout_tests",token)
+    for token in ("!change.CanApply(before)", 'payload["expectedSnapshot"]=previous.Snapshot',
+                  'payload["confirmed"]=true', "service.CreateAsync(payload,principal,lifetime.Token)",
+                  "service.UpdateAsync(payload,principal,lifetime.Token)",
+                  "service.DeactivateAsync(payload,principal,lifetime.Token)",
+                  "ReadRosterLayoutCoreAsync(actor,lifetime.Token)", "!change.MatchesReceipt(result)",
+                  "result.Snapshot!=snapshot"):
+        need("reader",token)
+    for token in ("_issued is null", "ReferenceEquals(reviewed,_draft)", "Guid.NewGuid().ToString(\"N\")",
+                  "result.StoredValueCount!=old.StoredValueCount", "IsSystemProtected:false",
+                  "FieldType==old.FieldType || old.StoredValueCount==0"):
+        need("layout_mutation",token)
+    for token in ("_mutation.Take(_liveActor?.Invoke(),_rows)", "_mutation.Accept(operation,receipt)",
+                  "_uncertainActor=operation.Actor", "if(_busy && _mutation.HasUnverifiedCommit)return;",
+                  "InvalidateReview()", "_uncertainActor!=_actor"):
+        need("layout_vm",token)
+    for token in ("Binding CreateCommand","Binding EditCommand","Binding DeactivateCommand",
+                  "Binding ReviewCommand","Binding ConfirmCommand","Binding CanEditType"):
+        need("layout_view",token)
+    for token in ("Exact_current_metadata_and_protected_columns_are_required",
+                  "Create_and_retire_have_distinct_rules_and_cannot_change_saved_values",
+                  "Commit_requires_review_and_does_not_automatically_retry_uncertain_result",
+                  "ViewModel_requires_fresh_review_and_clears_saved_metadata_on_close",
+                  "Lost_commit_reply_blocks_repeat_mutation_for_same_session"):
+        need("layout_mutation_tests",token)
     for key in ("register_xaml","review_xaml","project","layout_view"):
         try: ET.fromstring(contents[key])
         except ET.ParseError as ex: errors.append(f"Invalid XML/XAML in {key}: {ex}")
@@ -559,6 +585,11 @@ if __name__=="__main__":
         ("settings_shell","Settings.Diagnostics.Clear();"),
         ("settings_shell","if (CurrentPage.Screen == screen) return;"),
         ("layout_vm","Snapshot.All(Uri.IsHexDigit)"),
+        ("layout_mutation","result.StoredValueCount!=old.StoredValueCount"),
+        ("layout_mutation","ReferenceEquals(reviewed,_draft)"),
+        ("reader",'payload["expectedSnapshot"]=previous.Snapshot'),
+        ("layout_vm","_mutation.Take(_liveActor?.Invoke(),_rows)"),
+        ("layout_view","Binding ConfirmCommand"),
         ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
         ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},lifetime.Token)'),
         ("layout_view","Binding StoredValueCount"),
