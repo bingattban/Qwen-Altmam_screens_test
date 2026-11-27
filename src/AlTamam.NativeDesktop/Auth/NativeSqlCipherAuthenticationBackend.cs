@@ -152,6 +152,21 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     public Task RevokeSessionAsync(string nonce, CancellationToken ct = default)
         => _operations.RunAsync(() => _services.RevokeSessionAsync(nonce, ct));
 
+    internal async Task<ForwardUpgradedBackup?> PrepareBackupUpgradeAsync(NativeBackupUpgradeIntent intent,
+        string password,CancellationToken ct=default)
+    {
+        if(_disposed || intent is null || !intent.IsValid ||
+            intent.Evidence.CurrentSchemaVersion!=AlTamamDbContext.CurrentSchemaVersion) return null;
+        using var nativeOperation=_operations.Enter();
+        var actor=intent.Actor;
+        var principal=await _services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
+        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
+            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return null;
+        return await new NativeBackupForwardUpgradeService(_database,_services)
+            .PrepareAsync(principal,password,intent.Evidence.Path,intent.Evidence.Sha256,ct)
+            .ConfigureAwait(false);
+    }
+
     // Only the physical WPF host calls this entrypoint; it must keep the
     // window disabled and forbid ordinary close until this attempt finishes.
     // No lease spans the coordinator: its shutdown callback drains leases.
@@ -180,21 +195,6 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
                 await DisposeAsync().ConfigureAwait(false);
                 await drainCompleted().ConfigureAwait(false);
             }).ConfigureAwait(false);
-    }
-
-    internal async Task<ForwardUpgradedBackup?> PrepareBackupUpgradeAsync(NativeBackupUpgradeIntent intent,
-        string password,CancellationToken ct=default)
-    {
-        if(_disposed || intent is null || !intent.IsValid ||
-            intent.Evidence.CurrentSchemaVersion!=AlTamamDbContext.CurrentSchemaVersion) return null;
-        using var nativeOperation=_operations.Enter();
-        var actor=intent.Actor;
-        var principal=await _services.ResolveSessionAsync(actor.SessionNonce,ct).ConfigureAwait(false);
-        if(principal is null || principal.UserId!=actor.UserId || principal.Username!=actor.Username ||
-            principal.Role!=actor.Role || principal.SessionNonce!=actor.SessionNonce) return null;
-        return await new NativeBackupForwardUpgradeService(_database,_services)
-            .PrepareAsync(principal,password,intent.Evidence.Path,intent.Evidence.Sha256,ct)
-            .ConfigureAwait(false);
     }
 
     internal async Task<bool> ExportRecoveryKeyAsync(NativeRecoveryExportIntent intent,
