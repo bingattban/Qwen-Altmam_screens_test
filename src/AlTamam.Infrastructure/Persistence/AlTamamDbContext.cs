@@ -286,6 +286,15 @@ public sealed class AlTamamDbContext : IDisposable
         CancellationToken ct=default)
         => EncryptedBackupInspector.VerifyAsync(path,_databasePath,_databaseKey,ct);
 
+    /// <summary>
+    /// Prepare a separate, verified forward-upgraded backup for explicit later
+    /// selection. Does not restore, approve, or open the active database.
+    /// The original key stays within Infrastructure.
+    /// </summary>
+    public Task<ForwardUpgradedBackup> PrepareForwardUpgradedBackupAsync(string sourcePath,
+        string expectedSha256,CancellationToken ct=default)
+        => EncryptedBackupForwardUpgrade.PrepareAsync(sourcePath,_databasePath,_databaseKey,expectedSha256,ct);
+
     public bool HasValidIntegrity()
     {
         using var connection = CreateOpenConnection();
