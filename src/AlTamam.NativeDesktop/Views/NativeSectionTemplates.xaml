@@ -6,11 +6,11 @@
     <Style x:Key="HeaderStyle" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="24" />
-        <Setter Property="Foreground" Value="#123752" />
+        <Setter Property="Foreground" Value="{DynamicResource NativeHeading}" />
         <Setter Property="Margin" Value="0,0,0,16" />
     </Style>
     <Style x:Key="StatusStyle" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="#845B12" />
+        <Setter Property="Foreground" Value="{DynamicResource NativeWarningText}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="0,0,0,22" />
@@ -40,7 +40,7 @@
             </Grid.RowDefinitions>
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}"/>
-                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#475569"/>
+                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                 <Button Content="أرشيف القيود المعدلة والمخفية" Command="{Binding OpenHistoryCommand}" Visibility="{Binding CanOpenHistory, Converter={StaticResource VisibilityIfTrue}}" Margin="0,6" Padding="10,5" HorizontalAlignment="Right"/>
             </StackPanel>
             <WrapPanel Grid.Row="1" Margin="0,8" IsEnabled="{Binding CanQuery}">
@@ -64,8 +64,8 @@
                 <Button Content="مسح الفلاتر" Command="{Binding ClearFiltersCommand}" Padding="12,5" Margin="4"/>
             </WrapPanel>
             <StackPanel Grid.Row="2">
-                <TextBlock Text="التواريخ بصيغة YYYY-MM-DD؛ نطاق البحث حسب توقيت UTC للخدمة الأصلية." Foreground="#475569" TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                <TextBlock Text="التواريخ بصيغة YYYY-MM-DD؛ نطاق البحث حسب توقيت UTC للخدمة الأصلية." Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                 <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
             </StackPanel>
             <DataGrid Grid.Row="3" Margin="0,8" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
@@ -92,7 +92,7 @@
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
-            <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Grid.Row="3" Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="8" Padding="12" Margin="0,8"
                     Visibility="{Binding IsDetailOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <DockPanel LastChildFill="True">
@@ -105,17 +105,17 @@
                         </DockPanel>
                         <ProgressBar Height="4" IsIndeterminate="True"
                                      Visibility="{Binding IsDetailLoading, Converter={StaticResource VisibilityIfTrue}}"/>
-                        <TextBlock Text="{Binding DetailError}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding DetailError}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     </StackPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
                             <TextBlock Text="{Binding Detail.ChainStatus}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,8">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#BE123C"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource NativeDangerText}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Detail.ChainValid}" Value="True">
-                                                <Setter Property="Foreground" Value="#166534"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource NativeSuccessText}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -156,9 +156,9 @@
                                         Margin="4,8" Padding="12,6"/>
                                 <Button Content="إخفاء القيد من العرض" Command="{Binding OpenHideCommand}"
                                         Visibility="{Binding CanOpenHide, Converter={StaticResource VisibilityIfTrue}}"
-                                        Margin="4,8" Padding="12,6" Foreground="#BE123C"/>
+                                        Margin="4,8" Padding="12,6" Foreground="{DynamicResource NativeDangerText}"/>
                             </WrapPanel>
-                            <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1"
+                            <Border Background="{DynamicResource NativeCanvas}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                                     CornerRadius="6" Padding="10" Margin="0,8"
                                     Visibility="{Binding Edit.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                                 <StackPanel>
@@ -186,8 +186,8 @@
                                                 Padding="10,6" Margin="0,8,0,0" HorizontalAlignment="Right"/>
                                     </StackPanel>
                                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Edit.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                                    <TextBlock Text="{Binding Edit.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Edit.CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Edit.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Edit.CompletionMessage}" Foreground="{DynamicResource NativeSuccessText}" FontWeight="Bold" TextWrapping="Wrap"/>
                                     <Button Content="إغلاق المراجعة" Command="{Binding CloseEditCommand}" Margin="0,8,0,0" Padding="10,5" HorizontalAlignment="Right"/>
                                 </StackPanel>
                             </Border>
@@ -202,8 +202,8 @@
                 </StackPanel>
                 <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold"/>
             </DockPanel>
-            <Border Grid.Row="0" Grid.RowSpan="5" Panel.ZIndex="10" Background="#FFFFFF"
-                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="12"
+            <Border Grid.Row="0" Grid.RowSpan="5" Panel.ZIndex="10" Background="{DynamicResource NativeSurface}"
+                    BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="8" Padding="12"
                     Visibility="{Binding History.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top">
@@ -212,8 +212,8 @@
                             <TextBlock Text="أرشيف القيود المعدلة والمخفية" FontWeight="Bold" FontSize="18" TextWrapping="Wrap"/>
                         </DockPanel>
                         <TextBlock Text="{Binding History.ScopeLabel}" FontWeight="SemiBold" Margin="0,5"/>
-                        <TextBlock Text="للقراءة فقط — يعرض جميع إصدارات التعديل والإخفاء، ولا يحذف الدليل الأصلي." TextWrapping="Wrap" Foreground="#475569"/>
-                        <TextBlock Text="{Binding History.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                        <TextBlock Text="للقراءة فقط — يعرض جميع إصدارات التعديل والإخفاء، ولا يحذف الدليل الأصلي." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
+                        <TextBlock Text="{Binding History.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                         <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding History.IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
                     </StackPanel>
                     <DockPanel DockPanel.Dock="Bottom" Margin="0,6">
@@ -257,10 +257,10 @@
             </Grid.RowDefinitions>
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}"/>
-                <TextBlock Text="{Binding StatusMessage}" Foreground="#475569" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"/>
                 <WrapPanel Margin="0,8">
                     <TextBlock Text="الأدوار المتاحة للإنشاء حسب صلاحيتك:" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                    <TextBlock Text="{Binding CreationRoleLabel}" Foreground="#166534" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding CreationRoleLabel}" Foreground="{DynamicResource NativeSuccessText}" TextWrapping="Wrap"/>
                 </WrapPanel>
                 <WrapPanel Margin="0,4" IsEnabled="{Binding CanQuery}">
                     <TextBlock Text="بحث بالاسم أو اسم المستخدم أو الرقم (ع)" VerticalAlignment="Center" Margin="4"/>
@@ -271,7 +271,7 @@
                 </WrapPanel>
                 <Button Content="إنشاء حساب جديد" Command="{Binding OpenCreateCommand}" Margin="0,4" Padding="12,6"
                         HorizontalAlignment="Right" Visibility="{Binding CanOpenCreate, Converter={StaticResource VisibilityIfTrue}}"/>
-                <TextBlock Text="{Binding Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                 <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
             </StackPanel>
             <DataGrid Grid.Row="1" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
@@ -295,9 +295,9 @@
                                 <WrapPanel>
                                     <Button Content="كلمة المرور" Padding="5,3" Margin="2"
                                             Command="{Binding DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
-                                    <Button Content="تعطيل" Padding="5,3" Margin="2" Foreground="#BE123C"
+                                    <Button Content="تعطيل" Padding="5,3" Margin="2" Foreground="{DynamicResource NativeDangerText}"
                                             Command="{Binding DataContext.DeactivateCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
-                                    <Button Content="تفعيل" Padding="5,3" Margin="2" Foreground="#166534"
+                                    <Button Content="تفعيل" Padding="5,3" Margin="2" Foreground="{DynamicResource NativeSuccessText}"
                                             Command="{Binding DataContext.ReactivateCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" CommandParameter="{Binding}"/>
                                 </WrapPanel>
                             </DataTemplate>
@@ -312,8 +312,8 @@
                 </StackPanel>
                 <TextBlock Text="{Binding PageLabel}" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"/>
             </DockPanel>
-            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="10" Background="#FFFFFF"
-                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="10"
+            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="10" Background="{DynamicResource NativeSurface}"
+                    BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="8" Padding="10"
                     Visibility="{Binding Create.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <DockPanel LastChildFill="True">
                     <Button DockPanel.Dock="Top" Content="إغلاق مراجعة الإنشاء" Command="{Binding CloseCreateCommand}"
@@ -321,8 +321,8 @@
                     <views:NativeAccountCreateView DataContext="{Binding Create}"/>
                 </DockPanel>
             </Border>
-            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="11" Background="#FFFFFF"
-                    BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="10"
+            <Border Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="11" Background="{DynamicResource NativeSurface}"
+                    BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="8" Padding="10"
                     Visibility="{Binding Lifecycle.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <DockPanel LastChildFill="True">
                     <Button DockPanel.Dock="Top" Content="إغلاق مراجعة الحساب" Command="{Binding CloseLifecycleCommand}"
@@ -348,16 +348,16 @@
         <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource HeaderStyle}" />
             <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource StatusStyle}" />
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="6" Padding="14" Margin="6">
                 <StackPanel>
                     <DockPanel>
                         <Button DockPanel.Dock="Left" Content="تحديث الإعدادات" Command="{Binding Overview.RefreshCommand}" Padding="10,5"/>
-                        <TextBlock Text="الإعدادات الحالية" FontSize="18" FontWeight="Bold" Foreground="#123752"/>
+                        <TextBlock Text="الإعدادات الحالية" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     </DockPanel>
                     <ProgressBar Height="4" IsIndeterminate="True" Margin="0,5"
                                  Visibility="{Binding Overview.IsLoading, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding Overview.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Overview.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding Overview.HasSnapshot, Converter={StaticResource VisibilityIfTrue}}">
                         <TextBlock Text="الحساب والصلاحية" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.Username}" TextWrapping="Wrap"/>
@@ -371,7 +371,7 @@
                         <TextBlock Text="{Binding Overview.Snapshot.RetentionLabel}"/>
                         <TextBlock Text="آخر نسخة تلقائية ناجحة مسجلة" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupLabel}" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
                         <WrapPanel Margin="0,5,0,0">
@@ -380,15 +380,15 @@
                         </WrapPanel>
                         <ProgressBar Height="4" IsIndeterminate="True" Margin="0,4"
                                      Visibility="{Binding Overview.IsSavingTheme, Converter={StaticResource VisibilityIfTrue}}"/>
-                        <TextBlock Text="يتم حفظ الاختيار في الإعداد الأصلي للبرنامج. تطبيق ألوان المظهر الليلي على جميع شاشات WPF قيد الاستكمال." TextWrapping="Wrap" Foreground="#475569"/>
-                        <TextBlock Text="هذه قراءة للإعدادات المحفوظة وآخر النتائج المسجلة. يعمل المجدول الأصلي أثناء تشغيل البرنامج؛ تفعيل الإعداد وحده لا يعني نجاح النسخ. حدّث الإعدادات لعرض آخر نتيجة." TextWrapping="Wrap" Foreground="#475569" Margin="0,10,0,0"/>
+                        <TextBlock Text="يتم حفظ الاختيار في الإعداد الأصلي وتطبيق الألوان المشتركة على الواجهات. بعض عناصر Windows الأصلية تخضع لمظهر النظام." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
+                        <TextBlock Text="هذه قراءة للإعدادات المحفوظة وآخر النتائج المسجلة. يعمل المجدول الأصلي أثناء تشغيل البرنامج؛ تفعيل الإعداد وحده لا يعني نجاح النسخ. حدّث الإعدادات لعرض آخر نتيجة." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,10,0,0"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="6" Padding="14" Margin="6">
                 <StackPanel>
-                    <TextBlock Text="بيانات البرنامج وفحص السلامة" FontSize="18" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="بيانات البرنامج وفحص السلامة" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     <TextBlock Text="معلومات الإصدار المثبت وفحص قاعدة البيانات المحلية للقراءة فقط، دون إرسال أي بيانات خارج الجهاز."
                                TextWrapping="Wrap" Margin="0,6"/>
                     <WrapPanel>
@@ -397,7 +397,7 @@
                     </WrapPanel>
                     <ProgressBar Height="4" IsIndeterminate="True" Margin="0,6"
                                  Visibility="{Binding Diagnostics.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding Diagnostics.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Diagnostics.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding Diagnostics.HasInformation, Converter={StaticResource VisibilityIfTrue}}">
                         <TextBlock Text="إصدار الواجهة الأصلية التجريبية" FontWeight="SemiBold" Margin="0,6,0,2"/>
                         <TextBlock Text="{Binding Diagnostics.Information.Version}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
@@ -410,17 +410,17 @@
                         <TextBlock Text="{Binding Diagnostics.Information.OfflineLabel}" TextWrapping="Wrap" Margin="0,6"/>
                         <TextBlock Text="{Binding Diagnostics.IntegrityLabel}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,6"/>
                         <TextBlock Text="تخص النتيجة وقت الفحص فقط؛ لا تعد بديلا عن نسخة احتياطية مشفرة ومتحقق منها."
-                                   TextWrapping="Wrap" Foreground="#475569"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
             <views:NativeManualBackupView/>
             <Button Content="إعداد النسخ الاحتياطي التلقائي" Command="{Binding OpenScheduleCommand}"
                     Padding="12,8" Margin="6"/>
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6"
                     Padding="14" Margin="6" Visibility="{Binding Schedule.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <StackPanel>
-                    <TextBlock Text="مراجعة إعداد النسخ التلقائي" FontSize="18" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="مراجعة إعداد النسخ التلقائي" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     <TextBlock Text="{Binding Schedule.Before.BackupDirectory}" TextWrapping="Wrap" FlowDirection="LeftToRight" Margin="0,5"/>
                     <TextBlock Text="{Binding Schedule.Before.DirectoryLabel}" TextWrapping="Wrap"/>
                     <StackPanel IsEnabled="{Binding Schedule.CanEdit}">
@@ -431,7 +431,7 @@
                         <TextBlock Text="عدد النسخ التلقائية المحتفظ بها (0 للجميع، أو 2 إلى 365)" TextWrapping="Wrap"/>
                         <TextBox Text="{Binding Schedule.RetentionText, UpdateSourceTrigger=PropertyChanged}" MaxLength="3"
                                  FlowDirection="LeftToRight" Margin="0,4,0,8"/>
-                        <TextBlock Text="تنبيه: تحديد عدد غير صفري يسمح بحذف النسخ التلقائية القديمة المؤهلة بعد نجاح نسخة تلقائية موثوقة، وفقا لسياسة الاحتفاظ الأصلية. لا يشمل ذلك النسخ اليدوية أو الإنقاذية." Foreground="#92400E" TextWrapping="Wrap"/>
+                        <TextBlock Text="تنبيه: تحديد عدد غير صفري يسمح بحذف النسخ التلقائية القديمة المؤهلة بعد نجاح نسخة تلقائية موثوقة، وفقا لسياسة الاحتفاظ الأصلية. لا يشمل ذلك النسخ اليدوية أو الإنقاذية." Foreground="{DynamicResource NativeWarningText}" TextWrapping="Wrap"/>
                         <Button Content="معاينة الإعداد" Command="{Binding Schedule.PreviewCommand}" Padding="10,6" Margin="0,8"/>
                     </StackPanel>
                     <StackPanel Visibility="{Binding Schedule.HasPreview, Converter={StaticResource VisibilityIfTrue}}">
@@ -445,19 +445,19 @@
                         <Button Content="{Binding Schedule.ConfirmLabel}" Command="{Binding Schedule.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
                     </StackPanel>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Schedule.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding Schedule.Error}" TextWrapping="Wrap" Foreground="#BE123C"/>
-                    <TextBlock Text="{Binding Schedule.CompletionMessage}" TextWrapping="Wrap" Foreground="#0D9488"/>
+                    <TextBlock Text="{Binding Schedule.Error}" TextWrapping="Wrap" Foreground="{DynamicResource NativeDangerText}"/>
+                    <TextBlock Text="{Binding Schedule.CompletionMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeAccentText}"/>
                     <TextBlock Text="يقرأ المجدول الأصلي الإعدادات أثناء تشغيل البرنامج ويتحقق من الموعد كل دقيقة. حفظ الإعداد لا يعني إنشاء نسخة ناجحة." TextWrapping="Wrap" Margin="0,6"/>
                     <Button Content="إغلاق مراجعة الجدولة" Command="{Binding CloseScheduleCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
             <Button Content="استدراك يوم سابق (خلال 7 أيام)"
                     Command="{Binding OpenCatchUpCommand}" Padding="12,8" Margin="6"/>
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="6" Padding="14" Margin="6"
                     Visibility="{Binding CatchUp.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <StackPanel>
-                    <TextBlock Text="استدراك التحضير الناقص — للإدارة فقط" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="استدراك التحضير الناقص — للإدارة فقط" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     <TextBlock Text="يشمل هذا الإجراء الأفراد المؤهلين في جميع المواقع للتاريخ المحدد، وليس فردا واحدا أو موقعا واحدا. لا يستبدل التمام المحفوظ." TextWrapping="Wrap" Margin="0,6"/>
                     <TextBlock Text="تاريخ الاستدراك (yyyy-MM-dd)" Margin="0,6,0,2"/>
                     <TextBox Text="{Binding CatchUp.DateText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -469,7 +469,7 @@
                              IsEnabled="{Binding CatchUp.CanEdit}" AutomationProperties.Name="سبب الاستدراك"/>
                     <Button Content="معاينة الاستدراك" Command="{Binding CatchUp.PreviewCommand}" Margin="0,8" Padding="10,6"/>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding CatchUp.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding CatchUp.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding CatchUp.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding CatchUp.HasPreview, Converter={StaticResource VisibilityIfTrue}}">
                         <TextBlock Text="التاريخ المعتمد في المعاينة" FontWeight="Bold"/>
                         <TextBlock Text="{Binding CatchUp.Preview.Request.BusinessDate, StringFormat=yyyy-MM-dd}"/>
@@ -480,23 +480,23 @@
                         <TextBlock Text="{Binding CatchUp.Preview.Request.Reason}" TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Content="{Binding CatchUp.ConfirmLabel}" Command="{Binding CatchUp.ConfirmCommand}" Margin="0,8" Padding="10,6"/>
-                    <TextBlock Text="{Binding CatchUp.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding CatchUp.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                     <Button Content="إغلاق مراجعة الاستدراك" Command="{Binding CatchUp.CloseCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
             <TextBlock Text="إذن التصحيح الاستثنائي للأيام المغلقة" FontWeight="Bold"
-                       Foreground="#123752" Margin="6,12,6,4"/>
+                       Foreground="{DynamicResource NativeHeading}" Margin="6,12,6,4"/>
             <TextBlock Text="تغيير الإذن لا يعدل أي سجل حضور بذاته. العملية المسجلة لا تثبت الحالة الحالية للإعداد."
                        TextWrapping="Wrap" Margin="6,0,6,6"/>
             <UniformGrid Columns="2">
                 <Button Content="تفعيل الإذن الاستثنائي" Command="{Binding EnablePolicyCommand}" Padding="10,8" Margin="6"/>
                 <Button Content="إيقاف الإذن الاستثنائي" Command="{Binding DisablePolicyCommand}" Padding="10,8" Margin="6"/>
             </UniformGrid>
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="6" Padding="14" Margin="6"
                     Visibility="{Binding Policy.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <StackPanel>
-                    <TextBlock Text="{Binding Policy.TargetLabel}" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="{Binding Policy.TargetLabel}" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     <TextBlock Text="سيتم تسجيل تغيير الإذن في سجل العمليات. راجع الإجراء قبل التأكيد."
                                TextWrapping="Wrap" Margin="0,6"/>
                     <TextBlock Text="ملاحظة اختيارية (10 إلى 400 حرف عند إدخالها)" Margin="0,8,0,2"/>
@@ -510,19 +510,19 @@
                         <TextBlock Text="{Binding Policy.Approved.Reason}" TextWrapping="Wrap"/>
                     </StackPanel>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Policy.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding Policy.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Policy.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <Button Content="{Binding Policy.ConfirmLabel}" Command="{Binding Policy.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
-                    <TextBlock Text="{Binding Policy.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Policy.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                     <Button Content="إغلاق مراجعة الإذن" Command="{Binding Policy.CloseCommand}" Padding="10,6"/>
                 </StackPanel>
             </Border>
             <Button Content="البحث التاريخي وتصحيح تمام فرد"
                     Command="{Binding OpenHistoricalCommand}" Padding="12,8" Margin="6"/>
-            <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1"
+            <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                     CornerRadius="6" Padding="14" Margin="6"
                     Visibility="{Binding Historical.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                 <StackPanel>
-                    <TextBlock Text="البحث عن فرد وقراءة تمامه التاريخي — للإدارة فقط" FontWeight="Bold" Foreground="#123752"/>
+                    <TextBlock Text="البحث عن فرد وقراءة تمامه التاريخي — للإدارة فقط" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                     <TextBlock Text="يشمل البحث الأفراد المؤرشفين. عدم وجود سجل محفوظ لا يعني الأهلية للتعديل." TextWrapping="Wrap" Margin="0,6"/>
                     <StackPanel IsEnabled="{Binding Historical.CanEdit}">
                         <TextBlock Text="الاسم أو الرقم (ع)" Margin="0,6,0,2"/>
@@ -547,7 +547,7 @@
                         <Button Content="قراءة الفترة (1–62 يوما)" Command="{Binding Historical.ReadCommand}" Padding="10,6" Margin="0,6"/>
                     </StackPanel>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Historical.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                    <TextBlock Text="{Binding Historical.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Historical.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding Historical.HasEvidence, Converter={StaticResource VisibilityIfTrue}}">
                         <TextBlock Text="{Binding Historical.Evidence.PersonName}" FontWeight="Bold"/>
                         <TextBlock Text="{Binding Historical.Evidence.ServiceNumberA}"/>
@@ -563,10 +563,10 @@
                         <Button Content="فتح مراجعة تعديل الفترة" Command="{Binding OpenHistoricalRangeCommand}" Padding="10,6" Margin="0,8"/>
                         <Button Content="تصحيح يوم مغلق محفوظ (تاريخ واحد)" Command="{Binding OpenHistoricalSingleCommand}" Padding="10,6" Margin="0,4"/>
                     </StackPanel>
-                    <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                    <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="10"
                             Visibility="{Binding HistoricalRange.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                         <StackPanel>
-                            <TextBlock Text="مراجعة تصحيح الفترة المحددة" FontWeight="Bold" Foreground="#123752"/>
+                            <TextBlock Text="مراجعة تصحيح الفترة المحددة" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                             <TextBlock Text="الفرد والتواريخ ثابتة أثناء المراجعة. لا يعدل إلا ما يظهر في المعاينة المعتمدة." TextWrapping="Wrap" Margin="0,6"/>
                             <TextBlock Text="{Binding HistoricalRange.FromText}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
                             <TextBlock Text="{Binding HistoricalRange.ToText}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
@@ -580,7 +580,7 @@
                                      AutomationProperties.Name="سبب التصحيح التاريخي"/>
                             <Button Content="معاينة الأيام قبل التعديل" Command="{Binding HistoricalRange.PreviewCommand}" Padding="10,6" Margin="0,8"/>
                             <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding HistoricalRange.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <TextBlock Text="{Binding HistoricalRange.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalRange.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding HistoricalRange.Preview.PersonName}" FontWeight="Bold"/>
                             <TextBlock Text="{Binding HistoricalRange.Preview.ServiceNumberA}"/>
                             <TextBlock Text="{Binding HistoricalRange.PreviewSummary}" FontWeight="Bold" TextWrapping="Wrap"/>
@@ -595,14 +595,14 @@
                             </DataGrid>
                             <TextBlock Text="{Binding HistoricalRange.Preview.Request.Reason}" TextWrapping="Wrap"/>
                             <Button Content="{Binding HistoricalRange.ConfirmLabel}" Command="{Binding HistoricalRange.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
-                            <TextBlock Text="{Binding HistoricalRange.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalRange.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                             <Button Content="إغلاق مراجعة التصحيح" Command="{Binding CloseHistoricalRangeCommand}" Padding="10,6"/>
                         </StackPanel>
                     </Border>
-                    <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10"
+                    <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="10"
                             Visibility="{Binding HistoricalSingle.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                         <StackPanel>
-                            <TextBlock Text="تصحيح يوم مغلق محفوظ" FontWeight="Bold" Foreground="#123752"/>
+                            <TextBlock Text="تصحيح يوم مغلق محفوظ" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
                             <TextBlock Text="التصحيح الاستثنائي ليوم سابق واحد؛ لا يعاد فتح اليوم ولا يتغير وقت التحضير الأصلي. الخدمة تتحقق من الإذن والأهلية." TextWrapping="Wrap" Margin="0,6"/>
                             <TextBlock Text="{Binding Historical.Evidence.Request.From, StringFormat=yyyy-MM-dd}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
                             <TextBlock Text="الحالة المصححة" Margin="0,6,0,2"/>
@@ -615,17 +615,17 @@
                                      AutomationProperties.Name="سبب تصحيح اليوم المغلق"/>
                             <Button Content="معاينة التصحيح الاستثنائي" Command="{Binding HistoricalSingle.PreviewCommand}" Padding="10,6" Margin="0,8"/>
                             <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding HistoricalSingle.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
-                            <TextBlock Text="{Binding HistoricalSingle.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding HistoricalSingle.Preview.PersonName}" FontWeight="Bold"/>
                             <TextBlock Text="{Binding HistoricalSingle.Preview.ServiceNumberA}"/>
                             <TextBlock Text="{Binding HistoricalSingle.Preview.SiteName}"/>
                             <TextBlock Text="الحالة السابقة" FontWeight="Bold"/>
                             <TextBlock Text="{Binding HistoricalSingle.Preview.BeforeStatusName}"/>
                             <TextBlock Text="الحالة الجديدة" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding HistoricalSingle.Preview.AfterStatusName}" Foreground="#0D9488"/>
+                            <TextBlock Text="{Binding HistoricalSingle.Preview.AfterStatusName}" Foreground="{DynamicResource NativeAccentText}"/>
                             <TextBlock Text="{Binding HistoricalSingle.Preview.Request.Reason}" TextWrapping="Wrap"/>
                             <Button Content="{Binding HistoricalSingle.ConfirmLabel}" Command="{Binding HistoricalSingle.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
-                            <TextBlock Text="{Binding HistoricalSingle.CompletionMessage}" Foreground="#0D9488" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding HistoricalSingle.CompletionMessage}" Foreground="{DynamicResource NativeAccentText}" TextWrapping="Wrap"/>
                             <Button Content="إغلاق مراجعة اليوم المغلق" Command="{Binding CloseHistoricalSingleCommand}" Padding="10,6"/>
                         </StackPanel>
                     </Border>

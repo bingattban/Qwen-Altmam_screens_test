@@ -7,14 +7,14 @@
         MinWidth="900" MinHeight="610" Width="1200" Height="760"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI" FlowDirection="RightToLeft"
-        Background="#F1F5F9"
+        Background="{DynamicResource NativeCanvas}" Foreground="{DynamicResource NativeText}"
         Loaded="OnWindowLoaded" Closing="OnWindowClosing" Closed="OnWindowClosed"
         PreviewMouseDown="OnNativePointerInput" PreviewKeyDown="OnNativeKeyboardInput">
     <Window.Resources>
-        <Style x:Key="NavButton" TargetType="Button">
-            <Setter Property="Background" Value="#FFFFFF"/>
-            <Setter Property="Foreground" Value="#0F2942"/>
-            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        <Style x:Key="NavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeSurface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NativeText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NativeBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -55,27 +55,27 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="46"/>
             </Grid.RowDefinitions>
-            <Border Grid.Row="0" Background="#0F2942" Padding="22,9">
+            <Border Grid.Row="0" Background="{DynamicResource NativeHeader}" Padding="22,9">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Foreground="#FFFFFF" FontSize="25" FontWeight="Bold" Text="التمام اليومي"/>
-                        <TextBlock Foreground="#D8E8F1" FontSize="12"
+                        <TextBlock Foreground="{DynamicResource NativeOnStrong}" FontSize="25" FontWeight="Bold" Text="التمام اليومي"/>
+                        <TextBlock Foreground="{DynamicResource NativeHeaderMuted}" FontSize="12"
                                    Text="واجهة WPF الأصلية — تسجيل الدخول فعلي، بقية الشاشات قيد التحويل"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#163A5F" CornerRadius="8" Padding="10,7">
+                        <Border Background="{DynamicResource NativeHeaderCard}" CornerRadius="8" Padding="10,7">
                             <StackPanel>
-                                <TextBlock Text="{Binding Username}" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding Username}" Foreground="{DynamicResource NativeOnStrong}" FontWeight="SemiBold"
                                            TextAlignment="Center"/>
-                                <TextBlock Text="{Binding RoleLabel}" Foreground="#99F6E4" FontSize="12"
+                                <TextBlock Text="{Binding RoleLabel}" Foreground="{DynamicResource NativeHeaderAccent}" FontSize="12"
                                            TextAlignment="Center"/>
                             </StackPanel>
                         </Border>
-                        <Button Content="تسجيل الخروج" Background="#BE123C" Foreground="#FFFFFF"
+                        <Button Content="تسجيل الخروج" Background="{DynamicResource NativeDangerFill}" Foreground="{DynamicResource NativeOnStrong}"
                                 BorderThickness="0" Padding="15,8" Margin="12,0,0,0"
                                 FontWeight="SemiBold" Cursor="Hand" Click="OnLogoutClick"/>
                     </StackPanel>
@@ -86,12 +86,12 @@
                     <ColumnDefinition Width="225"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Border CornerRadius="12" Background="#E7F0F7" BorderBrush="#CBD5E1"
+                <Border CornerRadius="12" Background="{DynamicResource NativeNavSurface}" BorderBrush="{DynamicResource NativeBorder}"
                         BorderThickness="1" Padding="14">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="القائمة الرئيسية" FontSize="17" FontWeight="Bold"
-                                   Foreground="#0F2942" Margin="0,4,0,16"/>
+                                   Foreground="{DynamicResource NativeText}" Margin="0,4,0,16"/>
                         <Button Content="الرئيسية" Style="{StaticResource NavButton}"
                                 Command="{Binding NavigateCommand}" CommandParameter="{x:Static present:NativeScreen.Dashboard}"/>
                         <Button Content="التمام اليومي" Style="{StaticResource NavButton}"
@@ -123,15 +123,15 @@
                     </ScrollViewer>
                 </Border>
                 <Border Grid.Column="1" Margin="14,0,0,0" Padding="20"
-                        Background="#FFFFFF" CornerRadius="12"
-                        BorderBrush="#CBD5E1" BorderThickness="1">
+                        Background="{DynamicResource NativeSurface}" CornerRadius="12"
+                        BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1">
                     <ContentControl Content="{Binding CurrentPage}"/>
                 </Border>
             </Grid>
-            <Border Grid.Row="2" Background="#FEF3C7" Padding="14,10"
-                    BorderBrush="#FDE68A" BorderThickness="0,1,0,0">
+            <Border Grid.Row="2" Background="{DynamicResource NativeWarningSurface}" Padding="14,10"
+                    BorderBrush="{DynamicResource NativeWarningBorder}" BorderThickness="0,1,0,0">
                 <TextBlock Text="الأمان: الجلسة والصلاحيات حقيقية، والرئيسية والتمام اليومي يقرآن SQLCipher. التحضير من الشاشة اليومية وبقية الوظائف قيد التحويل."
-                           Foreground="#845B12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                           Foreground="{DynamicResource NativeWarningText}" FontWeight="SemiBold" TextWrapping="Wrap"/>
             </Border>
         </Grid>
     </Grid>

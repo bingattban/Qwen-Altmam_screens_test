@@ -5,9 +5,9 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ShowIfTrue"/>
     </UserControl.Resources>
-    <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="14" Margin="6">
+    <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="14" Margin="6">
         <StackPanel>
-            <TextBlock Text="النسخ الاحتياطي اليدوي المشفر" FontSize="18" FontWeight="Bold" Foreground="#123752"/>
+            <TextBlock Text="النسخ الاحتياطي اليدوي المشفر" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource NativeHeading}"/>
             <TextBlock Text="حفظ نسخة محلية والتحقق منها دون تعديل سجلات الحضور أو استعادة البيانات." TextWrapping="Wrap" Margin="0,5"/>
             <WrapPanel>
                 <Button Content="اختيار مجلد الحفظ" Click="OnChooseFolder" IsEnabled="{Binding CanOpenBackup}" Padding="12,6" Margin="4"/>
@@ -18,9 +18,9 @@
             </WrapPanel>
             <Button Content="مراجعة تصفير جميع البيانات" Click="OnFullResetClick"
                     Visibility="{Binding CanExportRecovery, Converter={StaticResource ShowIfTrue}}"
-                    IsEnabled="{Binding CanExportRecovery}" Foreground="#B91C1C"
+                    IsEnabled="{Binding CanExportRecovery}" Foreground="{DynamicResource NativeDangerText}"
                     Padding="12,6" Margin="4" HorizontalAlignment="Right"/>
-            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F1F5F9" Padding="12" Margin="0,8,0,0"
+            <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Background="{DynamicResource NativeCanvas}" Padding="12" Margin="0,8,0,0"
                     Visibility="{Binding Backup.IsOpen, Converter={StaticResource ShowIfTrue}}">
                 <StackPanel>
                     <TextBlock Text="{Binding Backup.ReviewTitle}" FontWeight="Bold" FontSize="16"/>
@@ -29,8 +29,8 @@
                     <TextBlock Text="{Binding Backup.Directory}" FlowDirection="LeftToRight" TextWrapping="Wrap" Margin="0,4"/>
                     <Button Content="تأكيد التنفيذ" Command="{Binding Backup.ConfirmCommand}" Padding="12,6" Margin="0,6" HorizontalAlignment="Right"/>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Backup.IsBusy, Converter={StaticResource ShowIfTrue}}"/>
-                    <TextBlock Text="{Binding Backup.Error}" Foreground="#BE123C" TextWrapping="Wrap" Margin="0,6"/>
-                    <TextBlock Text="{Binding Backup.CompletionMessage}" Foreground="#166534" FontWeight="Bold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Backup.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap" Margin="0,6"/>
+                    <TextBlock Text="{Binding Backup.CompletionMessage}" Foreground="{DynamicResource NativeSuccessText}" FontWeight="Bold" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding Backup.HasReceipt, Converter={StaticResource ShowIfTrue}}">
                         <TextBlock Text="معرف النسخة" FontWeight="SemiBold" Margin="0,6,0,2"/>
                         <TextBlock Text="{Binding Backup.Receipt.BackupId}" TextWrapping="Wrap" FlowDirection="LeftToRight"/>
@@ -46,14 +46,14 @@
             </Border>
             <Button Content="اختيار نسخة مشفرة للفحص" Click="OnChooseBackup"
                     IsEnabled="{Binding CanOpenInspection}" Padding="12,6" Margin="4,12,4,4" HorizontalAlignment="Right"/>
-            <Border BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F1F5F9" Padding="12"
+            <Border BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Background="{DynamicResource NativeCanvas}" Padding="12"
                     Visibility="{Binding Inspection.IsOpen, Converter={StaticResource ShowIfTrue}}">
                 <StackPanel>
                     <TextBlock Text="فحص النسخة ومعاينة الاستعادة (قراءة فقط)" FontWeight="Bold" FontSize="16" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding Inspection.SelectedPath}" FlowDirection="LeftToRight" TextWrapping="Wrap" Margin="0,6"/>
                     <Button Content="فحص الملف" Command="{Binding Inspection.InspectCommand}" Padding="12,6" HorizontalAlignment="Right"/>
                     <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding Inspection.IsBusy, Converter={StaticResource ShowIfTrue}}"/>
-                    <TextBlock Text="{Binding Inspection.Error}" Foreground="#BE123C" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Inspection.Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
                     <StackPanel Visibility="{Binding Inspection.HasEvidence, Converter={StaticResource ShowIfTrue}}">
                         <TextBlock Text="{Binding Inspection.Evidence.CompatibilityLabel}" FontWeight="Bold"/>
                         <TextBlock Text="{Binding Inspection.Evidence.CatalogLabel}" TextWrapping="Wrap"/>
@@ -91,7 +91,7 @@
                             <TextBlock Text="{Binding Inspection.Comparison.Incoming.Users}"/>
                         </UniformGrid>
                     </StackPanel>
-                    <TextBlock Text="المعاينة لا تغير البيانات. الاستعادة الفعلية تستبدل قاعدة البيانات بعد التحقق من كلمة المرور وتأكيد مستقل وإنشاء نسخ إنقاذ. القيم تعكس وقت الفحص." TextWrapping="Wrap" Foreground="#92400E" Margin="0,8"/>
+                    <TextBlock Text="المعاينة لا تغير البيانات. الاستعادة الفعلية تستبدل قاعدة البيانات بعد التحقق من كلمة المرور وتأكيد مستقل وإنشاء نسخ إنقاذ. القيم تعكس وقت الفحص." TextWrapping="Wrap" Foreground="{DynamicResource NativeWarningText}" Margin="0,8"/>
                     <Button Content="متابعة الاستعادة الآمنة (الإدارة العامة فقط)" Click="OnRestoreClick"
                             Visibility="{Binding Inspection.CanRequestRestore, Converter={StaticResource ShowIfTrue}}"
                             IsEnabled="{Binding Inspection.CanRequestRestore}" Padding="12,6" Margin="0,4,0,8"/>
