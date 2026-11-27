@@ -4,8 +4,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="RetirementVisible"/>
-        <Style x:Key="RetirementButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="RetirementButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -15,7 +15,7 @@
     </UserControl.Resources>
     <Grid Background="#D00F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource RetirementVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1"
+        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}"
                 BorderThickness="1" CornerRadius="10" Padding="18"
                 Width="685" MaxHeight="700" Margin="12"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -27,13 +27,13 @@
                             AutomationProperties.Name="إغلاق معاينة إيقاف الموقع دون تنفيذ"/>
                     <TextBlock Text="إيقاف موقع مع حماية تاريخ الأفراد"
                                FontSize="19" FontWeight="Bold"
-                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource NativeText}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="هذه العملية توقف الموقع المختار، وتنقل انتساب جميع أفراده النشطين إلى الموقع النظامي «غير محدد» فقط. لا توجد وجهة يحددها المستخدم في هذه العملية، ولا يُحذف الفرد أو تحضيره التاريخي."
-                                   Foreground="#475569" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeMuted}" TextWrapping="Wrap"
                                    Margin="0,0,0,10"/>
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -41,19 +41,19 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="الموقع المصدر" FontWeight="Bold" Foreground="#64748B"/>
+                                <TextBlock Text="الموقع المصدر" FontWeight="Bold" Foreground="{DynamicResource NativeSecondary}"/>
                                 <TextBlock Text="{Binding SourceSiteName}" FontWeight="SemiBold"
-                                           Foreground="#0F2942" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding SourceSiteId}" Foreground="#475569"/>
+                                           Foreground="{DynamicResource NativeText}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding SourceSiteId}" Foreground="{DynamicResource NativeMuted}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="الوجهة النظامية الثابتة" FontWeight="Bold"
-                                           Foreground="#64748B"/>
+                                           Foreground="{DynamicResource NativeSecondary}"/>
                                 <TextBlock Text="غير محدد (SITE-UNSPECIFIED)"
-                                           Foreground="#0F2942" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"
                                            TextWrapping="Wrap"/>
                                 <TextBlock Text="{Binding SourceRevision, StringFormat='إصدار الموقع: {0}'}"
-                                           Foreground="#475569"/>
+                                           Foreground="{DynamicResource NativeMuted}"/>
                             </StackPanel>
                         </Grid>
                         <ProgressBar Height="4" IsIndeterminate="True"
@@ -62,22 +62,22 @@
                                 Command="{Binding PreviewCommand}"
                                 Style="{StaticResource RetirementButton}"
                                 AutomationProperties.Name="معاينة أثر الإيقاف والانتسابات قبل أي تعديل"/>
-                        <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                    FontWeight="SemiBold" TextWrapping="Wrap"
                                    Margin="0,6,0,8"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <Border Visibility="{Binding HasPreview, Converter={StaticResource RetirementVisible}}"
-                                Background="#F8FAFC" BorderBrush="#CBD5E1"
+                                Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeBorder}"
                                 BorderThickness="1" Padding="12" CornerRadius="6"
                                 Margin="0,5,0,8">
                             <StackPanel>
                                 <TextBlock Text="نتيجة المعاينة من قاعدة البيانات الأصلية"
                                            FontSize="16" FontWeight="Bold"
-                                           Foreground="#0F2942"/>
-                                <TextBlock Text="{Binding ImpactNote}" Foreground="#334155"
+                                           Foreground="{DynamicResource NativeText}"/>
+                                <TextBlock Text="{Binding ImpactNote}" Foreground="{DynamicResource NativeBodyText}"
                                            TextWrapping="Wrap" Margin="0,8,0,8"/>
                                 <TextBlock Text="{Binding Preview.BlockReason}"
-                                           Foreground="#BE123C" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"
                                            FontWeight="SemiBold"/>
                                 <CheckBox IsChecked="{Binding ImpactConfirmed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           IsEnabled="{Binding CanEdit}" Margin="0,9,0,4"
@@ -91,12 +91,12 @@
                                 Command="{Binding ConfirmCommand}"
                                 Style="{StaticResource RetirementButton}"
                                 AutomationProperties.Name="اعتماد إيقاف الموقع بعد الموافقة الصريحة دون إعادة المحاولة"/>
-                        <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                        <TextBlock Text="{Binding CompletionNote}" Foreground="{DynamicResource NativeAccentText}"
                                    FontWeight="Bold" TextWrapping="Wrap"
                                    Margin="0,8,0,0"
                                    AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="إذا تغير عدد الأفراد أو الموقع، أو كان اليوم أو الشهر مغلقا، أو وجد تحضير أو نقل في اليوم نفسه، ترفض الخدمة العملية بالكامل. عند فقدان استجابة الحفظ راجع المواقع وسجل العمليات؛ لا تكرر التنفيذ."
-                                   Foreground="#64748B" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NativeSecondary}" TextWrapping="Wrap"
                                    FontSize="12" Margin="0,10,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

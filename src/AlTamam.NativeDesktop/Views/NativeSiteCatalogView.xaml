@@ -5,8 +5,8 @@
              FlowDirection="RightToLeft" FontFamily="Segoe UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="SitesVisible"/>
-        <Style x:Key="SitesButton" TargetType="Button">
-            <Setter Property="Background" Value="#0D9488"/>
+        <Style x:Key="SitesButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource NativeAccentFill}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -16,7 +16,7 @@
     </UserControl.Resources>
     <Grid Background="#C80F172A"
           Visibility="{Binding IsOpen, Converter={StaticResource SitesVisible}}">
-        <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1"
+        <Border Background="White" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1"
                 CornerRadius="10" Padding="16" Margin="12"
                 Width="840" MaxWidth="960" MaxHeight="720"
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -34,11 +34,11 @@
                             Command="{Binding CloseCommand}"/>
                     <TextBlock Text="إدارة المواقع — المعرف والتاريخ محفوظان"
                                FontSize="19" FontWeight="Bold"
-                               Foreground="#0F2942" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource NativeText}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <StackPanel Grid.Row="1">
                     <TextBlock Text="المواقع النشطة والمتوقفة من السجل الأصلي. يمكن إيقاف موقع بعد مراجعة عدد الأفراد ونقلهم إلى «غير محدد» اعتبارا من اليوم، مع الحفاظ على تحضيرهم السابق."
-                               TextWrapping="Wrap" Foreground="#475569"/>
+                               TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
                         <Button Content="إضافة موقع" Style="{StaticResource SitesButton}"
                                 Command="{Binding CreateCommand}"
@@ -58,7 +58,7 @@
                     </StackPanel>
                     <ProgressBar Height="4" IsIndeterminate="True"
                                  Visibility="{Binding IsBusy, Converter={StaticResource SitesVisible}}"/>
-                    <TextBlock Text="{Binding Error}" Foreground="#BE123C"
+                    <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}"
                                TextWrapping="Wrap"
                                AutomationProperties.LiveSetting="Polite"/>
                 </StackPanel>
@@ -77,23 +77,23 @@
                         <DataGridTextColumn Header="الإصدار" Binding="{Binding Revision}" Width="80"/>
                     </DataGrid.Columns>
                 </DataGrid>
-                <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#CBD5E1"
+                <Border Grid.Row="3" Background="{DynamicResource NativeSubtle}" BorderBrush="{DynamicResource NativeBorder}"
                         BorderThickness="1" CornerRadius="7" Padding="12"
                         Visibility="{Binding HasDraft, Converter={StaticResource SitesVisible}}">
                     <StackPanel>
-                        <TextBlock Text="{Binding Heading}" Foreground="#0F2942"
+                        <TextBlock Text="{Binding Heading}" Foreground="{DynamicResource NativeText}"
                                    FontSize="17" FontWeight="Bold" Margin="0,0,0,7"/>
                         <TextBlock Text="الاسم الجديد (حرفان إلى 100 حرف)"
-                                   Foreground="#475569" FontWeight="SemiBold"/>
+                                   Foreground="{DynamicResource NativeMuted}" FontWeight="SemiBold"/>
                         <TextBox Height="36" Padding="8,5" Margin="0,5,0,8"
                                  Text="{Binding DraftName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding CanEdit}"
                                  AutomationProperties.Name="اسم الموقع الجديد"/>
                         <TextBlock Text="تغيير الاسم لا يعيد كتابة الكشوف التاريخية، ويُحفظ معرف الموقع كما هو."
-                                   TextWrapping="Wrap" Foreground="#64748B"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource NativeSecondary}"/>
                         <TextBlock Text="{Binding ReviewNote}"
                                    Visibility="{Binding IsReviewing, Converter={StaticResource SitesVisible}}"
-                                   Foreground="#0F2942" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource NativeText}" FontWeight="SemiBold"
                                    TextWrapping="Wrap" Margin="0,8,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                             <Button Content="مراجعة دون حفظ" Style="{StaticResource SitesButton}"
@@ -109,11 +109,11 @@
                     </StackPanel>
                 </Border>
                 <StackPanel Grid.Row="4" Margin="0,10,0,0">
-                    <TextBlock Text="{Binding CompletionNote}" Foreground="#0D9488"
+                    <TextBlock Text="{Binding CompletionNote}" Foreground="{DynamicResource NativeAccentText}"
                                TextWrapping="Wrap" FontWeight="Bold"
                                AutomationProperties.LiveSetting="Polite"/>
                     <TextBlock Text="إذا انقطع الرد عند الاعتماد، تحقق من القائمة وسجل العمليات. لا يُسمح بإعادة إرسال العملية تلقائيا."
-                               Foreground="#64748B" FontSize="12" TextWrapping="Wrap"/>
+                               Foreground="{DynamicResource NativeSecondary}" FontSize="12" TextWrapping="Wrap"/>
                 </StackPanel>
             </Grid>
         </Border>
