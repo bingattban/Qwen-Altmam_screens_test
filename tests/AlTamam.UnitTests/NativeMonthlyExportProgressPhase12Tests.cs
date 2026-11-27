@@ -64,8 +64,40 @@ public sealed class NativeMonthlyExportProgressPhase12Tests
         Assert.False(vm.IsOpen);Assert.Null(vm.Receipt);Assert.Equal(0,vm.ProgressPercent);
     }
 
-    private sealed class Probe:INativeMonthlyExcelExportBackend,INativeMonthlyExcelProgressBackend
+    [Fact]
+    public async Task Monthly_scope_is_frozen_until_canonical_export_finishes()
     {
+        var b=new Probe();
+        var page=new MonthlyAttendancePageViewModel();
+        page.AttachReader(b,()=>Actor);
+        await page.RefreshAsync();
+        await page.SelectSiteAsync("SITE-A");
+        await page.Excel.OpenPreviewAsync();
+        var work=page.Excel.ConfirmAsync();
+        Assert.True(page.Excel.IsExporting);
+        Assert.False(page.CanChangeMonthlyScope);
+        Assert.False(page.RefreshCommand.CanExecute(null));
+        await page.SelectSiteAsync("");
+        page.SearchDraft="unapplied";
+        Assert.Equal("SITE-A",page.SelectedSiteId);
+        Assert.Equal("",page.SearchDraft);
+        b.Report!(-1,10);b.Report(11,10);b.Report(0,0);
+        Assert.True(page.Excel.IsProgressIndeterminate);
+        b.Report(5,10);Assert.Equal(50,page.Excel.ProgressPercent);
+        b.Pending.SetResult(b.Receipt());await work;
+        Assert.True(page.CanChangeMonthlyScope);
+        Assert.NotNull(page.Excel.Receipt);
+    }
+
+    private sealed class Probe:INativeMonthlyExcelExportBackend,INativeMonthlyExcelProgressBackend,INativeMonthlyAttendanceReader
+    {
+        public Task<NativeMonthlyCatalogue> ReadCatalogueAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Task.FromResult(new NativeMonthlyCatalogue([Filter.Period],[new NativeDashboardSite("SITE-A","الموقع")]));
+        public Task<NativeMonthlySnapshot> ReadMonthAsync(NativeIdentity actor,NativeMonthlyFilter filter,CancellationToken ct=default)
+            =>Task.FromResult(new NativeMonthlySnapshot(filter.Period,filter.SiteId,filter.Page,
+                DateTime.DaysInMonth(DateTime.Now.Year,DateTime.Now.Month),1,false,
+                [],[new NativeMonthlyRow("P-1","123","أحمد","الموقع",[],
+                    new NativeMonthlyCell?[DateTime.DaysInMonth(DateTime.Now.Year,DateTime.Now.Month)])]));
         public Action<int,int>? Report;
         public CancellationToken Token;
         public int Exports;
