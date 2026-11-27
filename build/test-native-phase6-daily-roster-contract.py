@@ -307,6 +307,12 @@ def check(content):
                   "ListDraftsCoreAsync(userId,false,ct)",
                   "ListDraftsCoreAsync(userId,true,ct)"):
         needs("shared",token)
+    for token in ("ORDER BY UpdatedAtUtc DESC, DraftId LIMIT 10001",
+                  "if(native && rows.Count>=10000)",
+                  "json_valid(SelectedPersonIdsJson)=1",
+                  "json_array_length(SelectedPersonIdsJson)=json_array_length($json)",
+                  "reviewed.key=stored.key", "reviewed.value=stored.value COLLATE BINARY"):
+        needs("shared",token)
     needs("reader","RangeEvidence=ParseNativeDraftRange(row)")
     needs("review","RangeEvidence=evidence")
     needs("vm","draft.RangeEvidence!.IsInitial!=initial")
@@ -336,6 +342,10 @@ if __name__ == "__main__":
     if errors:
         raise SystemExit("NATIVE PHASE 6 DAILY CONTRACT FAILED:\n" + "\n".join(errors))
     for key, text in (
+        ("shared", "ORDER BY UpdatedAtUtc DESC, DraftId LIMIT 10001"),
+        ("shared", "if(native && rows.Count>=10000)"),
+        ("shared", "reviewed.key=stored.key"),
+        ("shared", "reviewed.value=stored.value COLLATE BINARY"),
         ("shared", "RangeStartDate IS $from AND RangeEndDate IS $to AND RangeIsInitial IS $mode"),
         ("shared", "ON CONFLICT(DraftId) DO NOTHING"),
         ("reader", "RangeEvidence=ParseNativeDraftRange(row)"),
