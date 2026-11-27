@@ -1,3 +1,4 @@
+using System.IO;
 using AlTamam.Domain.Enums;
 using AlTamam.NativePresentation;
 using Xunit;
@@ -36,7 +37,7 @@ public sealed class NativeMonthlyExcelExportPhase7Tests
         Assert.Equal(1, backend.Exports);
         Assert.Equal(backend.PreviewRequests[0], Assert.Single(backend.ExportRequests));
         Assert.NotNull(vm.Excel.Receipt);
-        Assert.Equal("C:\\Reports\\monthly.xlsx", vm.Excel.Receipt.PrimaryFilePath);
+        Assert.Equal(Path.Combine(Path.GetTempPath(),"altamam-test-reports","monthly.xlsx"), vm.Excel.Receipt.PrimaryFilePath);
         Assert.Equal(1, vm.Excel.Receipt.FileCount);
     }
 
@@ -53,6 +54,10 @@ public sealed class NativeMonthlyExcelExportPhase7Tests
         Assert.Equal(1, backend.Exports);
         Assert.Equal(2, vm.Excel.Receipt!.FileCount);
         Assert.Equal("", Assert.Single(backend.ExportRequests).SiteId);
+        Assert.Equal(2,vm.Excel.ResultFiles.Count);
+        Assert.Equal("SITE-A",vm.Excel.ResultFiles[1].SiteId);
+        vm.Excel.Close();
+        Assert.Empty(vm.Excel.ResultFiles);
     }
 
     [Fact]
@@ -198,12 +203,12 @@ public sealed class NativeMonthlyExcelExportPhase7Tests
 
         public NativeMonthlyExcelReceipt MakeReceipt(NativeMonthlyExcelFilter filter) =>
             new(ForgeReceipt ? "1900-01" : filter.Period, filter.SiteId,
-                filter.SearchTerm, "C:\\Reports\\monthly.xlsx",
+                filter.SearchTerm, Path.Combine(Path.GetTempPath(),"altamam-test-reports","monthly.xlsx"),
                 filter.SiteId == "" ? 2 : 1, 6)
             {
                 Files=filter.SiteId==""?
-                    [new("","جميع المواقع",@"C:\Reports\monthly.xlsx",6),new("SITE-A","المركز",@"C:\Reports\site.xlsx",6)]:
-                    [new(filter.SiteId,"المركز",@"C:\Reports\monthly.xlsx",6)]
+                    [new("","جميع المواقع",Path.Combine(Path.GetTempPath(),"altamam-test-reports","monthly.xlsx"),6),new("SITE-A","المركز",Path.Combine(Path.GetTempPath(),"altamam-test-reports","site.xlsx"),6)]:
+                    [new(filter.SiteId,"المركز",Path.Combine(Path.GetTempPath(),"altamam-test-reports","monthly.xlsx"),6)]
             };
     }
 }
