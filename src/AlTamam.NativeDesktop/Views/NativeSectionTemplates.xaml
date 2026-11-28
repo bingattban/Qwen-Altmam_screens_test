@@ -397,6 +397,18 @@
                         <TextBlock Text="آخر نسخة تلقائية ناجحة مسجلة" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupLabel}" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
+                        <StackPanel Visibility="{Binding Overview.Snapshot.HasMonthlyExport, Converter={StaticResource VisibilityIfTrue}}">
+                            <TextBlock Text="التصدير التلقائي للتمام الشهري — الإعدادات المحفوظة" FontWeight="SemiBold" Margin="0,12,0,4"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.EnabledLabel}"/>
+                            <TextBlock Text="موعد التصدير المحفوظ" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.ExportTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="مجلد التصدير المحفوظ" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.DirectoryLabel}" TextWrapping="Wrap" FlowDirection="LeftToRight"/>
+                            <TextBlock Text="آخر تصدير ناجح مسجل" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastSuccessLabel}"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
+                            <TextBlock Text="للقراءة فقط في هذه المرحلة. هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية أو توفر المجلد حاليا." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                        </StackPanel>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
                         <WrapPanel Margin="0,5,0,0">

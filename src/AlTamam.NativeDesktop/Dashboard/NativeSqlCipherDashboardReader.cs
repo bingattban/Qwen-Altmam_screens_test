@@ -506,12 +506,18 @@ public sealed class NativeSqlCipherDashboardReader(
         var data=RequiredObject(response,"GetSettingsOverview");
         if(RequiredText(data,"role")!=actor.Role.ToString() || !data.ContainsKey("lastAutoBackupDate"))
             throw new InvalidDataException("Invalid settings identity or backup evidence.");
+        var monthly=RequireObject(data["autoMonthlyExcel"]);
         var overview=new NativeSettingsOverview(RequiredText(data,"username"),actor.Role,
             RequiredText(data,"backupDirectory"),RequiredBoolean(data,"defaultDriveAvailable"),
             RequiredText(data,"backupTime"),RequiredBoolean(data,"automaticBackupEnabled"),
             checked((int)RequiredNumber(data,"automaticBackupRetentionCount")),
             data["lastAutoBackupDate"]?.GetValue<string>(),RequiredText(data,"lastAutoBackupFailure"),
-            RequiredText(data,"theme"));
+            RequiredText(data,"theme"))
+        {
+            MonthlyExport=new NativeAutomaticMonthlyExcelState(RequiredBoolean(monthly,"enabled"),
+                RequiredText(monthly,"exportTime"),RequiredText(monthly,"directory"),
+                RequiredText(monthly,"lastSuccessDate"),RequiredText(monthly,"lastFailure"))
+        };
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");
         return overview;
