@@ -95,6 +95,35 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
         Assert.Equal(2,Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate IS NULL;"));
     }
 
+    [Theory]
+    [InlineData("same-day")]
+    [InlineData("no-assignment")]
+    [InlineData("not-on-force")]
+    public async Task ArchivePreview_ReportsCanonicalCommitBlockersWithoutRosterWrites(string scenario)
+    {
+        if(scenario=="same-day")
+            Execute($"UPDATE PersonAssignments SET ValidFromLocalDate='{Day}' WHERE PersonId='TST-LIFE-P2';");
+        else if(scenario=="no-assignment")
+            Execute("UPDATE PersonAssignments SET ValidToLocalDate='2026-02-01' WHERE PersonId='TST-LIFE-P2';");
+        else
+            Execute("UPDATE Persons SET OrganizationalStatus=2 WHERE PersonId='TST-LIFE-P2';");
+        long open=Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate IS NULL;");
+        var service=new PersonRosterService(_db);
+        var selection=Selected();
+        var preview=await service.PreviewArchivePersonsAsync(selection,Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var data=Assert.IsType<JsonObject>(preview.Data);
+        var candidates=Assert.IsType<JsonArray>(data["candidates"]);
+        Assert.Equal(2,candidates.Count);
+        Assert.Null(candidates[0]!["blocker"]);
+        Assert.False(string.IsNullOrWhiteSpace(candidates[1]!["blocker"]!.GetValue<string>()));
+        var result=await service.ArchivePersonsAsync(Actor,"test-admin",Commit(data,(JsonArray)selection["personIds"]!),default);
+        Assert.False(result.Success);
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1;"));
+        Assert.Equal(open,Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate IS NULL;"));
+        Assert.Equal(0,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE';"));
+    }
+
     [Fact]
     public async Task ArchiveBatch_ClosesButNeverErasesHistory_RejectsReplay()
     {
