@@ -8,7 +8,8 @@ public sealed class NativeSettingsOverviewPhase12Tests
 {
     private static readonly NativeIdentity Actor=new("USR-1","owner",UserRole.GeneralAdministration,"NONCE-A");
     private static NativeSettingsOverview Data(NativeIdentity actor)=>new(actor.Username,actor.Role,
-        @"E:\AlTamam",true,"16:00",true,3,"2026-11-25","","light");
+        @"E:\AlTamam",true,"16:00",true,3,"2026-11-25","","light")
+        {MonthlyExport=new(false,"21:00","","","")};
     [Fact]
     public void Overview_validates_identity_schedule_and_retention_without_claiming_scheduler_running()
     {
@@ -21,6 +22,40 @@ public sealed class NativeSettingsOverviewPhase12Tests
         Assert.False((data with { LastBackupDate="2026-02-30" }).Matches(Actor));
         Assert.False((data with { Theme="unknown" }).Matches(Actor));
         Assert.True((data with { DirectoryAvailable=false,LastBackupDate=null }).Matches(Actor));
+    }
+
+    [Fact]
+    public void Monthly_export_saved_state_validates_time_directory_and_last_success_without_claiming_execution()
+    {
+        var disabled=new NativeAutomaticMonthlyExcelState(false,"21:00","","","");
+        Assert.True(disabled.IsValid);
+        Assert.False(disabled.Enabled);
+        Assert.NotEmpty(disabled.LastSuccessLabel);
+        var configured=disabled with{Enabled=true,Directory=@"Z:\Disconnected",LastSuccessDate="2026-11-25",LastFailure="تعذر الوصول إلى المجلد"};
+        Assert.True(configured.IsValid);
+        Assert.Equal("2026-11-25",configured.LastSuccessLabel);
+        Assert.True((Data(Actor) with{MonthlyExport=configured}).Matches(Actor));
+        Assert.False((Data(Actor) with{MonthlyExport=configured with{Directory=""}}).Matches(Actor));
+        Assert.False((configured with{ExportTime="24:00"}).IsValid);
+        Assert.False((configured with{Directory="bad\npath"}).IsValid);
+        Assert.False((configured with{LastSuccessDate="2026-02-30"}).IsValid);
+    }
+
+    [Fact]
+    public async Task Monthly_export_overview_rejects_invalid_evidence_and_never_shows_replaced_session_state()
+    {
+        NativeIdentity? actor=Actor;
+        var reader=new Reader{InvalidMonthly=true};
+        var vm=new NativeSettingsOverviewViewModel();
+        vm.Attach(reader,()=>actor);
+        await vm.RefreshAsync();
+        Assert.Null(vm.Snapshot);Assert.NotEmpty(vm.Error);
+        reader.InvalidMonthly=false;
+        await vm.RefreshAsync();
+        Assert.True(vm.Snapshot?.HasMonthlyExport==true);
+        Assert.Equal("21:00",vm.Snapshot?.MonthlyExport?.ExportTime);
+        actor=Actor with{SessionNonce="NONCE-B"};
+        Assert.Null(vm.Snapshot);
     }
 
     [Theory]
@@ -79,12 +114,15 @@ public sealed class NativeSettingsOverviewPhase12Tests
     private sealed class Reader:INativeSettingsOverviewReader
     {
         public int Reads;
-        public bool Forged;
+        public bool Forged,InvalidMonthly;
         public Task<NativeSettingsOverview>? Pending;
         public Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default)
         {
             Reads++;
-            return Pending??Task.FromResult(Forged?Data(actor) with { Username="other" }:Data(actor));
+            var data=Data(actor);
+            if(Forged)data=data with{Username="other"};
+            if(InvalidMonthly)data=data with{MonthlyExport=new(true,"25:00","","","")};
+            return Pending??Task.FromResult(data);
         }
     }
 }

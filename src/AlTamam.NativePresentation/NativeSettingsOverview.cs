@@ -5,10 +5,24 @@ using AlTamam.Domain.Policies;
 
 namespace AlTamam.NativePresentation;
 
+public sealed record NativeAutomaticMonthlyExcelState(bool Enabled,string ExportTime,string Directory,
+    string LastSuccessDate,string LastFailure)
+{
+    public bool IsValid=>TimeOnly.TryParseExact(ExportTime,"HH:mm",CultureInfo.InvariantCulture,DateTimeStyles.None,out _) &&
+        Directory is not null && !Directory.Any(char.IsControl) && (!Enabled || !string.IsNullOrWhiteSpace(Directory)) &&
+        LastSuccessDate is not null && (LastSuccessDate.Length==0 || DateOnly.TryParseExact(LastSuccessDate,"yyyy-MM-dd",
+            CultureInfo.InvariantCulture,DateTimeStyles.None,out _)) && LastFailure is not null;
+    public string EnabledLabel=>Enabled?"مفعّل في الإعدادات المحفوظة":"متوقف في الإعدادات المحفوظة";
+    public string DirectoryLabel=>string.IsNullOrWhiteSpace(Directory)?"لم يحدد مجلد للتصدير":Directory;
+    public string LastSuccessLabel=>LastSuccessDate.Length==0?"لا يوجد تصدير ناجح مسجل":LastSuccessDate;
+}
+
 public sealed record NativeSettingsOverview(string Username,UserRole Role,string BackupDirectory,
     bool DirectoryAvailable,string BackupTime,bool BackupEnabled,int RetentionCount,
     string? LastBackupDate,string LastBackupFailure,string Theme)
 {
+    public NativeAutomaticMonthlyExcelState? MonthlyExport {get;init;}
+    public bool HasMonthlyExport=>MonthlyExport is not null;
     public bool Matches(NativeIdentity actor)=>RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role) &&
         Username==actor.Username && Role==actor.Role &&
         !string.IsNullOrWhiteSpace(BackupDirectory) && !BackupDirectory.Any(char.IsControl) &&
@@ -16,7 +30,7 @@ public sealed record NativeSettingsOverview(string Username,UserRole Role,string
         (RetentionCount==0 || RetentionCount is >=2 and <=365) &&
         (LastBackupDate is null || DateOnly.TryParseExact(LastBackupDate,"yyyy-MM-dd",
             CultureInfo.InvariantCulture,DateTimeStyles.None,out _)) &&
-        LastBackupFailure is not null && Theme is "light" or "dark";
+        LastBackupFailure is not null && (MonthlyExport is not {} monthly || monthly.IsValid) && Theme is "light" or "dark";
     public string RoleLabel=>Role.ToArabicLabel();
     public string DirectoryLabel=>DirectoryAvailable?"متاح وفق فحص المسار الحالي":"غير متاح";
     public string BackupEnabledLabel=>BackupEnabled?"مفعّل في الإعدادات":"متوقف في الإعدادات";

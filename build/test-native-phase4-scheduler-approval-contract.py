@@ -31,6 +31,7 @@ FILES={
  "recovery_tests":"tests/AlTamam.UnitTests/NativeRecoveryExportPhase12Tests.cs",
  "settings_vm":"src/AlTamam.NativePresentation/NativePageViewModels.cs",
  "theme_vm":"src/AlTamam.NativePresentation/NativeSettingsOverview.cs",
+ "overview_tests":"tests/AlTamam.UnitTests/NativeSettingsOverviewPhase12Tests.cs",
  "theme_tests":"tests/AlTamam.UnitTests/NativeThemePhase12Tests.cs",
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
@@ -79,6 +80,14 @@ def problems(contents):
         if token not in contents[key]:
             errors.append(f"Missing {key} invariant: {token}")
     need("settings_shell","if (CurrentPage.Screen == screen) return;")
+    for token in ('RequireObject(data["autoMonthlyExcel"])', 'MonthlyExport=new NativeAutomaticMonthlyExcelState(',
+                  'RequiredText(monthly,"lastSuccessDate")', 'RequiredText(monthly,"lastFailure")'):
+        need("reader",token)
+    need("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid")
+    for token in ("Overview.Snapshot.MonthlyExport.EnabledLabel","Overview.Snapshot.MonthlyExport.LastSuccessLabel",
+                  "Overview.Snapshot.MonthlyExport.LastFailure","للقراءة فقط في هذه المرحلة"):
+        need("settings_templates",token)
+    need("overview_tests","Monthly_export_overview_rejects_invalid_evidence_and_never_shows_replaced_session_state")
     need("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&")
     need("navigation_tests","Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload")
     need("navigation_tests","Repeated_click_on_current_settings_does_not_start_second_read")
@@ -602,6 +611,9 @@ if __name__=="__main__":
         ("reader","new SettingsReadBackupService(database).Integrity()"),
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
         ("theme_vm","result.Theme!=theme"),
+        ("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid"),
+        ("reader",'RequireObject(data["autoMonthlyExcel"])'),
+        ("settings_templates","Overview.Snapshot.MonthlyExport.LastSuccessLabel"),
         ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),
         ("settings_templates","Binding Overview.SaveDarkCommand"),
         ("settings_shell","Settings.Diagnostics.Clear();"),
