@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativeRosterRemovalBackend, INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeMonthlyExportScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeMonthlyExportScheduleBackend, INativeAttendanceClockBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -534,6 +534,37 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");
         return overview;
+    }
+
+    public async Task<NativeAttendanceSettingsState> SaveAttendanceClockAsync(NativeIdentity actor,
+        NativeAttendanceClockIntent intent,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(intent is null || !intent.IsValid(actor))throw new UnauthorizedAccessException("Invalid attendance clock intent.");
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Clock administration required.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var service=new AutoAttendancePolicyService(database);
+        var response=await service.SetScheduleAsync(new JsonObject
+        {
+            [intent.PayloadKey]=intent.Time,["expectedValue"]=intent.Previous,["operationId"]=intent.OperationId
+        },principal,lifetime.Token).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!response.Success && response.Code is BridgeErrorCodes.ConflictStale or BridgeErrorCodes.ValidationError or BridgeErrorCodes.Unauthorized)
+            throw new NativeAttendanceClockRejectedException();
+        var receipt=RequiredObject(response,"SetAttendanceSchedule");
+        if(RequiredText(receipt,"settingKey")!=intent.SettingKey || RequiredText(receipt,"value")!=intent.Time ||
+            response.AuditEventId is not { } audit || !audit.StartsWith("AUD-",StringComparison.Ordinal))
+            throw new InvalidDataException("Invalid clock receipt.");
+        var state=RequiredObject(await service.GetAsync(lifetime.Token).ConfigureAwait(false),"GetAutoAttendancePolicy(clock)");
+        var current=new NativeAttendanceSettingsState(RequiredText(state,"dueTimeLocal"),RequiredText(state,"dailyLockTimeLocal"),
+            state["defaultStatusId"]?.GetValue<string>(),state["defaultStatusName"]?.GetValue<string>(),RequiredBoolean(state,"configured"));
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!intent.Matches(current))throw new InvalidDataException("Unverified attendance clock.");
+        return current;
     }
 
     public async Task<NativeAutomaticMonthlyExcelState> SaveMonthlyExportScheduleAsync(NativeIdentity actor,

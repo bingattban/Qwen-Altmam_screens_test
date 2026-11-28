@@ -405,7 +405,30 @@
                             <TextBlock Text="{Binding Overview.Snapshot.AttendanceSettings.LockTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
                             <TextBlock Text="الحالة الافتراضية عند عدم وجود تحضير أمس" Margin="0,5,0,2"/>
                             <TextBlock Text="{Binding Overview.Snapshot.AttendanceSettings.DefaultLabel}" TextWrapping="Wrap"/>
-                            <TextBlock Text="قراءة الإعدادات المحفوظة فقط. لن ينشئ هذا العرض سجلات تحضير، ولن يغير موعد القفل أو الحالة الافتراضية." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                            <TextBlock Text="يُحفظ كل وقت بصورة مستقلة بعد المعاينة والتأكيد. لا يغير هذا الإجراء الحالة الافتراضية." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                            <WrapPanel>
+                                <Button Content="تعديل وقت التحضير" Command="{Binding OpenDueClockCommand}" Padding="12,6" Margin="4"/>
+                                <Button Content="تعديل وقت القفل" Command="{Binding OpenLockClockCommand}" Padding="12,6" Margin="4"/>
+                            </WrapPanel>
+                            <StackPanel Visibility="{Binding AttendanceClock.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                                <TextBlock Text="{Binding AttendanceClock.ClockLabel}" FontWeight="Bold"/>
+                                <TextBlock Text="القيمة الحالية"/>
+                                <TextBlock Text="{Binding AttendanceClock.PreviousTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                                <StackPanel IsEnabled="{Binding AttendanceClock.CanEdit}">
+                                    <TextBlock Text="الوقت الجديد (HH:mm)"/>
+                                    <TextBox Text="{Binding AttendanceClock.Time, UpdateSourceTrigger=PropertyChanged}" MaxLength="5" FlowDirection="LeftToRight" Margin="0,5"/>
+                                    <Button Content="معاينة التغيير" Command="{Binding AttendanceClock.PreviewCommand}" Padding="10,6" Margin="0,5"/>
+                                </StackPanel>
+                                <StackPanel Visibility="{Binding AttendanceClock.HasPreview, Converter={StaticResource VisibilityIfTrue}}">
+                                    <TextBlock Text="الوقت المطلوب اعتماده"/>
+                                    <TextBlock Text="{Binding AttendanceClock.Prepared.Time}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                                    <Button Content="تأكيد حفظ الوقت" Command="{Binding AttendanceClock.ConfirmCommand}" Padding="10,6" Margin="0,5"/>
+                                </StackPanel>
+                                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding AttendanceClock.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                                <TextBlock Text="{Binding AttendanceClock.Error}" TextWrapping="Wrap" Foreground="{DynamicResource NativeDangerText}"/>
+                                <TextBlock Text="{Binding AttendanceClock.CompletionMessage}" TextWrapping="Wrap"/>
+                                <Button Content="إغلاق المراجعة" Command="{Binding CloseClockCommand}" Padding="10,6" Margin="0,5"/>
+                            </StackPanel>
                         </StackPanel>
                         <StackPanel Visibility="{Binding Overview.Snapshot.HasMonthlyExport, Converter={StaticResource VisibilityIfTrue}}">
                             <TextBlock Text="التصدير التلقائي للتمام الشهري — الإعدادات المحفوظة" FontWeight="SemiBold" Margin="0,12,0,4"/>

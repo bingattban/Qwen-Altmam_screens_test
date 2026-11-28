@@ -39,6 +39,10 @@ FILES={
  "monthly_view":"src/AlTamam.NativeDesktop/Views/NativeMonthlyExportScheduleView.xaml",
  "monthly_tests":"tests/AlTamam.UnitTests/NativeMonthlyExportSchedulePhase12Tests.cs",
  "monthly_sql_tests":"tests/AlTamam.Tests/Bridge/AutomaticMonthlyExcelTests.cs",
+ "attendance_clock_review":"src/AlTamam.NativePresentation/NativeAttendanceClockReview.cs",
+ "attendance_clock_service":"src/AlTamam.Application/Bridge/AutoAttendancePolicyService.cs",
+ "attendance_clock_tests":"tests/AlTamam.UnitTests/NativeAttendanceClockPhase12Tests.cs",
+ "attendance_clock_sql":"tests/AlTamam.Tests/Bridge/AutoAttendanceDefaultPolicyTests.cs",
  "theme_tests":"tests/AlTamam.UnitTests/NativeThemePhase12Tests.cs",
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
@@ -105,6 +109,20 @@ def problems(contents):
                   "Overview.Snapshot.AttendanceSettings.LockTime","Overview.Snapshot.AttendanceSettings.DefaultLabel"):
         need("settings_templates",token)
     need("overview_tests","Attendance_policy_read_is_session_bound_and_rejects_malformed_evidence")
+    for token in ("NativeAttendanceClockKind.Due","NativeAttendanceClockKind.Lock","_busy=_attempted=_uncertain=true",
+                  "ReferenceEquals(_current?.Invoke(),_snapshot)","intent.Matches(result)"):
+        need("attendance_clock_review",token)
+    for token in ('payload?.ContainsKey("expectedValue")==true','if(expected is not null &&','BridgeErrorCodes.ConflictStale'):
+        need("attendance_clock_service",token)
+    for token in ("SaveAttendanceClockAsync(", 'service.SetScheduleAsync(new JsonObject',
+                  '[intent.PayloadKey]=intent.Time,["expectedValue"]=intent.Previous', 'if(!intent.Matches(current))'):
+        need("reader",token)
+    need("settings_vm","AttendanceClock.ForceClear();")
+    need("settings_vm","|| AttendanceClock.IsOpen || MonthlyExportSchedule.IsOpen;")
+    need("settings_shell","!Settings.AttendanceClock.IsOpen")
+    need("settings_templates","AttendanceClock.ConfirmCommand")
+    need("attendance_clock_tests","Clock_requires_exact_review_and_never_repeats_write")
+    need("attendance_clock_sql","Reviewed_clock_rejects_stale_value_and_preserves_other_clock_and_legacy_writes")
     for token in ('payload.ContainsKey("expectedConfiguration")','previouslyEnabled!=expectedEnabled.Value',
                   'previousDirectory!=expectedDirectory','BridgeErrorCodes.ConflictStale'):
         need("monthly_config",token)
@@ -679,6 +697,10 @@ if __name__=="__main__":
         ("reader",'RequiredText(policy,"dailyLockTimeLocal")'),
         ("theme_vm","AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)"),
         ("settings_templates","Overview.Snapshot.AttendanceSettings.DefaultLabel"),
+        ("attendance_clock_service","if(expected is not null &&"),
+        ("reader",'[intent.PayloadKey]=intent.Time,["expectedValue"]=intent.Previous'),
+        ("settings_shell","!Settings.AttendanceClock.IsOpen"),
+        ("settings_templates","AttendanceClock.ConfirmCommand"),
         ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),

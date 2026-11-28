@@ -66,6 +66,8 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     private INativeManualBackupBackend? _backupBackend;
     private INativeBackupScheduleBackend? _scheduleBackend;
     private INativeMonthlyExportScheduleBackend? _monthlyExportBackend;
+    private INativeAttendanceClockBackend? _clockBackend;
+    private Func<NativeIdentity?>? _clockActor;
     private Func<NativeIdentity?>? _monthlyExportActor;
     private INativeBackupInspectionBackend? _inspectionBackend;
     private Func<NativeIdentity?>? _inspectionActor;
@@ -81,6 +83,10 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenMonthlyExportCommand=new NativeCommand(_=>OpenMonthlyExport(),_=>CanOpenMonthlyExport);
         CloseMonthlyExportCommand=new NativeCommand(_=>_ = CloseMonthlyExportAsync(),_=>MonthlyExportSchedule.CanClose);
         MonthlyExportSchedule.PropertyChanged+=(_,_)=>NotifySessionChanged();
+        OpenDueClockCommand=new NativeCommand(_=>OpenClock(NativeAttendanceClockKind.Due),_=>CanOpenClock);
+        OpenLockClockCommand=new NativeCommand(_=>OpenClock(NativeAttendanceClockKind.Lock),_=>CanOpenClock);
+        CloseClockCommand=new NativeCommand(_=>_ = CloseClockAsync(),_=>AttendanceClock.CanClose);
+        AttendanceClock.PropertyChanged+=(_,_)=>NotifySessionChanged();
         OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
         CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
         Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
@@ -113,6 +119,30 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public NativeProgramDiagnosticsViewModel Diagnostics { get; }=new();
     public NativeManualBackupReview Backup { get; }=new();
     public NativeBackupScheduleReview Schedule { get; }=new();
+    public NativeAttendanceClockReview AttendanceClock {get;}=new();
+    public NativeCommand OpenDueClockCommand {get;}
+    public NativeCommand OpenLockClockCommand {get;}
+    public NativeCommand CloseClockCommand {get;}
+    public bool CanOpenClock=>!IsReviewOpen && !Overview.IsLoading && _clockBackend is not null &&
+        _clockActor?.Invoke() is {} actor && Authorized(actor) &&
+        Overview.Snapshot is {HasAttendanceSettings:true} snapshot && snapshot.Matches(actor);
+    public void AttachAttendanceClock(INativeAttendanceClockBackend backend,Func<NativeIdentity?> actor)
+    {
+        if(_clockBackend is not null)throw new InvalidOperationException("Clock backend already attached.");
+        _clockBackend=backend;_clockActor=actor;NotifySessionChanged();
+    }
+    public void OpenClock(NativeAttendanceClockKind kind)
+    {
+        if(CanOpenClock && _clockBackend is {} backend && _clockActor is {} live &&
+            live() is {} actor && Overview.Snapshot is {} snapshot)
+            AttendanceClock.Open(backend,actor,snapshot,live,()=>Overview.Snapshot,kind);
+    }
+    public async Task CloseClockAsync(CancellationToken ct=default)
+    {
+        bool reload=AttendanceClock.Receipt is not null || AttendanceClock.NeedsReload;
+        if(!AttendanceClock.Close())return;
+        if(reload)await Overview.RefreshAsync(ct);
+    }
     public NativeMonthlyExportScheduleReview MonthlyExportSchedule {get;}=new();
     public NativeCommand OpenMonthlyExportCommand {get;}
     public NativeCommand CloseMonthlyExportCommand {get;}
@@ -209,6 +239,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         CloseBackupCommand.NotifyAvailabilityChanged();
         OpenScheduleCommand.NotifyAvailabilityChanged(); CloseScheduleCommand.NotifyAvailabilityChanged();
         OpenMonthlyExportCommand.NotifyAvailabilityChanged(); CloseMonthlyExportCommand.NotifyAvailabilityChanged();
+        OpenDueClockCommand.NotifyAvailabilityChanged(); OpenLockClockCommand.NotifyAvailabilityChanged(); CloseClockCommand.NotifyAvailabilityChanged();
         CloseInspectionCommand.NotifyAvailabilityChanged();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenInspection)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanExportRecovery)));
@@ -227,7 +258,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen || MonthlyExportSchedule.IsOpen;
+    public bool IsReviewOpen => Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen || AttendanceClock.IsOpen || MonthlyExportSchedule.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -363,6 +394,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         Inspection.ForceClear();
         Schedule.ForceClear();
         MonthlyExportSchedule.ForceClear();
+        AttendanceClock.ForceClear();
         Backup.ForceClear();
         Diagnostics.Clear();
         Overview.Clear();
