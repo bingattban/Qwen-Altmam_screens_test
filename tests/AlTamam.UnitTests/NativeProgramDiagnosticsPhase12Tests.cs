@@ -98,15 +98,55 @@ public sealed class NativeProgramDiagnosticsPhase12Tests
         Assert.Null(settings.Diagnostics.Integrity);
     }
 
+    [Theory]
+    [InlineData(false,"clear")]
+    [InlineData(false,"session")]
+    [InlineData(false,"cancel")]
+    [InlineData(true,"clear")]
+    [InlineData(true,"session")]
+    [InlineData(true,"cancel")]
+    public async Task Diagnostics_rechecks_admission_after_observer_notification(bool check,string change)
+    {
+        NativeIdentity? actor=Actor;
+        var backend=new Probe();
+        var vm=new NativeProgramDiagnosticsViewModel();
+        using var cancellation=new CancellationTokenSource();
+        vm.Attach(backend,()=>actor,()=>true);
+        if(check)await vm.RefreshAsync();
+        var readsBefore=backend.Reads;
+        bool observed=false;
+        vm.PropertyChanged+=(_,_)=>
+        {
+            if(!vm.IsBusy || observed)return;
+            observed=true;
+            if(change=="clear")vm.Clear();
+            else if(change=="session")actor=Actor with {SessionNonce="N2"};
+            else cancellation.Cancel();
+        };
+        if(check)await vm.CheckAsync(cancellation.Token);
+        else await vm.RefreshAsync(cancellation.Token);
+        Assert.True(observed);
+        Assert.Equal(readsBefore,backend.Reads);
+        Assert.Equal(0,backend.Checks);
+        Assert.Null(vm.Integrity);
+        Assert.False(vm.IsBusy);
+        if(!check || change!="cancel")Assert.Null(vm.Information);
+        else Assert.Equal(Info(),vm.Information);
+    }
+
     private sealed class Probe:INativeProgramDiagnosticsBackend
     {
         public NativeProgramInformation Information=Info();
         public NativeIntegrityStatus Result=NativeIntegrityStatus.Passed;
         public bool Throw;
         public int Checks;
+        public int Reads;
         public Task<NativeIntegrityStatus>? Pending;
         public Task<NativeProgramInformation> ReadProgramInformationAsync(NativeIdentity actor,CancellationToken ct=default)
-            =>Task.FromResult(Information);
+        {
+            Reads++;
+            return Task.FromResult(Information);
+        }
         public Task<NativeIntegrityStatus> CheckDatabaseIntegrityAsync(NativeIdentity actor,CancellationToken ct=default)
         {
             Checks++;
