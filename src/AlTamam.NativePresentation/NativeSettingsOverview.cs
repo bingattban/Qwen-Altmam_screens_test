@@ -164,14 +164,23 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     public async Task RefreshAsync(CancellationToken ct=default)
     {
         if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;
-        Clear();
-        if(_reader is null || Authorized is not { } actor) return;
-        long generation=_generation;
+        if(_reader is not { } reader || Authorized is not { } actor)
+        {
+            Clear(); return;
+        }
+        // Publish the loading gate before notifying observers. Clear() would notify
+        // while idle and permit a synchronous reentrant refresh or competing review.
+        long generation=++_generation;
         using var pending=CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _pending=pending; _loading=true; Notify();
+        _snapshot=null; _bound=null; _error="";
+        _pending=pending; _loading=true;
         try
         {
-            var result=await _reader.ReadSettingsOverviewAsync(actor,pending.Token);
+            Notify();
+            // A synchronous observer may navigate away, clear the page or revoke
+            // the session before the backend is invoked.
+            if(generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
+            var result=await reader.ReadSettingsOverviewAsync(actor,pending.Token);
             if(generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
             if(result is null || !result.Matches(actor))
                 throw new InvalidOperationException("Invalid canonical settings overview.");

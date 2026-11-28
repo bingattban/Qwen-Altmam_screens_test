@@ -188,6 +188,68 @@ public sealed class NativeSettingsOverviewPhase12Tests
         Assert.Equal(2,secondReader.Reads);
     }
 
+    [Fact]
+    public async Task Overview_publishes_loading_before_observers_can_reenter_or_open_review()
+    {
+        var settings=new SettingsPageViewModel();
+        var reader=new Reader();
+        settings.Overview.Attach(reader,()=>Actor,()=>!settings.IsReviewOpen);
+        settings.Diagnostics.Attach(new DiagnosticProbe(),()=>Actor,
+            ()=>!settings.IsReviewOpen && !settings.Overview.IsLoading);
+        var pending=new TaskCompletionSource<NativeSettingsOverview>(TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.Pending=pending.Task;
+        Task? duplicate=null;
+        bool observed=false;
+        bool loadingAtNotification=false;
+        bool diagnosticsAtNotification=true;
+        settings.Overview.PropertyChanged+=(_,_)=>{
+            if(observed)return;
+            observed=true;
+            loadingAtNotification=settings.Overview.IsLoading;
+            diagnosticsAtNotification=settings.Diagnostics.CanRun;
+            duplicate=settings.Overview.RefreshAsync();
+        };
+        var first=settings.Overview.RefreshAsync();
+        Assert.True(observed);
+        Assert.True(loadingAtNotification);
+        Assert.False(diagnosticsAtNotification);
+        Assert.NotNull(duplicate);
+        Assert.True(duplicate!.IsCompletedSuccessfully);
+        Assert.Equal(1,reader.Reads);
+        pending.SetResult(Data(Actor));
+        await first;
+        await duplicate;
+        Assert.Equal(Data(Actor),settings.Overview.Snapshot);
+        Assert.False(settings.Overview.IsLoading);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Overview_rechecks_session_and_generation_after_loading_notification(bool revokeSession)
+    {
+        NativeIdentity? actor=Actor;
+        var reader=new Reader();
+        var vm=new NativeSettingsOverviewViewModel();
+        vm.Attach(reader,()=>actor);
+        bool interrupted=false;
+        vm.PropertyChanged+=(_,_)=>{
+            if(interrupted || !vm.IsLoading)return;
+            interrupted=true;
+            if(revokeSession)actor=null;
+            else vm.Clear();
+        };
+        await vm.RefreshAsync();
+        Assert.True(interrupted);
+        Assert.Equal(0,reader.Reads);
+        Assert.Null(vm.Snapshot);
+        Assert.False(vm.IsLoading);
+        actor=Actor;
+        await vm.RefreshAsync();
+        Assert.Equal(1,reader.Reads);
+        Assert.Equal(Data(Actor),vm.Snapshot);
+    }
+
     private sealed class DiagnosticProbe:INativeProgramDiagnosticsBackend
     {
         public Task<NativeProgramInformation>? Pending;

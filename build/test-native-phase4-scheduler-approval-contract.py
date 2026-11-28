@@ -138,6 +138,19 @@ def problems(contents):
     need("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;")
     need("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;")
     need("overview_tests","Overview_rejects_overlapping_refresh_and_preserves_snapshot_during_diagnostics")
+    need("overview_tests","Overview_publishes_loading_before_observers_can_reenter_or_open_review")
+    need("overview_tests","Overview_rechecks_session_and_generation_after_loading_notification")
+    refresh=contents["theme_vm"].split("public async Task RefreshAsync(",1)
+    if len(refresh)!=2:
+        errors.append("Native settings refresh method missing")
+    else:
+        refresh_body=refresh[1].split("public void Clear()",1)[0]
+        ordered_tokens=("long generation=++_generation;", "_pending=pending; _loading=true;",
+                        "Notify();", "if(generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;",
+                        "await reader.ReadSettingsOverviewAsync(actor,pending.Token)")
+        positions=[refresh_body.find(token) for token in ordered_tokens]
+        if min(positions)<0 or positions!=sorted(positions):
+            errors.append("Settings refresh must publish loading and recheck session before backend read")
     need("settings_shell","ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical")
     need("settings_shell","Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings))")
     need("settings_templates","DefaultStatus.ConfirmCommand")
@@ -730,6 +743,9 @@ if __name__=="__main__":
         ("settings_shell","Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings))"),
         ("settings_templates","DefaultStatus.ConfirmCommand"),
         ("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;"),
+        ("theme_vm","_pending=pending; _loading=true;"),
+        ("overview_tests","Overview_publishes_loading_before_observers_can_reenter_or_open_review"),
+        ("overview_tests","Overview_rechecks_session_and_generation_after_loading_notification"),
         ("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;"),
         ("settings_shell","ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical"),
         ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
