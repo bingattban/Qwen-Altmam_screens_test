@@ -32,6 +32,11 @@ FILES={
  "settings_vm":"src/AlTamam.NativePresentation/NativePageViewModels.cs",
  "theme_vm":"src/AlTamam.NativePresentation/NativeSettingsOverview.cs",
  "overview_tests":"tests/AlTamam.UnitTests/NativeSettingsOverviewPhase12Tests.cs",
+ "monthly_config":"src/AlTamam.Application/Scheduling/AutomaticMonthlyExcelService.cs",
+ "monthly_review":"src/AlTamam.NativePresentation/NativeMonthlyExportScheduleReview.cs",
+ "monthly_view":"src/AlTamam.NativeDesktop/Views/NativeMonthlyExportScheduleView.xaml",
+ "monthly_tests":"tests/AlTamam.UnitTests/NativeMonthlyExportSchedulePhase12Tests.cs",
+ "monthly_sql_tests":"tests/AlTamam.Tests/Bridge/AutomaticMonthlyExcelTests.cs",
  "theme_tests":"tests/AlTamam.UnitTests/NativeThemePhase12Tests.cs",
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
@@ -85,9 +90,25 @@ def problems(contents):
         need("reader",token)
     need("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid")
     for token in ("Overview.Snapshot.MonthlyExport.EnabledLabel","Overview.Snapshot.MonthlyExport.LastSuccessLabel",
-                  "Overview.Snapshot.MonthlyExport.LastFailure","للقراءة فقط في هذه المرحلة"):
+                  "Overview.Snapshot.MonthlyExport.LastFailure","هذه البيانات لا تثبت تشغيل مجدول التصدير"):
         need("settings_templates",token)
     need("overview_tests","Monthly_export_overview_rejects_invalid_evidence_and_never_shows_replaced_session_state")
+    for token in ('payload.ContainsKey("expectedConfiguration")','previouslyEnabled!=expectedEnabled.Value',
+                  'previousDirectory!=expectedDirectory','BridgeErrorCodes.ConflictStale'):
+        need("monthly_config",token)
+    for token in ("SaveMonthlyExportScheduleAsync(","service.ConfigureAsync(new JsonObject",
+                  '["expectedConfiguration"]=new JsonObject','!intent.Matches(receipt) || !intent.Matches(current)'):
+        need("reader",token)
+    for token in ("ReferenceEquals(_current?.Invoke(),_snapshot)","_busy=_attempted=_uncertain=true",
+                  "intent.Matches(result)","RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role)"):
+        need("monthly_review",token)
+    need("settings_vm","MonthlyExportSchedule.ForceClear();")
+    need("settings_vm","|| MonthlyExportSchedule.IsOpen;")
+    need("settings_shell","!Settings.MonthlyExportSchedule.IsOpen")
+    need("settings_templates","<views:NativeMonthlyExportScheduleView/>")
+    need("monthly_view","MonthlyExportSchedule.ConfirmCommand")
+    need("monthly_tests","Unverified_receipt_blocks_repeat_and_success_message")
+    need("monthly_sql_tests","Reviewed_configuration_rejects_stale_settings_and_preserves_legacy_writes")
     need("settings_shell","(screen == NativeScreen.Administration ||\n            !ReferenceEquals(CurrentPage,Administration) || Administration.CanLeaveForHistoricalReview) &&")
     need("navigation_tests","Administration_review_blocks_all_other_navigation_and_same_page_does_not_reload")
     need("navigation_tests","Repeated_click_on_current_settings_does_not_start_second_read")
@@ -612,6 +633,10 @@ if __name__=="__main__":
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
         ("theme_vm","result.Theme!=theme"),
         ("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid"),
+        ("monthly_config","previousDirectory!=expectedDirectory"),
+        ("reader",'["expectedConfiguration"]=new JsonObject'),
+        ("monthly_review","intent.Matches(result)"),
+        ("settings_vm","MonthlyExportSchedule.ForceClear();"),
         ("reader",'RequireObject(data["autoMonthlyExcel"])'),
         ("settings_templates","Overview.Snapshot.MonthlyExport.LastSuccessLabel"),
         ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),

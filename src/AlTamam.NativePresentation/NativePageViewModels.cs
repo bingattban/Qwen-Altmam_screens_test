@@ -65,6 +65,8 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     private Func<NativeIdentity?>? _liveActor;
     private INativeManualBackupBackend? _backupBackend;
     private INativeBackupScheduleBackend? _scheduleBackend;
+    private INativeMonthlyExportScheduleBackend? _monthlyExportBackend;
+    private Func<NativeIdentity?>? _monthlyExportActor;
     private INativeBackupInspectionBackend? _inspectionBackend;
     private Func<NativeIdentity?>? _inspectionActor;
     private Func<NativeIdentity?>? _scheduleActor;
@@ -76,6 +78,9 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenScheduleCommand=new NativeCommand(_=>OpenSchedule(),_=>CanOpenSchedule);
         CloseScheduleCommand=new NativeCommand(_=>_ = CloseScheduleAsync(),_=>Schedule.CanClose);
         Schedule.PropertyChanged+=(_,_)=>NotifySessionChanged();
+        OpenMonthlyExportCommand=new NativeCommand(_=>OpenMonthlyExport(),_=>CanOpenMonthlyExport);
+        CloseMonthlyExportCommand=new NativeCommand(_=>_ = CloseMonthlyExportAsync(),_=>MonthlyExportSchedule.CanClose);
+        MonthlyExportSchedule.PropertyChanged+=(_,_)=>NotifySessionChanged();
         OpenManualBackupCommand=new NativeCommand(_=>OpenBackupReview(),_=>CanOpenBackup && Overview.Snapshot?.DirectoryAvailable==true);
         CloseBackupCommand=new NativeCommand(_=>_ = CloseBackupAsync(),_=>Backup.CanClose);
         Backup.PropertyChanged+=(_,_)=>NotifySessionChanged();
@@ -108,6 +113,29 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public NativeProgramDiagnosticsViewModel Diagnostics { get; }=new();
     public NativeManualBackupReview Backup { get; }=new();
     public NativeBackupScheduleReview Schedule { get; }=new();
+    public NativeMonthlyExportScheduleReview MonthlyExportSchedule {get;}=new();
+    public NativeCommand OpenMonthlyExportCommand {get;}
+    public NativeCommand CloseMonthlyExportCommand {get;}
+    public bool CanOpenMonthlyExport=>!IsReviewOpen && !Overview.IsLoading && _monthlyExportBackend is not null &&
+        _monthlyExportActor?.Invoke() is {} actor && Authorized(actor) &&
+        Overview.Snapshot is {HasMonthlyExport:true} snapshot && snapshot.Matches(actor);
+    public void AttachMonthlyExportSchedule(INativeMonthlyExportScheduleBackend backend,Func<NativeIdentity?> actor)
+    {
+        if(_monthlyExportBackend is not null)throw new InvalidOperationException("Monthly export backend already attached.");
+        _monthlyExportBackend=backend;_monthlyExportActor=actor;NotifySessionChanged();
+    }
+    public void OpenMonthlyExport()
+    {
+        if(CanOpenMonthlyExport && _monthlyExportBackend is {} backend && _monthlyExportActor is {} live &&
+            live() is {} actor && Overview.Snapshot is {} snapshot)
+            MonthlyExportSchedule.Open(backend,actor,snapshot,live,()=>Overview.Snapshot);
+    }
+    public async Task CloseMonthlyExportAsync(CancellationToken ct=default)
+    {
+        bool reload=MonthlyExportSchedule.Receipt is not null || MonthlyExportSchedule.NeedsReload;
+        if(!MonthlyExportSchedule.Close())return;
+        if(reload)await Overview.RefreshAsync(ct);
+    }
     public NativeBackupInspectionReview Inspection { get; }=new();
     public NativeCommand CloseInspectionCommand { get; }
     public bool CanExportRecovery=>!IsReviewOpen && !Overview.IsLoading &&
@@ -180,6 +208,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         OpenManualBackupCommand.NotifyAvailabilityChanged();
         CloseBackupCommand.NotifyAvailabilityChanged();
         OpenScheduleCommand.NotifyAvailabilityChanged(); CloseScheduleCommand.NotifyAvailabilityChanged();
+        OpenMonthlyExportCommand.NotifyAvailabilityChanged(); CloseMonthlyExportCommand.NotifyAvailabilityChanged();
         CloseInspectionCommand.NotifyAvailabilityChanged();
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanOpenInspection)));
         PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(CanExportRecovery)));
@@ -198,7 +227,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     public System.Windows.Input.ICommand OpenHistoricalCommand { get; }
     public System.Windows.Input.ICommand OpenHistoricalRangeCommand { get; }
     public System.Windows.Input.ICommand CloseHistoricalRangeCommand { get; }
-    public bool IsReviewOpen => Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen;
+    public bool IsReviewOpen => Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen || Schedule.IsOpen || Backup.IsOpen || CatchUp.IsOpen || Policy.IsOpen || Historical.IsOpen || HistoricalRange.IsOpen || HistoricalSingle.IsOpen || MonthlyExportSchedule.IsOpen;
     private static bool Authorized(NativeIdentity? actor) => actor is not null &&
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
@@ -333,6 +362,7 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
     {
         Inspection.ForceClear();
         Schedule.ForceClear();
+        MonthlyExportSchedule.ForceClear();
         Backup.ForceClear();
         Diagnostics.Clear();
         Overview.Clear();

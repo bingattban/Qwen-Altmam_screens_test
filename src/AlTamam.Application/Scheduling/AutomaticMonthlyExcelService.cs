@@ -62,12 +62,22 @@ public sealed class AutomaticMonthlyExcelService
                 "إعداد التصدير التلقائي متاح للإدارة فقط.");
         bool enabled;
         string exportTime, directory;
+        bool? expectedEnabled=null;
+        string? expectedTime=null,expectedDirectory=null;
         try
         {
             enabled = payload?["enabled"]?.GetValue<bool>()
                 ?? throw new ArgumentException("Missing enabled");
             exportTime = payload?["exportTime"]?.GetValue<string>() ?? "";
             directory = payload?["directory"]?.GetValue<string>()?.Trim() ?? "";
+            if(payload is not null && payload.ContainsKey("expectedConfiguration"))
+            {
+                if(payload["expectedConfiguration"] is not JsonObject expected)
+                    throw new ArgumentException("Missing expected configuration");
+                expectedEnabled=expected["enabled"]?.GetValue<bool>() ?? throw new ArgumentException("Missing expected enabled");
+                expectedTime=expected["exportTime"]?.GetValue<string>() ?? throw new ArgumentException("Missing expected time");
+                expectedDirectory=expected["directory"]?.GetValue<string>() ?? throw new ArgumentException("Missing expected directory");
+            }
             if (string.IsNullOrWhiteSpace(payload?["operationId"]?.GetValue<string>()))
                 throw new ArgumentException("Missing operationId");
         }
@@ -114,6 +124,9 @@ public sealed class AutomaticMonthlyExcelService
             }
             bool previouslyEnabled = old.GetValueOrDefault(Keys[0]) == "true";
             string previousDirectory = old.GetValueOrDefault(Keys[2], "");
+            if(expectedEnabled.HasValue && (previouslyEnabled!=expectedEnabled.Value ||
+                old.GetValueOrDefault(Keys[1],"21:00")!=expectedTime || previousDirectory!=expectedDirectory))
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير إعداد التصدير منذ المعاينة؛ حدّث الإعدادات قبل الحفظ.");
             bool reset = enabled && (!previouslyEnabled ||
                 !string.Equals(directory, previousDirectory, StringComparison.OrdinalIgnoreCase));
             string lastSuccess = reset ? "" : old.GetValueOrDefault(Keys[3], "");

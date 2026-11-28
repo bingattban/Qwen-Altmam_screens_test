@@ -407,7 +407,7 @@
                             <TextBlock Text="آخر تصدير ناجح مسجل" Margin="0,5,0,2"/>
                             <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastSuccessLabel}"/>
                             <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
-                            <TextBlock Text="للقراءة فقط في هذه المرحلة. هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية أو توفر المجلد حاليا." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                            <TextBlock Text="هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية أو توفر المجلد حاليا." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
                         </StackPanel>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>
@@ -451,6 +451,7 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+            <views:NativeMonthlyExportScheduleView/>
             <views:NativeManualBackupView/>
             <Button Content="إعداد النسخ الاحتياطي التلقائي" Command="{Binding OpenScheduleCommand}"
                     Padding="12,8" Margin="6"/>

@@ -1,0 +1,38 @@
+<UserControl x:Class="AlTamam.NativeDesktop.Views.NativeMonthlyExportScheduleView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" FlowDirection="RightToLeft">
+    <UserControl.Resources><BooleanToVisibilityConverter x:Key="ShowIfTrue"/></UserControl.Resources>
+    <Border Background="{DynamicResource NativeSurface}" BorderBrush="{DynamicResource NativeBorder}" BorderThickness="1" CornerRadius="6" Padding="14" Margin="6">
+        <StackPanel>
+            <TextBlock Text="إعداد التصدير التلقائي للتمام الشهري" FontWeight="Bold" FontSize="18" Foreground="{DynamicResource NativeHeading}"/>
+            <Button Content="مراجعة إعداد التصدير" Command="{Binding OpenMonthlyExportCommand}" Padding="12,6" Margin="0,8"/>
+            <StackPanel Visibility="{Binding MonthlyExportSchedule.IsOpen, Converter={StaticResource ShowIfTrue}}">
+                <TextBlock Text="الحالة المحفوظة قبل التعديل" FontWeight="Bold"/>
+                <TextBlock Text="{Binding MonthlyExportSchedule.Before.EnabledLabel}"/>
+                <TextBlock Text="{Binding MonthlyExportSchedule.Before.ExportTime}"/>
+                <TextBlock Text="{Binding MonthlyExportSchedule.Before.DirectoryLabel}" TextWrapping="Wrap"/>
+                <StackPanel IsEnabled="{Binding MonthlyExportSchedule.CanEdit}">
+                    <CheckBox Content="تفعيل التصدير التلقائي" IsChecked="{Binding MonthlyExportSchedule.Enabled, Mode=TwoWay}" Margin="0,8"/>
+                    <TextBlock Text="وقت التصدير (HH:mm)"/>
+                    <TextBox Text="{Binding MonthlyExportSchedule.Time, UpdateSourceTrigger=PropertyChanged}" MaxLength="5" FlowDirection="LeftToRight" Margin="0,5"/>
+                    <TextBlock Text="مجلد التصدير المستقل"/>
+                    <TextBox Text="{Binding MonthlyExportSchedule.Directory, UpdateSourceTrigger=PropertyChanged}" MaxLength="600" FlowDirection="LeftToRight" Margin="0,5"/>
+                    <Button Content="اختيار مجلد محلي" Click="OnChooseFolder" Padding="10,6"/>
+                    <Button Content="معاينة التغيير" Command="{Binding MonthlyExportSchedule.PreviewCommand}" Padding="10,6" Margin="0,8"/>
+                </StackPanel>
+                <StackPanel Visibility="{Binding MonthlyExportSchedule.HasPreview, Converter={StaticResource ShowIfTrue}}">
+                    <TextBlock Text="الإعداد المطلوب اعتماده" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding MonthlyExportSchedule.Prepared.EnabledLabel}"/>
+                    <TextBlock Text="{Binding MonthlyExportSchedule.Prepared.Time}"/>
+                    <TextBlock Text="{Binding MonthlyExportSchedule.Prepared.Directory}" TextWrapping="Wrap"/>
+                    <Button Content="حفظ الإعداد المعتمد" Command="{Binding MonthlyExportSchedule.ConfirmCommand}" Padding="10,6" Margin="0,8"/>
+                </StackPanel>
+                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding MonthlyExportSchedule.IsBusy, Converter={StaticResource ShowIfTrue}}"/>
+                <TextBlock Text="{Binding MonthlyExportSchedule.Error}" TextWrapping="Wrap" Foreground="{DynamicResource NativeDangerText}"/>
+                <TextBlock Text="{Binding MonthlyExportSchedule.CompletionMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeAccentText}"/>
+                <TextBlock Text="حفظ الإعداد لا ينشئ ملف Excel ولا يثبت تشغيل المجدول في هذه الواجهة التجريبية." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,6"/>
+                <Button Content="إغلاق مراجعة التصدير" Command="{Binding CloseMonthlyExportCommand}" Padding="10,6"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>
