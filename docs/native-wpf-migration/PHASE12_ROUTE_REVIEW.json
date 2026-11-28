@@ -131,12 +131,17 @@
     {
       "screenId": "screen_012",
       "routeKey": "RemovePersonnel",
-      "reviewStatus": "partial",
+      "reviewStatus": "candidate",
       "evidence": [
-        "src/AlTamam.NativeDesktop/Views/NativePersonnelSeparationView.xaml",
-        "src/AlTamam.NativePresentation/NativePersonnelSeparationViewModel.cs"
+        "src/AlTamam.NativeDesktop/Views/NativePersonnelDirectoryView.xaml",
+        "src/AlTamam.NativePresentation/NativeRosterRemovalViewModel.cs",
+        "src/AlTamam.NativePresentation/NativeRosterRemovalEvidence.cs",
+        "src/AlTamam.Application/Roster/RosterAuthorizedCommands.cs",
+        "src/AlTamam.Application/Bridge/PersonRosterService.cs",
+        "tests/AlTamam.UnitTests/NativeRosterRemovalCommitPhase12Tests.cs",
+        "tests/AlTamam.Tests/Bridge/Section02RosterLifecycleTests.cs"
       ],
-      "note": "Separation is present; exact legacy removal-from-strength workflow requires comparison, not assumed equivalent.",
+      "note": "Native explicit current-page archive selection, canonical preview, identity and account-suspension acknowledgement and atomic archive commit; exact per-member revisions and receipt, no automatic retry or hard deletion. Distinct from separation. Source-level candidate; physical acceptance remains outstanding.",
       "functionalParityVerified": false
     },
     {
