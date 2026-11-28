@@ -211,6 +211,37 @@ public sealed class NativeHistoricalSettingsPhase10Tests
         Assert.Empty(fake.SingleCommits);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Administration_shortcut_waits_for_overview_and_discards_logged_out_continuation(bool logout)
+    {
+        var fake=new Fake();
+        var shell=new NativeShellViewModel();
+        shell.Settings.AttachHistorical(fake,fake,fake,()=>shell.IsAuthenticated?fake.Principal:null);
+        var pending=new TaskCompletionSource<NativeSettingsOverview>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.Settings.Overview.Attach(new OverviewProbe(pending.Task),()=>shell.IsAuthenticated?fake.Principal:null,
+            ()=>!shell.Settings.IsReviewOpen && ReferenceEquals(shell.CurrentPage,shell.Settings));
+        await shell.InitializeAuthenticationAsync(fake);
+        Assert.True(await shell.LoginAsync("admin","Abc123"));
+        shell.NavigateCommand.Execute(NativeScreen.Administration);
+        var opening=shell.OpenAdministrativeHistoricalAsync();
+        Assert.Same(shell.Settings,shell.CurrentPage);
+        Assert.True(shell.Settings.Overview.IsLoading);
+        Assert.False(shell.Settings.Historical.IsOpen);
+        Assert.False(shell.Settings.CanOpenHistorical);
+        if(logout)await shell.LogoutAsync();
+        pending.SetResult(new NativeSettingsOverview(Admin.Username,Admin.Role,@"E:\AlTamam",true,"16:00",true,3,null,"","light"));
+        await opening;
+        Assert.Equal(!logout,shell.Settings.Historical.IsOpen);
+        if(!logout)Assert.True(shell.Settings.Historical.Close());
+    }
+
+    private sealed class OverviewProbe(Task<NativeSettingsOverview> pending):INativeSettingsOverviewReader
+    {
+        public Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default)=>pending;
+    }
+
     private sealed class Fake : INativeHistoricalPeriodReader, INativeHistoricalRangeBackend, INativeClosedDayCorrectionBackend, INativeAuthenticationBackend
     {
         public NativeIdentity Principal=Admin;

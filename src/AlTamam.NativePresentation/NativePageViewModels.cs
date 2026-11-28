@@ -292,11 +292,11 @@ public sealed class SettingsPageViewModel : NativePageViewModel, System.Componen
         AlTamam.Domain.Policies.RoleAuthorizationPolicy.CanExecuteClosedDayEmergencyOverride(actor.Role);
     private bool HasCatchUpAccess => _backend is not null && Authorized(_liveActor?.Invoke());
     private bool HasPolicyAccess => _policyBackend is not null && Authorized(_policyActor?.Invoke());
-    public bool CanOpenCatchUp => HasCatchUpAccess && !IsReviewOpen;
-    public bool CanOpenPolicy => HasPolicyAccess && !IsReviewOpen;
+    public bool CanOpenCatchUp => HasCatchUpAccess && !IsReviewOpen && !Overview.IsLoading;
+    public bool CanOpenPolicy => HasPolicyAccess && !IsReviewOpen && !Overview.IsLoading;
     private bool HasHistoricalAccess => _historicalReader is not null && _historicalBackend is not null &&
         _historicalCatalogue is not null && Authorized(_historicalActor?.Invoke());
-    public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen;
+    public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;
     public bool CanOpenHistoricalRange => HasHistoricalAccess && Historical.CanEdit && Historical.HasEvidence &&
         !CatchUp.IsOpen && !Policy.IsOpen && !HistoricalRange.IsOpen && !HistoricalSingle.IsOpen;
     public bool CanOpenHistoricalSingle => CanOpenHistoricalRange && Historical.Evidence is { } evidence &&

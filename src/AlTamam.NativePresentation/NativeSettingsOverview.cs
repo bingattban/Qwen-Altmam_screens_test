@@ -163,7 +163,7 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
     }
     public async Task RefreshAsync(CancellationToken ct=default)
     {
-        if(IsSavingTheme || _canRefresh?.Invoke()==false) return;
+        if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;
         Clear();
         if(_reader is null || Authorized is not { } actor) return;
         long generation=_generation;

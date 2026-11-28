@@ -167,7 +167,7 @@ def problems(content):
     require("period_review","_scopeLocked?.Invoke()!=true")
     for token in ("ReferenceEquals(CurrentPage,Administration)", "Administration.CanLeaveForHistoricalReview",
                   "Settings.CanOpenHistorical", "CanNavigate(NativeScreen.Settings)",
-                  "_navigateCommand.Execute(NativeScreen.Settings)", "Settings.OpenHistoricalCommand.Execute(null)"):
+                  "_navigateCommand.Execute(NativeScreen.Settings)", "Settings.OpenHistoricalCommand.Execute(null)", "await refresh;", "ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical"):
         require("shell",token)
     for token in ("CanLeaveForHistoricalReview => !Removal.IsOpen && !_loading && !ColumnLayout.IsOpen", "!Mutation.HasUnverifiedCommit",
                   "!ReportHistory.IsOpen && !GroupReport.IsOpen", "Changed(nameof(CanLeaveForHistoricalReview))"):

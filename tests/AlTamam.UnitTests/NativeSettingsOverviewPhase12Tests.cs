@@ -151,6 +151,52 @@ public sealed class NativeSettingsOverviewPhase12Tests
         Assert.False(vm.IsLoading);
     }
 
+    [Fact]
+    public async Task Overview_rejects_overlapping_refresh_and_preserves_snapshot_during_diagnostics()
+    {
+        var settings=new SettingsPageViewModel();
+        var reader=new Reader();
+        settings.Overview.Attach(reader,()=>Actor,()=>!settings.IsReviewOpen);
+        settings.Diagnostics.Attach(new DiagnosticProbe(),()=>Actor,()=>!settings.IsReviewOpen && !settings.Overview.IsLoading);
+        var pending=new TaskCompletionSource<NativeSettingsOverview>(TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.Pending=pending.Task;
+        var first=settings.Overview.RefreshAsync();
+        Assert.True(settings.Overview.IsLoading);
+        Assert.False(settings.Diagnostics.CanRun);
+        await settings.Overview.RefreshAsync();
+        Assert.Equal(1,reader.Reads);
+        pending.SetResult(Data(Actor));await first;
+        var snapshot=settings.Overview.Snapshot;
+        Assert.NotNull(snapshot);
+        var diagnostics=new TaskCompletionSource<NativeProgramInformation>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Use a separate settings instance to preserve the one-time backend attachment contract.
+        var second=new SettingsPageViewModel();
+        var secondReader=new Reader();
+        second.Overview.Attach(secondReader,()=>Actor,()=>!second.IsReviewOpen);
+        second.Diagnostics.Attach(new DiagnosticProbe{Pending=diagnostics.Task},()=>Actor,()=>!second.IsReviewOpen && !second.Overview.IsLoading);
+        await second.Overview.RefreshAsync();
+        var original=second.Overview.Snapshot;
+        var read=second.Diagnostics.RefreshAsync();
+        Assert.True(second.IsReviewOpen);
+        Assert.False(second.Overview.RefreshCommand.CanExecute(null));
+        await second.Overview.RefreshAsync();
+        Assert.Same(original,second.Overview.Snapshot);
+        Assert.Equal(1,secondReader.Reads);
+        diagnostics.SetResult(new("0.0.403-ci","X86","10.0.0",true,12));await read;
+        Assert.False(second.IsReviewOpen);
+        await second.Overview.RefreshAsync();
+        Assert.Equal(2,secondReader.Reads);
+    }
+
+    private sealed class DiagnosticProbe:INativeProgramDiagnosticsBackend
+    {
+        public Task<NativeProgramInformation>? Pending;
+        public Task<NativeProgramInformation> ReadProgramInformationAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Pending??Task.FromResult(new NativeProgramInformation("0.0.403-ci","X86","10.0.0",true,12));
+        public Task<NativeIntegrityStatus> CheckDatabaseIntegrityAsync(NativeIdentity actor,CancellationToken ct=default)
+            =>Task.FromResult(NativeIntegrityStatus.Passed);
+    }
+
     private sealed class Reader:INativeSettingsOverviewReader
     {
         public int Reads;

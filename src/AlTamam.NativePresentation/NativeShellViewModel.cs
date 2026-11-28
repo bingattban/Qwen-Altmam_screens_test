@@ -19,6 +19,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
     private readonly NativeCommand _openAdministrativeHistoricalCommand;
     private readonly NativeCommand _openRosterExportCommand;
     private NativePageViewModel _currentPage;
+    private Task _settingsEntryRefresh=Task.CompletedTask;
     private INativeAuthenticationBackend? _backend;
     private NativeIdentity? _active;
     private bool _isReady;
@@ -112,12 +113,12 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
                     if (screen == NativeScreen.Accounts)
                         _ = Accounts.RefreshAsync();
                     if (screen == NativeScreen.Settings)
-                        _ = Settings.Overview.RefreshAsync();
+                        _settingsEntryRefresh = Settings.Overview.RefreshAsync();
                 }
             },
             parameter => parameter is NativeScreen screen && CanNavigate(screen));
         _openAdministrativeHistoricalCommand = new NativeCommand(
-            _ => OpenAdministrativeHistorical(), _ => CanOpenAdministrativeHistorical());
+            _ => _ = OpenAdministrativeHistoricalAsync(), _ => CanOpenAdministrativeHistorical());
         _openRosterExportCommand = new NativeCommand(_ => OpenRosterExport(), _ => CanOpenRosterExport());
         _navigateCommand.CanExecuteChanged += (_, _) =>
         {
@@ -173,7 +174,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         if (reader is INativePersonnelDirectoryReader personnelReader)
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeSettingsOverviewReader overviewReader)
-            Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen && !Settings.Schedule.IsOpen && !Settings.Inspection.IsOpen && !Settings.MonthlyExportSchedule.IsOpen && !Settings.AttendanceClock.IsOpen && !Settings.DefaultStatus.IsOpen);
+            Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings));
         if (reader is INativeThemeBackend themeBackend)
             Settings.Overview.AttachTheme(themeBackend, () => !Settings.IsReviewOpen &&
                 ReferenceEquals(CurrentPage,Settings));
@@ -257,11 +258,15 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         Administration.CanLeaveForHistoricalReview && Settings.CanOpenHistorical &&
         CanNavigate(NativeScreen.Settings);
 
-    private void OpenAdministrativeHistorical()
+    public async Task OpenAdministrativeHistoricalAsync()
     {
-        if (!CanOpenAdministrativeHistorical()) return;
+        if (!CanOpenAdministrativeHistorical() || _active is not {} actor) return;
         _navigateCommand.Execute(NativeScreen.Settings);
-        if (ReferenceEquals(CurrentPage,Settings))
+        if (!ReferenceEquals(CurrentPage,Settings))return;
+        var refresh=_settingsEntryRefresh;
+        await refresh;
+        if (_active==actor && ReferenceEquals(CurrentPage,Settings) &&
+            ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical)
             Settings.OpenHistoricalCommand.Execute(null);
     }
 
