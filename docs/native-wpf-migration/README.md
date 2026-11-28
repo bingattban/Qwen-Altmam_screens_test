@@ -2561,3 +2561,22 @@ Base `f7ac543838ad56c61ca641dc7dfa99c7a92ce2a7` (#130; exact-head Core 461042718
 ## Phase 12.08g.3 — native host monthly Excel scheduler lifecycle
 
 Base `976f7f3345308a89c10f00e5e290936b2f270efb` (#131; exact-head Core 46108466519 and Release 46108466524 passed, nine shards, actual Windows E2E, x86 development Portable and SHA256). Link exact original AutomaticMonthlyExcelSchedulerService source, use existing NativeAutomaticSchedulerGate and recovered host database, start once after native initialization, stop all three schedulers and admitted foreground operations before disposal/restore/reset. Shared per-database service gate serializes configuration with active export, preventing old configuration success after new configuration save. Original schedule, opt-in defaults and closed-period behavior remain unchanged. Add real SQLCipher scheduler startup/export/drain test and static positive/negative lifecycle contracts. Screen_054 remains partial pending full original settings comparison; 64 candidate/5 partial, no physical parity claim. CI pending. No schema/dependency changes; final four packages outstanding.
+
+
+## Phase 12.08g.4a — screen_054 source comparison and scheduler status wording
+
+Base `a102369fb32c303ae3e97b69917a1097d5778734` (#132; exact-head Core 46111817701 and Release 46111817733 passed, nine shards, 1,162+ test coverage guard, Windows E2E and development x86 Portable 0.0.401-ci acceptance and independent SHA256). Full customer packages and clean-machine acceptance remain outstanding.
+
+Compared the original `src/AlTamam.WebUI/assets/js/admin-settings.js` renderSettings function with `NativeSectionTemplates.xaml`, `NativePageViewModels.cs`, `NativeManualBackupView.xaml`, `NativeSettingsOverview.cs` and `NativeDashboardContinuationContracts.cs`. This is source-level triage, not behavioral parity or a release claim.
+
+| Legacy settings area | Native evidence / remaining work |
+| --- | --- |
+| Account and version | Overview and Diagnostics bindings; verify shell logout and role visibility in physical tests. |
+| Automatic attendance time, daily lock time and default status | Dashboard contract exposes due time and configured only. Native settings lacks the original three-field editing UI. Next: typed canonical read of GetAutoAttendancePolicy and active statuses, excluding STS-LEAVE and STS-PERMISSION from timeless fallback choices; then reviewed independent SetAttendanceSchedule and SetAutoAttendanceDefaultStatus writes with per-field receipts, live authorization and stale-state handling. Preserve original defaults and scheduling logic. |
+| Shared output directory and verified manual backup | NativeManualBackupView exposes folder selection, confirmation and verified receipt; verify unavailable-folder recovery and original shared Excel output semantics. |
+| Automatic backup | Native schedule review and original host scheduler; verify role, time and retention boundary cases physically. |
+| Automatic monthly Excel | Native settings state, reviewed configuration and original host scheduler. Correct outdated overview warning to distinguish saved settings, scheduler lifecycle and actual export success; require current status text in existing fatal guard. |
+| Database integrity | Diagnostics check and information view; verify read-only behavior on actual Windows. |
+| Backup inspection, restore and reset | Native inspection/preview and guarded recovery/reset actions; preserve stricter canonical activation authorization and confirm physical paths separately. |
+
+No schema, dependencies, role policy, scheduling logic, package workflow or production switch changed. Screen_054 stays partial; 64 candidate/5 partial, all functionalParityVerified=false. CI pending for this head. Do not mark route accepted until remaining policy controls and physical comparison complete.
