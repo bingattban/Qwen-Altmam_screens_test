@@ -417,7 +417,7 @@
                             <TextBlock Text="آخر تصدير ناجح مسجل" Margin="0,5,0,2"/>
                             <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastSuccessLabel}"/>
                             <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.LastFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
-                            <TextBlock Text="هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية أو توفر المجلد حاليا." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                            <TextBlock Text="يعمل المجدول الأصلي أثناء تشغيل البرنامج. هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا؛ حدّث الإعدادات لعرض آخر نتيجة." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
                         </StackPanel>
                         <TextBlock Text="المظهر المحفوظ" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.ThemeLabel}"/>

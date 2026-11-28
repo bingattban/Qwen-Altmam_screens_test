@@ -92,7 +92,7 @@ def problems(contents):
         need("reader",token)
     need("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid")
     for token in ("Overview.Snapshot.MonthlyExport.EnabledLabel","Overview.Snapshot.MonthlyExport.LastSuccessLabel",
-                  "Overview.Snapshot.MonthlyExport.LastFailure","هذه البيانات لا تثبت تشغيل مجدول التصدير"):
+                  "Overview.Snapshot.MonthlyExport.LastFailure","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"):
         need("settings_templates",token)
     need("overview_tests","Monthly_export_overview_rejects_invalid_evidence_and_never_shows_replaced_session_state")
     for token in ('new AutoAttendancePolicyService(database).GetAsync(ct).ConfigureAwait(false),"GetAutoAttendancePolicy(settings)"',
@@ -118,6 +118,8 @@ def problems(contents):
     need("settings_vm","|| MonthlyExportSchedule.IsOpen;")
     need("settings_shell","!Settings.MonthlyExportSchedule.IsOpen")
     need("settings_templates","<views:NativeMonthlyExportScheduleView/>")
+    if "هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية" in contents["settings_templates"]:
+        errors.append("Native settings overview retains obsolete pre-scheduler warning")
     need("monthly_view","MonthlyExportSchedule.ConfirmCommand")
     need("monthly_tests","Unverified_receipt_blocks_repeat_and_success_message")
     need("monthly_sql_tests","Reviewed_configuration_rejects_stale_settings_and_preserves_legacy_writes")
@@ -677,6 +679,7 @@ if __name__=="__main__":
         ("reader",'RequiredText(policy,"dailyLockTimeLocal")'),
         ("theme_vm","AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)"),
         ("settings_templates","Overview.Snapshot.AttendanceSettings.DefaultLabel"),
+        ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),
         ("monthly_review","intent.Matches(result)"),
