@@ -127,9 +127,12 @@ public sealed class NativeSettingsOverviewViewModel : INotifyPropertyChanged
         if(!CanSaveTheme(theme) || _themeBackend is not { } backend || Authorized is not { } actor) return;
         long generation=++_generation;
         using var pending=CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _pending=pending; _savingTheme=true; _error=""; Notify();
+        _pending=pending; _savingTheme=true; _error="";
         try
         {
+            Notify();
+            // Observers may clear the page, revoke the session or cancel the operation.
+            if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
             var result=await backend.SaveThemeAsync(actor,theme,pending.Token);
             if(generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
             if(result is null || !result.Matches(actor) || result.Theme!=theme)
