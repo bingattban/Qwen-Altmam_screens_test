@@ -173,7 +173,7 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
         if (reader is INativePersonnelDirectoryReader personnelReader)
             Administration.AttachReader(personnelReader, () => _active);
         if (reader is INativeSettingsOverviewReader overviewReader)
-            Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen && !Settings.Schedule.IsOpen && !Settings.Inspection.IsOpen && !Settings.MonthlyExportSchedule.IsOpen);
+            Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.Backup.IsOpen && !Settings.Schedule.IsOpen && !Settings.Inspection.IsOpen && !Settings.MonthlyExportSchedule.IsOpen && !Settings.AttendanceClock.IsOpen);
         if (reader is INativeThemeBackend themeBackend)
             Settings.Overview.AttachTheme(themeBackend, () => !Settings.IsReviewOpen &&
                 ReferenceEquals(CurrentPage,Settings));
@@ -185,6 +185,8 @@ public sealed class NativeShellViewModel : INotifyPropertyChanged
             Settings.AttachBackupInspection(inspectionBackend, () => _active);
         if (reader is INativeBackupScheduleBackend scheduleBackend)
             Settings.AttachBackupSchedule(scheduleBackend, () => _active);
+        if (reader is INativeAttendanceClockBackend clockBackend)
+            Settings.AttachAttendanceClock(clockBackend, () => _active);
         if (reader is INativeMonthlyExportScheduleBackend monthlyExportBackend)
             Settings.AttachMonthlyExportSchedule(monthlyExportBackend, () => _active);
         if (reader is INativeManualBackupBackend backupBackend)

@@ -104,6 +104,31 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
+    public async Task Reviewed_clock_rejects_stale_value_and_preserves_other_clock_and_legacy_writes()
+    {
+        var policy=new AutoAttendancePolicyService(_db);
+        var due=new JsonObject{["dueTimeLocal"]="07:15",["expectedValue"]="08:00",["operationId"]="NATIVE-DUE-REVIEW-001"};
+        var saved=await policy.SetScheduleAsync(due,Admin,default);
+        Assert.True(saved.Success,saved.UserMessage);
+        var replay=await policy.SetScheduleAsync((JsonObject)due.DeepClone(),Admin,default);
+        Assert.True(replay.Success);
+        Assert.Equal(saved.AuditEventId,replay.AuditEventId);
+        var stale=await policy.SetScheduleAsync(new JsonObject{["dueTimeLocal"]="09:00",["expectedValue"]="08:00",
+            ["operationId"]="NATIVE-DUE-STALE-002"},Admin,default);
+        Assert.False(stale.Success);Assert.Equal(BridgeErrorCodes.ConflictStale,stale.ErrorCode);
+        var lockChange=await policy.SetScheduleAsync(new JsonObject{["dailyLockTimeLocal"]="19:00",
+            ["expectedValue"]="20:00",["operationId"]="NATIVE-LOCK-REVIEW-003"},Admin,default);
+        Assert.True(lockChange.Success);
+        var state=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("07:15",state["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("19:00",state["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.False(state["configured"]!.GetValue<bool>());
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.True((await policy.SetScheduleAsync(new JsonObject{["dueTimeLocal"]="08:30",
+            ["operationId"]="NATIVE-DUE-LEGACY-004"},Admin,default)).Success);
+    }
+
+    [Fact]
     public async Task ScheduledDueAndDailyLock_AreIndependentAuthorizedPersistentAndIdempotent()
     {
         var policy=new AutoAttendancePolicyService(_db);

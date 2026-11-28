@@ -171,6 +171,13 @@ public sealed class AutoAttendancePolicyService
     private async Task<BridgeResponse> SetSingleClockAsync(string key,string value,
         JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
+        string? expected=null;
+        if(payload?.ContainsKey("expectedValue")==true)
+        {
+            try { expected=payload["expectedValue"]?.GetValue<string>(); }
+            catch(InvalidOperationException) { }
+            if(!IsValidClock(expected))return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"قيمة المراجعة السابقة غير صالحة.");
+        }
         if(!IsValidClock(value))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "وقت التحضير أو القفل غير صالح؛ استخدم الصيغة HH:mm.",
@@ -186,6 +193,8 @@ public sealed class AutoAttendancePolicyService
             prior.Parameters.AddWithValue("$key",key);
             string old=(await prior.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()
                 ??(key==DueTimeKey?DefaultDueTime:DefaultLockTime);
+            if(expected is not null && (IsValidClock(old)?old:(key==DueTimeKey?DefaultDueTime:DefaultLockTime))!=expected)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير الوقت المحفوظ منذ المعاينة؛ حدّث الإعدادات.");
             string? auditEventId=null;
             if(old!=value)
             {
