@@ -69,9 +69,11 @@ public sealed class NativeProgramDiagnosticsViewModel : INotifyPropertyChanged
         using var pending=CancellationTokenSource.CreateLinkedTokenSource(ct);
         _pending=pending; _busy=true; _error=""; _integrity=null;
         if(!check) { _information=null; _bound=null; }
-        Notify();
         try
         {
+            Notify();
+            // Synchronous observers may revoke the session or cancel before dispatch.
+            if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;
             if(check)
             {
                 var result=await backend.CheckDatabaseIntegrityAsync(actor,pending.Token);

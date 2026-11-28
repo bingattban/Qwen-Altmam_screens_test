@@ -449,6 +449,20 @@ def problems(contents):
                   "if(!CanRun || (check && Information is null)",
                   "_pending?.Cancel()", "NotifyAvailability()"):
         need("diagnostics_vm",token)
+    need("diagnostics_tests","Diagnostics_rechecks_admission_after_observer_notification")
+    diag=contents["diagnostics_vm"].split("private async Task RunAsync(",1)
+    if len(diag)!=2:
+        errors.append("Native diagnostics admission method missing")
+    else:
+        diag_body=diag[1].split("public void Clear()",1)[0]
+        diag_tokens=("long generation=++_generation;", "_pending=pending; _busy=true;",
+                     "try\n        {\n            Notify();",
+                     "if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;",
+                     "await backend.CheckDatabaseIntegrityAsync(actor,pending.Token)",
+                     "await backend.ReadProgramInformationAsync(actor,pending.Token)")
+        positions=[diag_body.find(token) for token in diag_tokens]
+        if min(positions)<0 or positions!=sorted(positions):
+            errors.append("Diagnostics must publish admission and recheck session before either backend call")
     for token in ("Overview.IsSavingTheme || Diagnostics.IsBusy || Inspection.IsOpen",
                   "Diagnostics.Clear();","Diagnostics.NotifyAvailability();"):
         need("settings_vm",token)
@@ -742,6 +756,9 @@ if __name__=="__main__":
         ("reset_service","IsNativeSessionLiveAsync(c,t,actor,ct)"),
         ("reader","new SettingsReadBackupService(database).Integrity()"),
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
+        ("diagnostics_vm","_pending=pending; _busy=true;"),
+        ("diagnostics_vm","if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;"),
+        ("diagnostics_tests","Diagnostics_rechecks_admission_after_observer_notification"),
         ("theme_vm","result.Theme!=theme"),
         ("theme_vm","_pending=pending; _savingTheme=true;"),
         ("theme_vm","if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;"),
