@@ -43,6 +43,8 @@ FILES={
  "attendance_clock_service":"src/AlTamam.Application/Bridge/AutoAttendancePolicyService.cs",
  "attendance_clock_tests":"tests/AlTamam.UnitTests/NativeAttendanceClockPhase12Tests.cs",
  "attendance_clock_sql":"tests/AlTamam.Tests/Bridge/AutoAttendanceDefaultPolicyTests.cs",
+ "default_status_review":"src/AlTamam.NativePresentation/NativeDefaultStatusReview.cs",
+ "default_status_tests":"tests/AlTamam.UnitTests/NativeDefaultStatusPhase12Tests.cs",
  "theme_tests":"tests/AlTamam.UnitTests/NativeThemePhase12Tests.cs",
  "diagnostics_vm":"src/AlTamam.NativePresentation/NativeProgramDiagnosticsViewModel.cs",
  "diagnostics_tests":"tests/AlTamam.UnitTests/NativeProgramDiagnosticsPhase12Tests.cs",
@@ -123,6 +125,18 @@ def problems(contents):
     need("settings_templates","AttendanceClock.ConfirmCommand")
     need("attendance_clock_tests","Clock_requires_exact_review_and_never_repeats_write")
     need("attendance_clock_sql","Reviewed_clock_rejects_stale_value_and_preserves_other_clock_and_legacy_writes")
+    for token in ("ReferenceEquals(choice,value)","Choice.Id!=Before.DefaultStatusId","_busy=_attempted=_uncertain=true","intent.Matches(result)"):
+        need("default_status_review",token)
+    need("attendance_clock_service","if(reviewed && (previous!=expectedStatus || name!=expectedName))")
+    for token in ('"GetActiveAttendanceStatuses(settings)"','Where(choice=>choice.Id is not ("STS-LEAVE" or "STS-PERMISSION"))',
+                  '["expectedDefaultStatusId"]=intent.Before.DefaultStatusId','["expectedStatusName"]=intent.Choice.Name'):
+        need("reader",token)
+    need("settings_vm","DefaultStatus.ForceClear();")
+    need("settings_vm","|| DefaultStatus.IsOpen || AttendanceClock.IsOpen")
+    need("settings_shell","!Settings.DefaultStatus.IsOpen")
+    need("settings_templates","DefaultStatus.ConfirmCommand")
+    need("default_status_tests","Only_canonical_eligible_choice_can_be_reviewed_and_saved_once")
+    need("attendance_clock_sql","Reviewed_default_rejects_stale_selection_or_renamed_target_and_replays_once")
     for token in ('payload.ContainsKey("expectedConfiguration")','previouslyEnabled!=expectedEnabled.Value',
                   'previousDirectory!=expectedDirectory','BridgeErrorCodes.ConflictStale'):
         need("monthly_config",token)
@@ -701,6 +715,10 @@ if __name__=="__main__":
         ("reader",'[intent.PayloadKey]=intent.Time,["expectedValue"]=intent.Previous'),
         ("settings_shell","!Settings.AttendanceClock.IsOpen"),
         ("settings_templates","AttendanceClock.ConfirmCommand"),
+        ("attendance_clock_service","if(reviewed && (previous!=expectedStatus || name!=expectedName))"),
+        ("reader",'["expectedDefaultStatusId"]=intent.Before.DefaultStatusId'),
+        ("settings_shell","!Settings.DefaultStatus.IsOpen"),
+        ("settings_templates","DefaultStatus.ConfirmCommand"),
         ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),

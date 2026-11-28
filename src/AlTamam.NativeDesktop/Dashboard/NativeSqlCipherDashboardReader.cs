@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativeRosterRemovalBackend, INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeMonthlyExportScheduleBackend, INativeAttendanceClockBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeMonthlyExportScheduleBackend, INativeAttendanceClockBackend, INativeDefaultStatusBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -508,6 +508,7 @@ public sealed class NativeSqlCipherDashboardReader(
             throw new InvalidDataException("Invalid settings identity or backup evidence.");
         var monthly=RequireObject(data["autoMonthlyExcel"]);
         NativeAttendanceSettingsState? attendanceSettings=null;
+        IReadOnlyList<NativeDefaultStatusChoice> defaultChoices=Array.Empty<NativeDefaultStatusChoice>();
         if(RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
         {
             var policy=RequiredObject(await new AutoAttendancePolicyService(database).GetAsync(ct).ConfigureAwait(false),"GetAutoAttendancePolicy(settings)");
@@ -516,6 +517,14 @@ public sealed class NativeSqlCipherDashboardReader(
             attendanceSettings=new NativeAttendanceSettingsState(RequiredText(policy,"dueTimeLocal"),
                 RequiredText(policy,"dailyLockTimeLocal"),policy["defaultStatusId"]?.GetValue<string>(),
                 policy["defaultStatusName"]?.GetValue<string>(),RequiredBoolean(policy,"configured"));
+            var choices=RequiredArray(await services.ListActiveStatusesAsync(ct).ConfigureAwait(false),"GetActiveAttendanceStatuses(settings)")
+                .Select(node=>
+                {
+                    var item=RequireObject(node);
+                    if(!RequiredBoolean(item,"active"))throw new InvalidDataException("Inactive default status choice.");
+                    return new NativeDefaultStatusChoice(RequiredText(item,"statusId"),RequiredText(item,"displayName"));
+                }).Where(choice=>choice.Id is not ("STS-LEAVE" or "STS-PERMISSION")).ToArray();
+            defaultChoices=Array.AsReadOnly(choices);
             await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
         }
@@ -529,11 +538,45 @@ public sealed class NativeSqlCipherDashboardReader(
             MonthlyExport=new NativeAutomaticMonthlyExcelState(RequiredBoolean(monthly,"enabled"),
                 RequiredText(monthly,"exportTime"),RequiredText(monthly,"directory"),
                 RequiredText(monthly,"lastSuccessDate"),RequiredText(monthly,"lastFailure")),
-            AttendanceSettings=attendanceSettings
+            AttendanceSettings=attendanceSettings,
+            DefaultStatusChoices=defaultChoices
         };
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");
         return overview;
+    }
+
+    public async Task<NativeAttendanceSettingsState> SaveDefaultStatusAsync(NativeIdentity actor,
+        NativeDefaultStatusIntent intent,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(intent is null || !intent.IsValid(actor))throw new UnauthorizedAccessException("Invalid default status intent.");
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Default status administration required.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var service=new AutoAttendancePolicyService(database);
+        var response=await service.SetAsync(new JsonObject
+        {
+            ["statusId"]=intent.Choice.Id,["expectedDefaultStatusId"]=intent.Before.DefaultStatusId,
+            ["expectedStatusName"]=intent.Choice.Name,["operationId"]=intent.OperationId
+        },principal,lifetime.Token).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!response.Success && response.Code is BridgeErrorCodes.ConflictStale or BridgeErrorCodes.ValidationError or
+            BridgeErrorCodes.Unauthorized or BridgeErrorCodes.CustomStatusInactive)
+            throw new NativeDefaultStatusRejectedException();
+        var receipt=RequiredObject(response,"SetAutoAttendanceDefaultStatus");
+        if(RequiredText(receipt,"defaultStatusId")!=intent.Choice.Id || RequiredText(receipt,"defaultStatusName")!=intent.Choice.Name ||
+            !RequiredBoolean(receipt,"configured") || response.AuditEventId is not { } audit || !audit.StartsWith("AUD-",StringComparison.Ordinal))
+            throw new InvalidDataException("Invalid default status receipt.");
+        var state=RequiredObject(await service.GetAsync(lifetime.Token).ConfigureAwait(false),"GetAutoAttendancePolicy(default)");
+        var current=new NativeAttendanceSettingsState(RequiredText(state,"dueTimeLocal"),RequiredText(state,"dailyLockTimeLocal"),
+            state["defaultStatusId"]?.GetValue<string>(),state["defaultStatusName"]?.GetValue<string>(),RequiredBoolean(state,"configured"));
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!intent.Matches(current))throw new InvalidDataException("Unverified default status.");
+        return current;
     }
 
     public async Task<NativeAttendanceSettingsState> SaveAttendanceClockAsync(NativeIdentity actor,
