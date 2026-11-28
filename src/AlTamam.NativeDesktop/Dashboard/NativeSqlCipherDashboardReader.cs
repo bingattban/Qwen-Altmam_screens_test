@@ -507,6 +507,18 @@ public sealed class NativeSqlCipherDashboardReader(
         if(RequiredText(data,"role")!=actor.Role.ToString() || !data.ContainsKey("lastAutoBackupDate"))
             throw new InvalidDataException("Invalid settings identity or backup evidence.");
         var monthly=RequireObject(data["autoMonthlyExcel"]);
+        NativeAttendanceSettingsState? attendanceSettings=null;
+        if(RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+        {
+            var policy=RequiredObject(await new AutoAttendancePolicyService(database).GetAsync(ct).ConfigureAwait(false),"GetAutoAttendancePolicy(settings)");
+            if(!policy.ContainsKey("defaultStatusId") || !policy.ContainsKey("defaultStatusName"))
+                throw new InvalidDataException("Missing canonical default status evidence.");
+            attendanceSettings=new NativeAttendanceSettingsState(RequiredText(policy,"dueTimeLocal"),
+                RequiredText(policy,"dailyLockTimeLocal"),policy["defaultStatusId"]?.GetValue<string>(),
+                policy["defaultStatusName"]?.GetValue<string>(),RequiredBoolean(policy,"configured"));
+            await VerifyContinuationIdentityAsync(actor,ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+        }
         var overview=new NativeSettingsOverview(RequiredText(data,"username"),actor.Role,
             RequiredText(data,"backupDirectory"),RequiredBoolean(data,"defaultDriveAvailable"),
             RequiredText(data,"backupTime"),RequiredBoolean(data,"automaticBackupEnabled"),
@@ -516,7 +528,8 @@ public sealed class NativeSqlCipherDashboardReader(
         {
             MonthlyExport=new NativeAutomaticMonthlyExcelState(RequiredBoolean(monthly,"enabled"),
                 RequiredText(monthly,"exportTime"),RequiredText(monthly,"directory"),
-                RequiredText(monthly,"lastSuccessDate"),RequiredText(monthly,"lastFailure"))
+                RequiredText(monthly,"lastSuccessDate"),RequiredText(monthly,"lastFailure")),
+            AttendanceSettings=attendanceSettings
         };
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");

@@ -645,7 +645,7 @@
         "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
         "src/AlTamam.NativePresentation/NativeSettingsOverview.cs"
       ],
-      "note": "Multiple settings implemented; automatic monthly Excel saved state now read from the original settings service. Explicit reviewed configuration and native canonical save added; original monthly scheduler now linked to native host startup/drain. Remaining legacy settings comparison and physical acceptance outstanding.",
+      "note": "Multiple settings implemented; automatic monthly Excel saved state now read from the original settings service. Explicit reviewed configuration and native canonical save added; original monthly scheduler now linked to native host startup/drain. Legacy settings panel compared: account/logout, backup folder and schedule, manual backup, monthly Excel, integrity, restore/reset have native surfaces. Attendance due/lock/default policy now exposed read-only for managers; three independent canonical writes and physical acceptance remain outstanding.",
       "functionalParityVerified": false
     },
     {

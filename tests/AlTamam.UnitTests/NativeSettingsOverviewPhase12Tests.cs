@@ -9,7 +9,7 @@ public sealed class NativeSettingsOverviewPhase12Tests
     private static readonly NativeIdentity Actor=new("USR-1","owner",UserRole.GeneralAdministration,"NONCE-A");
     private static NativeSettingsOverview Data(NativeIdentity actor)=>new(actor.Username,actor.Role,
         @"E:\AlTamam",true,"16:00",true,3,"2026-11-25","","light")
-        {MonthlyExport=new(false,"21:00","","","")};
+        {MonthlyExport=new(false,"21:00","","",""),AttendanceSettings=actor.Role==UserRole.Supervisor?null:new("08:00","20:00",null,null,false)};
     [Fact]
     public void Overview_validates_identity_schedule_and_retention_without_claiming_scheduler_running()
     {
@@ -54,6 +54,46 @@ public sealed class NativeSettingsOverviewPhase12Tests
         await vm.RefreshAsync();
         Assert.True(vm.Snapshot?.HasMonthlyExport==true);
         Assert.Equal("21:00",vm.Snapshot?.MonthlyExport?.ExportTime);
+        actor=Actor with{SessionNonce="NONCE-B"};
+        Assert.Null(vm.Snapshot);
+    }
+
+    [Fact]
+    public void Attendance_policy_evidence_validates_clocks_and_configured_status_without_inventing_a_default()
+    {
+        var empty=new NativeAttendanceSettingsState("08:00","20:00",null,null,false);
+        Assert.True(empty.IsValid);
+        Assert.Equal("لم تحدد حالة افتراضية",empty.DefaultLabel);
+        var active=empty with{DefaultStatusId="STS-PRESENT",DefaultStatusName="موجود",Configured=true};
+        Assert.True(active.IsValid);
+        Assert.Equal("موجود",active.DefaultLabel);
+        Assert.True((Data(Actor) with{AttendanceSettings=active}).Matches(Actor));
+        var retired=active with{Configured=false};
+        Assert.True(retired.IsValid);
+        Assert.NotEqual(active.DefaultLabel,retired.DefaultLabel);
+        Assert.False((active with{DueTime="24:00"}).IsValid);
+        Assert.False((active with{LockTime="8:00"}).IsValid);
+        Assert.False((active with{DefaultStatusId="STS-LEAVE"}).IsValid);
+        Assert.False((active with{DefaultStatusId="STS-PERMISSION"}).IsValid);
+        Assert.False((active with{DefaultStatusName=null}).IsValid);
+        Assert.False((empty with{Configured=true}).IsValid);
+        var supervisor=Actor with{Role=UserRole.Supervisor};
+        Assert.False((Data(supervisor) with{AttendanceSettings=active}).Matches(supervisor));
+    }
+
+    [Fact]
+    public async Task Attendance_policy_read_is_session_bound_and_rejects_malformed_evidence()
+    {
+        NativeIdentity? actor=Actor;
+        var reader=new Reader{InvalidAttendance=true};
+        var vm=new NativeSettingsOverviewViewModel();
+        vm.Attach(reader,()=>actor);
+        await vm.RefreshAsync();
+        Assert.Null(vm.Snapshot);Assert.NotEmpty(vm.Error);
+        reader.InvalidAttendance=false;
+        await vm.RefreshAsync();
+        Assert.True(vm.Snapshot?.HasAttendanceSettings==true);
+        Assert.Equal("20:00",vm.Snapshot?.AttendanceSettings?.LockTime);
         actor=Actor with{SessionNonce="NONCE-B"};
         Assert.Null(vm.Snapshot);
     }
@@ -114,7 +154,7 @@ public sealed class NativeSettingsOverviewPhase12Tests
     private sealed class Reader:INativeSettingsOverviewReader
     {
         public int Reads;
-        public bool Forged,InvalidMonthly;
+        public bool Forged,InvalidMonthly,InvalidAttendance;
         public Task<NativeSettingsOverview>? Pending;
         public Task<NativeSettingsOverview> ReadSettingsOverviewAsync(NativeIdentity actor,CancellationToken ct=default)
         {
@@ -122,6 +162,7 @@ public sealed class NativeSettingsOverviewPhase12Tests
             var data=Data(actor);
             if(Forged)data=data with{Username="other"};
             if(InvalidMonthly)data=data with{MonthlyExport=new(true,"25:00","","","")};
+            if(InvalidAttendance)data=data with{AttendanceSettings=new("08:00","25:00",null,null,false)};
             return Pending??Task.FromResult(data);
         }
     }
