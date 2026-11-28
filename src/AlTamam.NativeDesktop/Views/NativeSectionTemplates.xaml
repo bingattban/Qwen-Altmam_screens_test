@@ -397,6 +397,16 @@
                         <TextBlock Text="آخر نسخة تلقائية ناجحة مسجلة" FontWeight="SemiBold" Margin="0,8,0,3"/>
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupLabel}" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding Overview.Snapshot.LastBackupFailure}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
+                        <StackPanel Visibility="{Binding Overview.Snapshot.HasAttendanceSettings, Converter={StaticResource VisibilityIfTrue}}">
+                            <TextBlock Text="التحضير التلقائي وقفل التمام — السياسة المحفوظة" FontWeight="SemiBold" Margin="0,12,0,4"/>
+                            <TextBlock Text="وقت التحضير التلقائي" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.AttendanceSettings.DueTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="وقت قفل التمام اليومي" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.AttendanceSettings.LockTime}" FlowDirection="LeftToRight" HorizontalAlignment="Right"/>
+                            <TextBlock Text="الحالة الافتراضية عند عدم وجود تحضير أمس" Margin="0,5,0,2"/>
+                            <TextBlock Text="{Binding Overview.Snapshot.AttendanceSettings.DefaultLabel}" TextWrapping="Wrap"/>
+                            <TextBlock Text="قراءة الإعدادات المحفوظة فقط. لن ينشئ هذا العرض سجلات تحضير، ولن يغير موعد القفل أو الحالة الافتراضية." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,5,0,8"/>
+                        </StackPanel>
                         <StackPanel Visibility="{Binding Overview.Snapshot.HasMonthlyExport, Converter={StaticResource VisibilityIfTrue}}">
                             <TextBlock Text="التصدير التلقائي للتمام الشهري — الإعدادات المحفوظة" FontWeight="SemiBold" Margin="0,12,0,4"/>
                             <TextBlock Text="{Binding Overview.Snapshot.MonthlyExport.EnabledLabel}"/>

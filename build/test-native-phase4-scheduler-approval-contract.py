@@ -92,9 +92,19 @@ def problems(contents):
         need("reader",token)
     need("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid")
     for token in ("Overview.Snapshot.MonthlyExport.EnabledLabel","Overview.Snapshot.MonthlyExport.LastSuccessLabel",
-                  "Overview.Snapshot.MonthlyExport.LastFailure","هذه البيانات لا تثبت تشغيل مجدول التصدير"):
+                  "Overview.Snapshot.MonthlyExport.LastFailure","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"):
         need("settings_templates",token)
     need("overview_tests","Monthly_export_overview_rejects_invalid_evidence_and_never_shows_replaced_session_state")
+    for token in ('new AutoAttendancePolicyService(database).GetAsync(ct).ConfigureAwait(false),"GetAutoAttendancePolicy(settings)"',
+                  'if(RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))',
+                  'RequiredText(policy,"dailyLockTimeLocal")','AttendanceSettings=attendanceSettings'):
+        need("reader",token)
+    need("theme_vm","AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)")
+    need("theme_vm",'DefaultStatusId is not ("STS-LEAVE" or "STS-PERMISSION")')
+    for token in ("Overview.Snapshot.HasAttendanceSettings","Overview.Snapshot.AttendanceSettings.DueTime",
+                  "Overview.Snapshot.AttendanceSettings.LockTime","Overview.Snapshot.AttendanceSettings.DefaultLabel"):
+        need("settings_templates",token)
+    need("overview_tests","Attendance_policy_read_is_session_bound_and_rejects_malformed_evidence")
     for token in ('payload.ContainsKey("expectedConfiguration")','previouslyEnabled!=expectedEnabled.Value',
                   'previousDirectory!=expectedDirectory','BridgeErrorCodes.ConflictStale'):
         need("monthly_config",token)
@@ -108,7 +118,6 @@ def problems(contents):
     need("settings_vm","|| MonthlyExportSchedule.IsOpen;")
     need("settings_shell","!Settings.MonthlyExportSchedule.IsOpen")
     need("settings_templates","<views:NativeMonthlyExportScheduleView/>")
-    need("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا")
     if "هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية" in contents["settings_templates"]:
         errors.append("Native settings overview retains obsolete pre-scheduler warning")
     need("monthly_view","MonthlyExportSchedule.ConfirmCommand")
@@ -667,6 +676,10 @@ if __name__=="__main__":
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
         ("theme_vm","result.Theme!=theme"),
         ("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid"),
+        ("reader",'RequiredText(policy,"dailyLockTimeLocal")'),
+        ("theme_vm","AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)"),
+        ("settings_templates","Overview.Snapshot.AttendanceSettings.DefaultLabel"),
+        ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),
         ("monthly_review","intent.Matches(result)"),

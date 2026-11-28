@@ -17,12 +17,32 @@ public sealed record NativeAutomaticMonthlyExcelState(bool Enabled,string Export
     public string LastSuccessLabel=>LastSuccessDate.Length==0?"لا يوجد تصدير ناجح مسجل":LastSuccessDate;
 }
 
+// Read-only evidence from the original policy service. A retired or bounded saved
+// status can be displayed as unconfigured, never silently replaced.
+public sealed record NativeAttendanceSettingsState(string DueTime,string LockTime,string? DefaultStatusId,
+    string? DefaultStatusName,bool Configured)
+{
+    private static bool ValidClock(string value)=>value is {Length:5} &&
+        TimeOnly.TryParseExact(value,"HH:mm",CultureInfo.InvariantCulture,DateTimeStyles.None,out _);
+    public bool IsValid=>ValidClock(DueTime) && ValidClock(LockTime) &&
+        (DefaultStatusId is null || (DefaultStatusId.Length<=128 && !DefaultStatusId.Any(char.IsControl))) &&
+        (DefaultStatusName is null || !DefaultStatusName.Any(char.IsControl)) &&
+        (!Configured || (!string.IsNullOrWhiteSpace(DefaultStatusId) &&
+            DefaultStatusId is not ("STS-LEAVE" or "STS-PERMISSION") &&
+            !string.IsNullOrWhiteSpace(DefaultStatusName)));
+    public string DefaultLabel=>Configured?DefaultStatusName??"":
+        string.IsNullOrEmpty(DefaultStatusId)?"لم تحدد حالة افتراضية":
+        $"الحالة المحفوظة غير صالحة للتطبيق التلقائي: {DefaultStatusName??DefaultStatusId}";
+}
+
 public sealed record NativeSettingsOverview(string Username,UserRole Role,string BackupDirectory,
     bool DirectoryAvailable,string BackupTime,bool BackupEnabled,int RetentionCount,
     string? LastBackupDate,string LastBackupFailure,string Theme)
 {
     public NativeAutomaticMonthlyExcelState? MonthlyExport {get;init;}
     public bool HasMonthlyExport=>MonthlyExport is not null;
+    public NativeAttendanceSettingsState? AttendanceSettings {get;init;}
+    public bool HasAttendanceSettings=>AttendanceSettings is not null;
     public bool Matches(NativeIdentity actor)=>RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role) &&
         Username==actor.Username && Role==actor.Role &&
         !string.IsNullOrWhiteSpace(BackupDirectory) && !BackupDirectory.Any(char.IsControl) &&
@@ -30,7 +50,9 @@ public sealed record NativeSettingsOverview(string Username,UserRole Role,string
         (RetentionCount==0 || RetentionCount is >=2 and <=365) &&
         (LastBackupDate is null || DateOnly.TryParseExact(LastBackupDate,"yyyy-MM-dd",
             CultureInfo.InvariantCulture,DateTimeStyles.None,out _)) &&
-        LastBackupFailure is not null && (MonthlyExport is not {} monthly || monthly.IsValid) && Theme is "light" or "dark";
+        LastBackupFailure is not null && (MonthlyExport is not {} monthly || monthly.IsValid) &&
+        (AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)) &&
+        Theme is "light" or "dark";
     public string RoleLabel=>Role.ToArabicLabel();
     public string DirectoryLabel=>DirectoryAvailable?"متاح وفق فحص المسار الحالي":"غير متاح";
     public string BackupEnabledLabel=>BackupEnabled?"مفعّل في الإعدادات":"متوقف في الإعدادات";
