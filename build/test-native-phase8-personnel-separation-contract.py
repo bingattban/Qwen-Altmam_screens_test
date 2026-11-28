@@ -15,6 +15,8 @@ PATHS = {
     "canonical": "src/AlTamam.Application/Bridge/PersonnelSeparationService.cs",
     "removal": "src/AlTamam.NativePresentation/NativeRosterRemovalEvidence.cs",
     "removal_tests": "tests/AlTamam.UnitTests/NativeRosterRemovalPreviewPhase12Tests.cs",
+    "removal_vm": "src/AlTamam.NativePresentation/NativeRosterRemovalViewModel.cs",
+    "removal_commit_tests": "tests/AlTamam.UnitTests/NativeRosterRemovalCommitPhase12Tests.cs",
     "roster_service": "src/AlTamam.Application/Bridge/PersonRosterService.cs",
     "removal_sql_tests": "tests/AlTamam.Tests/Bridge/Section02RosterLifecycleTests.cs",
     "removal_gateway": "src/AlTamam.Application/Roster/RosterAuthorizedCommands.cs",
@@ -146,7 +148,7 @@ def problems(files):
 
     # Removal from force is archival, not the independent separation action.
     begin=files["backend"].find("public async Task<NativeRosterRemovalPreview> PreviewRosterRemovalAsync(")
-    end=files["backend"].find("public async Task<NativePersonnelSeparationPreview> PreviewSeparationAsync(",begin)
+    end=files["backend"].find("public async Task<NativeRosterRemovalReceipt> CommitRosterRemovalAsync(",begin)
     if not (0<=begin<end):
         errors.append("Native removal preview boundary missing.")
     else:
@@ -176,6 +178,33 @@ def problems(files):
                   "Any_blocker_disables_entire_batch_and_freezes_evidence",
                   "Reject_duplicate_or_unbounded_selection_and_invalid_receipt_fields"):
         require("removal_tests",token)
+    commit_end=files["backend"].find("public async Task<NativePersonnelSeparationPreview> PreviewSeparationAsync(",end)
+    if not (0<=end<commit_end):
+        errors.append("Archive commit boundary missing.")
+    else:
+        commit=files["backend"][end:commit_end]
+        for token in ("using var nativeOperation = operations.Enter();",
+                      "preview.SessionNonce!=actor.SessionNonce", "if(!reviewed.CanApprove)",
+                      "principal.SessionRevocation", ".RemoveAsync(principal,",
+                      '["expectedVersions"]=versions', '["operationId"]=operationId',
+                      "NativeRosterRemovalEvidence.ValidateReceipt(reviewed,"):
+            if token not in commit:
+                errors.append("Archive commit missing: "+token)
+        if commit.count(".RemoveAsync(principal,")!=1 or "PersonnelSeparationService" in commit:
+            errors.append("Archive commit must use exactly one original removal gateway.")
+    for token in ("_identityReviewed && _accountAcknowledged",
+                  "p.SessionNonce==_actor?.SessionNonce", "openGeneration==_openGeneration && CanEdit",
+                  "_attempted=true", "NativeRosterRemovalEvidence.ValidateReceipt(preview,receipt)",
+                  "_uncertainActor=actor", "actor!=_uncertainActor", "public void ForceCancel()"):
+        require("removal_vm",token)
+    require("roster_service",'payload.ContainsKey("expectedVersions")')
+    require("roster_service",'ReadLong(row,"rowVersion",-1)!=memberExpectedVersions[ids[i]]')
+    require("removal_sql_tests","ArchiveExplicitReviewedVersions_RejectsEqualSumForgeryBeforeAnyWrite")
+    for token in ("Nothing_selected_automatically_and_two_explicit_approvals_required",
+                  "Changed_selection_or_reason_invalidates_review_and_blocker_denies_entire_batch",
+                  "Ambiguous_receipt_blocks_reopen_and_replay_in_same_session",
+                  "Supervisor_and_replaced_session_cannot_commit"):
+        require("removal_commit_tests",token)
     for key in ("core", "release"):
         lines = files[key].splitlines()
         call = "python build/test-native-phase8-personnel-separation-contract.py"
@@ -201,6 +230,12 @@ if __name__ == "__main__":
     if issues:
         raise SystemExit("PHASE8 PERSONNEL SEPARATION FAIL:\n" + "\n".join(issues))
     for key, token in (
+        ("backend", "preview.SessionNonce!=actor.SessionNonce"),
+        ("backend", ".RemoveAsync(principal,"),
+        ("backend", '["expectedVersions"]=versions'),
+        ("removal_vm", "_identityReviewed && _accountAcknowledged"),
+        ("removal_vm", "NativeRosterRemovalEvidence.ValidateReceipt(preview,receipt)"),
+        ("roster_service", 'ReadLong(row,"rowVersion",-1)!=memberExpectedVersions[ids[i]]'),
         ("backend", ".PreviewRemovalAsync(principal,"),
         ("backend", 'RequiredArray(data,"expectedVersions")'),
         ("backend", "NativeRosterRemovalEvidence.ValidateAndFreeze(selection,"),
