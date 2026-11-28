@@ -104,6 +104,33 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
+    public async Task Reviewed_default_rejects_stale_selection_or_renamed_target_and_replays_once()
+    {
+        var policy=new AutoAttendancePolicyService(_db);
+        var selected=Selection("STS-PRESENT","NATIVE-DEFAULT-FIRST-001");
+        selected["expectedDefaultStatusId"]=null;
+        selected["expectedStatusName"]="موجود";
+        var saved=await policy.SetAsync(selected,Admin,default);
+        Assert.True(saved.Success,saved.UserMessage);
+        var replay=await policy.SetAsync((JsonObject)selected.DeepClone(),Admin,default);
+        Assert.True(replay.Success);Assert.Equal(saved.AuditEventId,replay.AuditEventId);
+        var stale=Selection("STS-ABSENT","NATIVE-DEFAULT-STALE-002");
+        stale["expectedDefaultStatusId"]=null;stale["expectedStatusName"]="غياب";
+        var denied=await policy.SetAsync(stale,Admin,default);
+        Assert.False(denied.Success);Assert.Equal(BridgeErrorCodes.ConflictStale,denied.ErrorCode);
+        var renamed=Selection("STS-ABSENT","NATIVE-DEFAULT-RENAME-003");
+        renamed["expectedDefaultStatusId"]="STS-PRESENT";renamed["expectedStatusName"]="اسم قديم";
+        var mismatch=await policy.SetAsync(renamed,Admin,default);
+        Assert.False(mismatch.Success);Assert.Equal(BridgeErrorCodes.ConflictStale,mismatch.ErrorCode);
+        var state=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("STS-PRESENT",state["defaultStatusId"]!.GetValue<string>());
+        Assert.Equal("08:00",state["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("20:00",state["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.True((await policy.SetAsync(Selection("STS-ABSENT","NATIVE-DEFAULT-LEGACY-004"),Admin,default)).Success);
+    }
+
+    [Fact]
     public async Task Reviewed_clock_rejects_stale_value_and_preserves_other_clock_and_legacy_writes()
     {
         var policy=new AutoAttendancePolicyService(_db);

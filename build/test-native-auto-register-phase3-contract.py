@@ -3,7 +3,8 @@
 
 Executed in Core and Release BEFORE expensive Windows tests. Native xUnit
 remains mandatory; negative fixture verifies every fail-closed invariant.
-No scheduler, mutation or skipped legacy WebView2 package acceptance is allowed.
+No scheduler or mutation is allowed in the dashboard/register read paths; the
+separately approved settings mutation is narrowly scoped. Legacy acceptance remains mandatory.
 """
 from pathlib import Path
 from native_theme_contract import check_visual_resources
@@ -93,12 +94,33 @@ def problems(data):
     for token in ("AutoAttendanceService", "_attendance.RunPendingAsync",
                   "RunPendingAsync(ct)"):
         need("scheduler",token)
-    # New C# WPF modal is purposely read-only; do not fake parity by
-    # directly updating attendance from an unreviewed click.
+    # The shared adapter also owns the approved Phase 12 default-status writer.
+    # Exempt only its exact canonical call, inside that one method and only
+    # when the authorization, session, receipt and read-back guards are present.
+    reader_scan=data["reader"]
+    writer_start="    public async Task<NativeAttendanceSettingsState> SaveDefaultStatusAsync("
+    writer_end="    public async Task<NativeAttendanceSettingsState> SaveAttendanceClockAsync("
+    approved_call = """        var response=await service.SetAsync(new JsonObject
+        {
+            ["statusId"]=intent.Choice.Id,["expectedDefaultStatusId"]=intent.Before.DefaultStatusId,
+            ["expectedStatusName"]=intent.Choice.Name,["operationId"]=intent.OperationId
+        },principal,lifetime.Token).ConfigureAwait(false);"""
+    writer_guards = ["using var nativeOperation = operations.Enter();","if(intent is null || !intent.IsValid(actor))","ResolveBackupPrincipalAsync(actor,ct)","RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role)","CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation)","var service=new AutoAttendancePolicyService(database);","RequiredObject(response,\"SetAutoAttendanceDefaultStatus\")","response.AuditEventId","if(!intent.Matches(current))"]
+    before, marker, remainder=reader_scan.partition(writer_start)
+    writer, boundary, after=remainder.partition(writer_end)
+    if (not marker or not boundary or reader_scan.count(writer_start)!=1 or
+            reader_scan.count(writer_end)!=1 or writer.count(approved_call)!=1 or
+            not all(token in writer for token in writer_guards)):
+        errors.append("Approved default-status writer scope or security evidence is invalid.")
+    else:
+        # Leave all other source, even the rest of the writer, subject to the ban.
+        reader_scan=before+marker+writer.replace(approved_call,"APPROVED_DEFAULT_STATUS_CALL",1)+boundary+after
+    # The dashboard and auto-register remain read-only; no unreviewed write,
+    # direct attendance mutation or scheduler invocation is permitted.
     for forbidden in ("RunPendingAsync(", "ReviseTodayAttendance", "PreviewAttendanceChange",
                       "ExecuteInWriteTransactionAsync(", "SetAsync(new JsonObject"):
         for key in ("dashboard_vm","register_vm","reader","dashboard_code","register_code"):
-            if forbidden in data[key]:
+            if forbidden in (reader_scan if key=="reader" else data[key]):
                 errors.append(f"Forbidden native write or unapproved preview in {key}: {forbidden}")
     need("core","build/test-native-dashboard-phase2-contract.py")
     need("release","build/test-native-dashboard-phase2-contract.py")
@@ -127,4 +149,17 @@ if __name__ == "__main__":
         changed[key]=changed[key].replace(token, "REMOVED_FOR_NEGATIVE_TEST")
         if not problems(changed):
             raise SystemExit(f"Negative mutation unexpectedly passed for {key} / {token}")
-    print("NATIVE AUTO REGISTER PHASE3 PASS: canonical HH:mm display clock, read-only SQLCipher register, live sessions, no new scheduler or write")
+    # Adding an identical call anywhere else must still fail. Removing security
+    # evidence or changing the exact approved payload must also fail closed.
+    for old,new in (
+        ("ReadPolicyAsync(", "SetAsync(new JsonObject\nReadPolicyAsync("),
+        ("ReadAutoRegisterAsync(", "SetAsync(new JsonObject\nReadAutoRegisterAsync("),
+        ('["expectedStatusName"]=intent.Choice.Name', '["expectedStatusName"]="unreviewed"'),
+        ("if(intent is null || !intent.IsValid(actor))", "if(false)"),
+        ("var service=new AutoAttendancePolicyService(database);", "var service=otherService;")
+    ):
+        changed=DATA.copy()
+        changed["reader"]=changed["reader"].replace(old,new)
+        if changed["reader"]==DATA["reader"] or not problems(changed):
+            raise SystemExit(f"Default-status scope negative mutation unexpectedly passed: {old}")
+    print("NATIVE AUTO REGISTER PHASE3 PASS: canonical HH:mm display clock, read-only SQLCipher register, live sessions, scoped reviewed settings exception")

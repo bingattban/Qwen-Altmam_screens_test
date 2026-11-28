@@ -409,7 +409,26 @@
                             <WrapPanel>
                                 <Button Content="تعديل وقت التحضير" Command="{Binding OpenDueClockCommand}" Padding="12,6" Margin="4"/>
                                 <Button Content="تعديل وقت القفل" Command="{Binding OpenLockClockCommand}" Padding="12,6" Margin="4"/>
+                                <Button Content="تعديل الحالة الافتراضية" Command="{Binding OpenDefaultStatusCommand}" Padding="12,6" Margin="4"/>
                             </WrapPanel>
+                            <StackPanel Visibility="{Binding DefaultStatus.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
+                                <TextBlock Text="الحالة الافتراضية للتحضير" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding DefaultStatus.Before.DefaultLabel}" TextWrapping="Wrap"/>
+                                <StackPanel IsEnabled="{Binding DefaultStatus.CanEdit}">
+                                    <TextBlock Text="اختر حالة نشطة. الإجازة والإذن تحتاجان مدة ولا تظهران في القائمة." TextWrapping="Wrap"/>
+                                    <ComboBox ItemsSource="{Binding DefaultStatus.Choices}" SelectedItem="{Binding DefaultStatus.Selected, Mode=TwoWay}" DisplayMemberPath="Name" Margin="0,5"/>
+                                    <Button Content="معاينة الحالة" Command="{Binding DefaultStatus.PreviewCommand}" Padding="10,6" Margin="0,5"/>
+                                </StackPanel>
+                                <StackPanel Visibility="{Binding DefaultStatus.HasPreview, Converter={StaticResource VisibilityIfTrue}}">
+                                    <TextBlock Text="الحالة المطلوب اعتمادها"/>
+                                    <TextBlock Text="{Binding DefaultStatus.Prepared.Choice.Name}" FontWeight="Bold"/>
+                                    <Button Content="تأكيد حفظ الحالة" Command="{Binding DefaultStatus.ConfirmCommand}" Padding="10,6" Margin="0,5"/>
+                                </StackPanel>
+                                <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding DefaultStatus.IsBusy, Converter={StaticResource VisibilityIfTrue}}"/>
+                                <TextBlock Text="{Binding DefaultStatus.Error}" TextWrapping="Wrap" Foreground="{DynamicResource NativeDangerText}"/>
+                                <TextBlock Text="{Binding DefaultStatus.CompletionMessage}" TextWrapping="Wrap"/>
+                                <Button Content="إغلاق المراجعة" Command="{Binding CloseDefaultStatusCommand}" Padding="10,6" Margin="0,5"/>
+                            </StackPanel>
                             <StackPanel Visibility="{Binding AttendanceClock.IsOpen, Converter={StaticResource VisibilityIfTrue}}">
                                 <TextBlock Text="{Binding AttendanceClock.ClockLabel}" FontWeight="Bold"/>
                                 <TextBlock Text="القيمة الحالية"/>

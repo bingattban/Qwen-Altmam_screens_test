@@ -35,6 +35,13 @@ public sealed record NativeAttendanceSettingsState(string DueTime,string LockTim
         $"الحالة المحفوظة غير صالحة للتطبيق التلقائي: {DefaultStatusName??DefaultStatusId}";
 }
 
+public sealed record NativeDefaultStatusChoice(string Id,string Name)
+{
+    public bool IsValid=>!string.IsNullOrWhiteSpace(Id) && Id.Length<=128 && !Id.Any(char.IsControl) &&
+        Id is not ("STS-LEAVE" or "STS-PERMISSION") &&
+        !string.IsNullOrWhiteSpace(Name) && !Name.Any(char.IsControl);
+}
+
 public sealed record NativeSettingsOverview(string Username,UserRole Role,string BackupDirectory,
     bool DirectoryAvailable,string BackupTime,bool BackupEnabled,int RetentionCount,
     string? LastBackupDate,string LastBackupFailure,string Theme)
@@ -43,6 +50,8 @@ public sealed record NativeSettingsOverview(string Username,UserRole Role,string
     public bool HasMonthlyExport=>MonthlyExport is not null;
     public NativeAttendanceSettingsState? AttendanceSettings {get;init;}
     public bool HasAttendanceSettings=>AttendanceSettings is not null;
+    public IReadOnlyList<NativeDefaultStatusChoice> DefaultStatusChoices {get;init;}=Array.Empty<NativeDefaultStatusChoice>();
+    public bool HasDefaultStatusChoices=>DefaultStatusChoices.Count>0;
     public bool Matches(NativeIdentity actor)=>RoleAuthorizationPolicy.CanPerformStandardOperations(actor.Role) &&
         Username==actor.Username && Role==actor.Role &&
         !string.IsNullOrWhiteSpace(BackupDirectory) && !BackupDirectory.Any(char.IsControl) &&
@@ -52,6 +61,10 @@ public sealed record NativeSettingsOverview(string Username,UserRole Role,string
             CultureInfo.InvariantCulture,DateTimeStyles.None,out _)) &&
         LastBackupFailure is not null && (MonthlyExport is not {} monthly || monthly.IsValid) &&
         (AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)) &&
+        DefaultStatusChoices is not null && DefaultStatusChoices.Count<=10000 &&
+        (DefaultStatusChoices.Count==0 || (HasAttendanceSettings && RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))) &&
+        DefaultStatusChoices.All(choice=>choice is not null && choice.IsValid) &&
+        DefaultStatusChoices.Select(choice=>choice.Id).Distinct(StringComparer.Ordinal).Count()==DefaultStatusChoices.Count &&
         Theme is "light" or "dark";
     public string RoleLabel=>Role.ToArabicLabel();
     public string DirectoryLabel=>DirectoryAvailable?"متاح وفق فحص المسار الحالي":"غير متاح";

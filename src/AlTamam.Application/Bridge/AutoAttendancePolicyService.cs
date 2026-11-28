@@ -103,6 +103,21 @@ public sealed class AutoAttendancePolicyService
         if(statusId.Length is <1 or >128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "اختر حالة تحضير نشطة من الإعدادات.", "statusId");
+        bool reviewed=payload?.ContainsKey("expectedDefaultStatusId")==true;
+        string? expectedStatus=null,expectedName=null;
+        if(reviewed || payload?.ContainsKey("expectedStatusName")==true)
+        {
+            try
+            {
+                expectedStatus=payload?["expectedDefaultStatusId"]?.GetValue<string>();
+                expectedName=payload?["expectedStatusName"]?.GetValue<string>();
+            }
+            catch(InvalidOperationException)
+            { return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"بيانات مراجعة الحالة غير صالحة."); }
+            if(!reviewed || string.IsNullOrWhiteSpace(expectedName) ||
+                (expectedStatus is not null && (expectedStatus.Length>128 || expectedStatus.Any(char.IsControl))))
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"بيانات مراجعة الحالة غير صالحة.");
+        }
         // A default has no from/to dates. It cannot assign indefinite leave
         // or permission while the daily attendance API requires bounded dates.
         if(AttendanceDateRangePolicy.RequiresRange(statusId))
@@ -125,6 +140,8 @@ public sealed class AutoAttendancePolicyService
             before.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
             before.Parameters.AddWithValue("$key",DefaultStatusKey);
             string? previous=await before.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+            if(reviewed && (previous!=expectedStatus || name!=expectedName))
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغيرت الحالة المحفوظة أو اسم الحالة المختارة منذ المعاينة؛ حدّث الإعدادات.");
             string timestamp=_time.GetUtcNow().ToString("O");
             string? auditEventId=null;
             if(previous!=statusId)
