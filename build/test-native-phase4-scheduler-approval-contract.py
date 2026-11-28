@@ -121,7 +121,7 @@ def problems(contents):
         need("reader",token)
     need("settings_vm","AttendanceClock.ForceClear();")
     need("settings_vm","|| AttendanceClock.IsOpen || MonthlyExportSchedule.IsOpen;")
-    need("settings_shell","!Settings.AttendanceClock.IsOpen")
+    need("settings_vm","|| AttendanceClock.IsOpen || MonthlyExportSchedule.IsOpen;")
     need("settings_templates","AttendanceClock.ConfirmCommand")
     need("attendance_clock_tests","Clock_requires_exact_review_and_never_repeats_write")
     need("attendance_clock_sql","Reviewed_clock_rejects_stale_value_and_preserves_other_clock_and_legacy_writes")
@@ -133,7 +133,12 @@ def problems(contents):
         need("reader",token)
     need("settings_vm","DefaultStatus.ForceClear();")
     need("settings_vm","|| DefaultStatus.IsOpen || AttendanceClock.IsOpen")
-    need("settings_shell","!Settings.DefaultStatus.IsOpen")
+    need("settings_vm","public bool CanOpenCatchUp => HasCatchUpAccess && !IsReviewOpen && !Overview.IsLoading;")
+    need("settings_vm","public bool CanOpenPolicy => HasPolicyAccess && !IsReviewOpen && !Overview.IsLoading;")
+    need("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;")
+    need("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;")
+    need("overview_tests","Overview_rejects_overlapping_refresh_and_preserves_snapshot_during_diagnostics")
+    need("settings_shell","Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings))")
     need("settings_templates","DefaultStatus.ConfirmCommand")
     need("default_status_tests","Only_canonical_eligible_choice_can_be_reviewed_and_saved_once")
     need("attendance_clock_sql","Reviewed_default_rejects_stale_selection_or_renamed_target_and_replays_once")
@@ -713,12 +718,14 @@ if __name__=="__main__":
         ("settings_templates","Overview.Snapshot.AttendanceSettings.DefaultLabel"),
         ("attendance_clock_service","if(expected is not null &&"),
         ("reader",'[intent.PayloadKey]=intent.Time,["expectedValue"]=intent.Previous'),
-        ("settings_shell","!Settings.AttendanceClock.IsOpen"),
+        ("settings_vm","|| AttendanceClock.IsOpen || MonthlyExportSchedule.IsOpen;"),
         ("settings_templates","AttendanceClock.ConfirmCommand"),
         ("attendance_clock_service","if(reviewed && (previous!=expectedStatus || name!=expectedName))"),
         ("reader",'["expectedDefaultStatusId"]=intent.Before.DefaultStatusId'),
-        ("settings_shell","!Settings.DefaultStatus.IsOpen"),
+        ("settings_shell","Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings))"),
         ("settings_templates","DefaultStatus.ConfirmCommand"),
+        ("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;"),
+        ("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;"),
         ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),
