@@ -830,6 +830,21 @@ public sealed class PersonRosterService
                 }
             }
 
+            // Native approval supplies individual reviewed versions; legacy
+            // clients may omit them, but the canonical token always binds each.
+            if(payload.ContainsKey("expectedVersions"))
+            {
+                if(payload["expectedVersions"] is not JsonArray reviewed || reviewed.Count!=ids.Count)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"إصدارات الأفراد المراجعة غير مكتملة.");
+                for(int i=0;i<ids.Count;i++)
+                {
+                    if(reviewed[i] is not JsonObject row ||
+                       ReadString(row,"personId")!=ids[i] ||
+                       ReadLong(row,"rowVersion",-1)!=memberExpectedVersions[ids[i]])
+                        return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,"تغير إصدار أحد الأفراد المراجعين.");
+                }
+            }
+
             var people = new List<(string Id,string Name,int Org,int Active,long Revision)>();
             long sum = 0;
             foreach (string id in ids)
