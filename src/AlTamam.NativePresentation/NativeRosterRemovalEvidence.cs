@@ -13,18 +13,11 @@ public interface INativeRosterRemovalBackend:INativeRosterRemovalPreviewBackend
         NativeRosterRemovalPreview preview,string reason,string operationId,CancellationToken ct=default);
 }
 public sealed record NativeRosterRemovalReceipt(string BusinessDate,string PreviewToken,IReadOnlyList<string> ArchivedPersonIds);
-public interface INativeRosterRemovalBackend:INativeRosterRemovalPreviewBackend
-{
-    Task<NativeRosterRemovalReceipt> CommitRosterRemovalAsync(NativeIdentity actor,
-        NativeRosterRemovalPreview preview,string reason,string operationId,CancellationToken ct=default);
-}
-public sealed record NativeRosterRemovalReceipt(string BusinessDate,string PreviewToken,IReadOnlyList<string> ArchivedPersonIds);
 public sealed record NativeRosterRemovalMember(string PersonId,string Name,string ServiceNumberA,string SiteName,long Revision);
 public sealed record NativeRosterRemovalCandidate(NativeRosterRemovalMember Member,int OrganizationalStatus,long AttendanceDays,string? Blocker);
 public sealed record NativeRosterRemovalPreview(string BusinessDate,string PreviewToken,long BaseRevision,
     IReadOnlyList<NativeRosterRemovalCandidate> Candidates)
 {
-    public string? SessionNonce {get;init;}
     public string? SessionNonce {get;init;}
     public bool CanApprove=>Candidates.Count>0 && Candidates.All(x=>x.OrganizationalStatus==1 && x.Blocker is null);
 }
