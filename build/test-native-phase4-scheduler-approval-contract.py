@@ -138,6 +138,7 @@ def problems(contents):
     need("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;")
     need("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;")
     need("overview_tests","Overview_rejects_overlapping_refresh_and_preserves_snapshot_during_diagnostics")
+    need("settings_shell","ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical")
     need("settings_shell","Settings.Overview.Attach(overviewReader, () => _active, () => !Settings.IsReviewOpen && ReferenceEquals(CurrentPage,Settings))")
     need("settings_templates","DefaultStatus.ConfirmCommand")
     need("default_status_tests","Only_canonical_eligible_choice_can_be_reviewed_and_saved_once")
@@ -726,6 +727,7 @@ if __name__=="__main__":
         ("settings_templates","DefaultStatus.ConfirmCommand"),
         ("theme_vm","if(IsLoading || IsSavingTheme || _canRefresh?.Invoke()==false) return;"),
         ("settings_vm","public bool CanOpenHistorical => HasHistoricalAccess && !IsReviewOpen && !Overview.IsLoading;"),
+        ("settings_shell","ReferenceEquals(refresh,_settingsEntryRefresh) && Settings.CanOpenHistorical"),
         ("settings_templates","هذه الإعدادات المحفوظة لا تثبت نجاح تصدير جديد أو توفر المجلد حاليا"),
         ("monthly_config","previousDirectory!=expectedDirectory"),
         ("reader",'["expectedConfiguration"]=new JsonObject'),
