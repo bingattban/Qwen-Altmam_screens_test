@@ -26,6 +26,7 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
     private readonly NativeOperationDrainGate _operations = new();
     private readonly NativeAutomaticSchedulerGate _autoAttendance;
     private readonly NativeAutomaticSchedulerGate _autoBackup;
+    private readonly NativeAutomaticSchedulerGate _autoMonthlyExcel;
     private readonly object _lifecycleSync = new();
     private Task? _shutdownTask;
 
@@ -37,6 +38,8 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
             new NativeDurableAttendanceScheduler(database));
         _autoBackup = new NativeAutomaticSchedulerGate(
             new NativeDurableBackupScheduler(database));
+        _autoMonthlyExcel = new NativeAutomaticSchedulerGate(
+            new NativeDurableMonthlyExcelScheduler(database));
     }
 
     public static async Task<NativeSqlCipherAuthenticationBackend> OpenAsync(
@@ -90,6 +93,15 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
         {
             if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
             _autoBackup.StartOnce();
+        }
+    }
+
+    public void StartAutomaticMonthlyExcelScheduler()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(NativeSqlCipherAuthenticationBackend));
+            _autoMonthlyExcel.StartOnce();
         }
     }
 
@@ -267,10 +279,11 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
 
     private async Task DrainNativeWorkAsync()
     {
-        // Request both stops even if one later fails. Only release SQLCipher
-        // after both canonical schedulers have drained successfully.
+        // Request all stops even if one later fails. Only release SQLCipher
+        // after all three canonical schedulers have drained successfully.
         Task nativeDrain = _operations.StopAndDrainAsync();
         Task backupDrain = _autoBackup.DisposeAsync().AsTask();
+        Task monthlyDrain = _autoMonthlyExcel.DisposeAsync().AsTask();
         try
         {
             await _autoAttendance.DisposeAsync().ConfigureAwait(false);
@@ -278,7 +291,11 @@ public sealed class NativeSqlCipherAuthenticationBackend : INativeAuthentication
         finally
         {
             try { await backupDrain.ConfigureAwait(false); }
-            finally { await nativeDrain.ConfigureAwait(false); }
+            finally
+            {
+                try { await monthlyDrain.ConfigureAwait(false); }
+                finally { await nativeDrain.ConfigureAwait(false); }
+            }
         }
     }
 

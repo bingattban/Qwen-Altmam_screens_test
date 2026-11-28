@@ -16,6 +16,7 @@
   <ItemGroup>
     <Compile Include="../../src/AlTamam.DesktopHost/Bridge/WebViewSelfCheckTimeProvider.cs" Link="SelfCheck/WebViewSelfCheckTimeProvider.cs" />
     <Compile Include="../../src/AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs" Link="Scheduling/AutomaticBackupSchedulerService.cs" />
+    <Compile Include="../../src/AlTamam.DesktopHost/Scheduling/AutomaticMonthlyExcelSchedulerService.cs" Link="Scheduling/AutomaticMonthlyExcelSchedulerService.cs" />
     <Compile Include="../../src/AlTamam.NativePresentation/NativeOperationDrainGate.cs" Link="Restore/NativeOperationDrainGate.cs" />
   </ItemGroup>
 

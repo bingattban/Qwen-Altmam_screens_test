@@ -15,6 +15,8 @@ FILES={
  "canonical":"src/AlTamam.DesktopHost/Scheduling/EightPmSchedulerService.cs",
  "backup_canonical":"src/AlTamam.DesktopHost/Scheduling/AutomaticBackupSchedulerService.cs",
  "backup_adapter":"src/AlTamam.NativeDesktop/Scheduling/NativeDurableBackupScheduler.cs",
+ "monthly_canonical":"src/AlTamam.DesktopHost/Scheduling/AutomaticMonthlyExcelSchedulerService.cs",
+ "monthly_adapter":"src/AlTamam.NativeDesktop/Scheduling/NativeDurableMonthlyExcelScheduler.cs",
  "backup_tests":"tests/AlTamam.Tests/Bridge/Phase12BackupDiskRecoveryTests.cs",
  "backup_test_project":"tests/AlTamam.Tests/AlTamam.Tests.csproj",
  "attendance":"src/AlTamam.Application/Scheduling/AutoAttendanceService.cs",
@@ -225,6 +227,35 @@ def problems(contents):
             errors.append("Both scheduler drains must complete before shared drain returns")
     need("backend","private async Task ShutdownCoreAsync()\n    {\n        await DrainNativeWorkAsync().ConfigureAwait(false);\n        _database.Dispose();")
     need("host", "_backend.StartAutomaticBackupScheduler();")
+    need("project",'Compile Include="../AlTamam.DesktopHost/Scheduling/AutomaticMonthlyExcelSchedulerService.cs"')
+    need("backup_test_project",'Compile Include="../../src/AlTamam.DesktopHost/Scheduling/AutomaticMonthlyExcelSchedulerService.cs"')
+    for token in ("_service.RunIfDueAsync(ct)", "_service.RecordFailureAsync", "await _loop.ConfigureAwait(false)"):
+        need("monthly_canonical",token)
+    for token in ("new AutomaticMonthlyExcelSchedulerService(new AutomaticMonthlyExcelService(database))",
+                  "_original.Start()", "_original.DisposeAsync()"):
+        need("monthly_adapter",token)
+    for token in ("new NativeDurableMonthlyExcelScheduler(database)", "_autoMonthlyExcel.StartOnce()",
+                  "Task monthlyDrain = _autoMonthlyExcel.DisposeAsync().AsTask();",
+                  "await monthlyDrain.ConfigureAwait(false);"):
+        need("backend",token)
+    need("host","_backend.StartAutomaticMonthlyExcelScheduler();")
+    if contents["host"].count("_backend.StartAutomaticMonthlyExcelScheduler();") != 1:
+        errors.append("Monthly export scheduler must have one native startup call")
+    if len(shutdown)==2:
+        stop=shutdown[1]
+        tokens=("Task nativeDrain = _operations.StopAndDrainAsync();",
+                "Task backupDrain = _autoBackup.DisposeAsync().AsTask();",
+                "Task monthlyDrain = _autoMonthlyExcel.DisposeAsync().AsTask();",
+                "await _autoAttendance.DisposeAsync()", "await backupDrain.ConfigureAwait(false);",
+                "await monthlyDrain.ConfigureAwait(false);","await nativeDrain.ConfigureAwait(false);")
+        indices=[stop.find(token) for token in tokens]
+        if min(indices)<0 or indices!=sorted(indices):
+            errors.append("All three canonical schedulers and native work must drain")
+    for token in ("ConditionalWeakTable<AlTamamDbContext,SemaphoreSlim>",
+                  "DatabaseGates.GetValue(db,static _=>new SemaphoreSlim(1,1))",
+                  "return await ConfigureCoreAsync(payload,actor,ct).ConfigureAwait(false);"):
+        need("monthly_config",token)
+    need("monthly_sql_tests","OriginalHostMonthlyScheduler_StartsDueExportAndDrainsBeforeDatabaseDisposal")
     for token in ("ObjectDisposedException.ThrowIf(_stopping,this)", "_stopping=true",
                   "if(_stopping && _active==0) _drained.TrySetResult()", "Interlocked.Exchange(ref _gate,null)"):
         need("operation_gate", token)
@@ -670,6 +701,11 @@ if __name__=="__main__":
         ("reset_service","VerifyCurrentGeneralAdministratorPasswordAsync(actor,password,ct)"),
         ("reset_tests","NativeResetPreview_CannotBeConsumedByAnotherSessionOrLegacyEntry"),
         ("host","_backend.StartAutomaticBackupScheduler();"),
+        ("host","_backend.StartAutomaticMonthlyExcelScheduler();"),
+        ("backend","await monthlyDrain.ConfigureAwait(false);"),
+        ("monthly_adapter","new AutomaticMonthlyExcelSchedulerService(new AutomaticMonthlyExcelService(database))"),
+        ("monthly_config","DatabaseGates.GetValue(db,static _=>new SemaphoreSlim(1,1))"),
+        ("monthly_sql_tests","OriginalHostMonthlyScheduler_StartsDueExportAndDrainsBeforeDatabaseDisposal"),
         ("gate","_stopTask ??= StopCoreAsync()"),
         ("backup_adapter","new AutomaticBackupService(database)"),
         ("backup_tests","OriginalHostScheduler_StartsDueBackupAndDrainsBeforeDatabaseDisposal"),
