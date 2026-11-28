@@ -96,6 +96,23 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task OriginalHostMonthlyScheduler_StartsDueExportAndDrainsBeforeDatabaseDisposal()
+    {
+        var service=new AutomaticMonthlyExcelService(_db,_clock);
+        Assert.True((await service.ConfigureAsync(Configuration(true,_folder,"native-host-monthly-001"),Admin,default)).Success);
+        await using(var scheduler=new AlTamam.DesktopHost.Scheduling.AutomaticMonthlyExcelSchedulerService(service))
+        {
+            scheduler.Start();
+            scheduler.Start();
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            while((await service.ReadAsync(deadline.Token)).LastSuccessDate!="2026-11-05")
+                await Task.Delay(50,deadline.Token);
+        }
+        Assert.Equal(2,Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories).Length);
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
     public async Task FirstUseIsOff_OnlyAuthorizedAdminsCanConfigure()
     {
         var svc=new AutomaticMonthlyExcelService(_db,_clock);

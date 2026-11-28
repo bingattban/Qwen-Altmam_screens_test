@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
@@ -18,9 +19,10 @@ public sealed class AutomaticMonthlyExcelService
 {
     private readonly AlTamamDbContext _db;
     private readonly TimeProvider _clock;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private static readonly ConditionalWeakTable<AlTamamDbContext,SemaphoreSlim> DatabaseGates = new();
+    private readonly SemaphoreSlim _gate;
     public AutomaticMonthlyExcelService(AlTamamDbContext db, TimeProvider? clock = null)
-    { _db = db; _clock = clock ?? TimeProvider.System; }
+    { _db = db; _clock = clock ?? TimeProvider.System; _gate=DatabaseGates.GetValue(db,static _=>new SemaphoreSlim(1,1)); }
 
     public sealed record Options(bool Enabled, string ExportTime, string Directory,
         string LastSuccessDate, string LastFailure);
@@ -55,6 +57,16 @@ public sealed class AutomaticMonthlyExcelService
     };
 
     public async Task<BridgeResponse> ConfigureAsync(JsonObject? payload,
+        BridgePrincipal actor, CancellationToken ct)
+    {
+        if (actor.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,"إعداد التصدير التلقائي متاح للإدارة فقط.");
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try { return await ConfigureCoreAsync(payload,actor,ct).ConfigureAwait(false); }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<BridgeResponse> ConfigureCoreAsync(JsonObject? payload,
         BridgePrincipal actor, CancellationToken ct)
     {
         if (actor.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))

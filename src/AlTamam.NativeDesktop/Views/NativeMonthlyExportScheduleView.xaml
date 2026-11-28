@@ -30,7 +30,7 @@
                 <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding MonthlyExportSchedule.IsBusy, Converter={StaticResource ShowIfTrue}}"/>
                 <TextBlock Text="{Binding MonthlyExportSchedule.Error}" TextWrapping="Wrap" Foreground="{DynamicResource NativeDangerText}"/>
                 <TextBlock Text="{Binding MonthlyExportSchedule.CompletionMessage}" TextWrapping="Wrap" Foreground="{DynamicResource NativeAccentText}"/>
-                <TextBlock Text="حفظ الإعداد لا ينشئ ملف Excel ولا يثبت تشغيل المجدول في هذه الواجهة التجريبية." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,6"/>
+                <TextBlock Text="حفظ الإعداد لا ينشئ ملف Excel بذاته. يتحقق المجدول الأصلي من الموعد والإعدادات أثناء تشغيل البرنامج؛ راجع آخر نتيجة محفوظة." TextWrapping="Wrap" Foreground="{DynamicResource NativeMuted}" Margin="0,6"/>
                 <Button Content="إغلاق مراجعة التصدير" Command="{Binding CloseMonthlyExportCommand}" Padding="10,6"/>
             </StackPanel>
         </StackPanel>

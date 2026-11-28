@@ -645,7 +645,7 @@
         "src/AlTamam.NativeDesktop/Views/NativeSectionTemplates.xaml",
         "src/AlTamam.NativePresentation/NativeSettingsOverview.cs"
       ],
-      "note": "Multiple settings implemented; automatic monthly Excel saved state now read from the original settings service. Explicit reviewed configuration and native canonical save added; native scheduler lifecycle and physical acceptance remain outstanding.",
+      "note": "Multiple settings implemented; automatic monthly Excel saved state now read from the original settings service. Explicit reviewed configuration and native canonical save added; original monthly scheduler now linked to native host startup/drain. Remaining legacy settings comparison and physical acceptance outstanding.",
       "functionalParityVerified": false
     },
     {

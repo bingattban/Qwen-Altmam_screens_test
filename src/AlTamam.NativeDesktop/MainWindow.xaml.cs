@@ -73,6 +73,7 @@ public partial class MainWindow : Window
             // only after SQLCipher recovery and native UI initialization.
             _backend.StartAutomaticAttendanceScheduler();
             _backend.StartAutomaticBackupScheduler();
+            _backend.StartAutomaticMonthlyExcelScheduler();
             _sessionTimer.Start();
         }
         catch
