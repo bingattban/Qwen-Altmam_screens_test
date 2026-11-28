@@ -478,6 +478,19 @@ def problems(contents):
                   "Invalid_receipt_clears_uncertain_snapshot",
                   "Late_save_never_repaints_new_session_or_cleared_view"):
         need("theme_tests",token)
+    need("theme_tests","Theme_save_rechecks_admission_after_observer_notification")
+    save=contents["theme_vm"].split("public async Task SaveThemeAsync(",1)
+    if len(save)!=2:
+        errors.append("Native theme save method missing")
+    else:
+        save_body=save[1].split("public string Error=>",1)[0]
+        save_tokens=("long generation=++_generation;", "_pending=pending; _savingTheme=true;",
+                     "try\n        {\n            Notify();",
+                     "if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;",
+                     "await backend.SaveThemeAsync(actor,theme,pending.Token)")
+        positions=[save_body.find(token) for token in save_tokens]
+        if min(positions)<0 or positions!=sorted(positions):
+            errors.append("Theme save must publish admission and recheck session before backend write")
     theme=reader.split("public async Task<NativeSettingsOverview> SaveThemeAsync(",1)
     if len(theme)!=2:
         errors.append("Missing native theme adapter")
@@ -730,6 +743,9 @@ if __name__=="__main__":
         ("reader","new SettingsReadBackupService(database).Integrity()"),
         ("diagnostics_vm","generation!=_generation || pending.IsCancellationRequested || Authorized!=actor"),
         ("theme_vm","result.Theme!=theme"),
+        ("theme_vm","_pending=pending; _savingTheme=true;"),
+        ("theme_vm","if (generation!=_generation || pending.IsCancellationRequested || Authorized!=actor) return;"),
+        ("theme_tests","Theme_save_rechecks_admission_after_observer_notification"),
         ("theme_vm","MonthlyExport is not {} monthly || monthly.IsValid"),
         ("reader",'RequiredText(policy,"dailyLockTimeLocal")'),
         ("theme_vm","AttendanceSettings is not {} policy || (RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role) && policy.IsValid)"),

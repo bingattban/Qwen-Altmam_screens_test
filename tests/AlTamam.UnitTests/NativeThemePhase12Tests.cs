@@ -85,6 +85,35 @@ public sealed class NativeThemePhase12Tests
         Assert.False(vm.IsSavingTheme);
     }
 
+    [Theory]
+    [InlineData("clear")]
+    [InlineData("session")]
+    [InlineData("cancel")]
+    public async Task Theme_save_rechecks_admission_after_observer_notification(string change)
+    {
+        NativeIdentity? actor=Actor;
+        var backend=new Probe();
+        var vm=new NativeSettingsOverviewViewModel();
+        using var cancellation=new CancellationTokenSource();
+        vm.Attach(backend,()=>actor);
+        vm.AttachTheme(backend,()=>true);
+        await vm.RefreshAsync();
+        bool observed=false;
+        vm.PropertyChanged+=(_,_)=>
+        {
+            if(!vm.IsSavingTheme || observed) return;
+            observed=true;
+            if(change=="clear")vm.Clear();
+            else if(change=="session")actor=Actor with {SessionNonce="NONCE-B"};
+            else cancellation.Cancel();
+        };
+        await vm.SaveThemeAsync("dark",cancellation.Token);
+        Assert.True(observed);
+        Assert.Equal(0,backend.Saves);
+        Assert.Null(vm.Snapshot);
+        Assert.False(vm.IsSavingTheme);
+    }
+
     private sealed class Probe:INativeSettingsOverviewReader,INativeThemeBackend
     {
         public int Saves;
