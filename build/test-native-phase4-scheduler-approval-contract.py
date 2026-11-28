@@ -154,7 +154,11 @@ def problems(contents):
         need("monthly_review",token)
     need("settings_vm","MonthlyExportSchedule.ForceClear();")
     need("settings_vm","|| MonthlyExportSchedule.IsOpen;")
-    need("settings_shell","!Settings.MonthlyExportSchedule.IsOpen")
+    # The centralized review gate must block navigation while monthly export is open.
+    need("settings_shell","(screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&")
+    review_gate=re.search(r"public\s+bool\s+IsReviewOpen\s*=>\s*([^;]+);",contents["settings_vm"])
+    if not review_gate or "MonthlyExportSchedule.IsOpen" not in [part.strip() for part in review_gate.group(1).split("||")]:
+        errors.append("Settings.IsReviewOpen must include the monthly export review")
     need("settings_templates","<views:NativeMonthlyExportScheduleView/>")
     if "هذه البيانات لا تثبت تشغيل مجدول التصدير في الواجهة الأصلية" in contents["settings_templates"]:
         errors.append("Native settings overview retains obsolete pre-scheduler warning")
@@ -733,6 +737,8 @@ if __name__=="__main__":
         ("reader",'["expectedConfiguration"]=new JsonObject'),
         ("monthly_review","intent.Matches(result)"),
         ("settings_vm","MonthlyExportSchedule.ForceClear();"),
+        ("settings_shell","(screen == NativeScreen.Settings || !Settings.IsReviewOpen) &&"),
+        ("settings_vm","|| MonthlyExportSchedule.IsOpen;"),
         ("reader",'RequireObject(data["autoMonthlyExcel"])'),
         ("settings_templates","Overview.Snapshot.MonthlyExport.LastSuccessLabel"),
         ("reader",'.SetThemeAsync(new JsonObject{["theme"]=theme},lifetime.Token,principal)'),
