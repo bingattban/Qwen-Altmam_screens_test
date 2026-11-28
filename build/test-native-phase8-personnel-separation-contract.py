@@ -205,6 +205,15 @@ def problems(files):
                   "Ambiguous_receipt_blocks_reopen_and_replay_in_same_session",
                   "Supervisor_and_replaced_session_cannot_commit"):
         require("removal_commit_tests",token)
+    require("admin","OpenRemovalCommand")
+    require("admin","CanLeaveForHistoricalReview => !Removal.IsOpen")
+    require("admin","Removal.AttachBackend(")
+    require("admin","Removal.ForceCancel();")
+    require("shell","Administration.Removal.ForceCancel();")
+    for token in ('DataContext="{Binding Removal}"','Command="{Binding OpenRemovalCommand}"',
+                  'IsChecked="{Binding IdentityReviewed}"','IsChecked="{Binding AccountSuspensionAcknowledged}"',
+                  'ItemsSource="{Binding Candidates}"'):
+        require("roster",token)
     for key in ("core", "release"):
         lines = files[key].splitlines()
         call = "python build/test-native-phase8-personnel-separation-contract.py"
@@ -242,6 +251,10 @@ if __name__ == "__main__":
         ("removal", "row.Member!=members[i]"),
         ("removal", "x.Blocker is null"),
         ("roster_service", "!row.Eligible ?"),
+        ("admin", "CanLeaveForHistoricalReview => !Removal.IsOpen"),
+        ("shell", "Administration.Removal.ForceCancel();"),
+        ("roster", 'DataContext="{Binding Removal}"'),
+        ("roster", 'IsChecked="{Binding AccountSuspensionAcknowledged}"'),
         ("backend", "new PersonnelSeparationService(database)"),
         ("backend", '["operationId"] = operationId'),
         ("backend", "minimumSeconds != 5"),
