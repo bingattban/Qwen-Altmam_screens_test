@@ -78,6 +78,24 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Reviewed_configuration_rejects_stale_settings_and_preserves_legacy_writes()
+    {
+        var svc=new AutomaticMonthlyExcelService(_db,_clock);
+        var proposal=Configuration(true,_folder,"native-expected-config-001");
+        proposal["expectedConfiguration"]=new JsonObject{["enabled"]=false,["exportTime"]="21:00",["directory"]=""};
+        var intervening=Configuration(false,_folder,"legacy-config-change-001");
+        Assert.True((await svc.ConfigureAsync(intervening,Admin,default)).Success);
+        var rejected=await svc.ConfigureAsync(proposal,Admin,default);
+        Assert.False(rejected.Success);Assert.Equal(BridgeErrorCodes.ConflictStale,rejected.Code);
+        Assert.False((await svc.ReadAsync()).Enabled);
+        proposal["expectedConfiguration"]=new JsonObject{["enabled"]=false,["exportTime"]="21:00",["directory"]=_folder};
+        var result=await svc.ConfigureAsync(proposal,Admin,default);
+        Assert.True(result.Success,result.UserMessage);
+        Assert.True((await svc.ReadAsync()).Enabled);
+        Assert.True((await svc.ConfigureAsync(proposal,Admin,default)).Success);
+    }
+
+    [Fact]
     public async Task FirstUseIsOff_OnlyAuthorizedAdminsCanConfigure()
     {
         var svc=new AutomaticMonthlyExcelService(_db,_clock);

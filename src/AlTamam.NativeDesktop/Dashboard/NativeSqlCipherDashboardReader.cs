@@ -24,7 +24,7 @@ public sealed class NativeSqlCipherDashboardReader(
       INativePersonnelMutationBackend, INativePersonnelMovementBackend, INativeMovementArchiveBackend,
       INativeRosterRemovalBackend, INativePersonnelSeparationBackend, INativeSeparationArchiveBackend, INativeArchivedReturnBackend, INativeSiteCatalogBackend, INativeStatusCatalogBackend, INativeSiteRetirementBackend, INativeBulkInternalTransferBackend, INativeBulkExternalTransferBackend, INativeExcelPersonnelImportBackend,
       INativeImportOutcomeHistoryBackend, INativePersonnelReportReader, INativeHistoricalPeriodReader,
-      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
+      INativePersonnelGroupReportReader, INativePersonnelGroupExcelBackend, INativeIndividualExcelBackend, INativeAuditReader, INativeAuditDetailReader, INativeAuditEditBackend, INativeAuditHistoryReader, INativeAccountReader, INativeAccountCreateBackend, INativeAccountLifecycleBackend, INativeSettingsOverviewReader, INativeManualBackupBackend, INativeBackupScheduleBackend, INativeMonthlyExportScheduleBackend, INativeBackupInspectionBackend, INativeProgramDiagnosticsBackend, INativeThemeBackend, INativeRosterLayoutReader, INativeRosterColumnMutationBackend, INativeAttendanceDraftReader, INativeAttendanceDraftWriter, INativeAttendanceDraftDeleter
 {
     // Phase 11: canonical read-only audit query with the actual durable principal.
     public async Task<NativeAuditSnapshot> ReadAuditAsync(NativeIdentity actor,NativeAuditFilter filter,
@@ -521,6 +521,38 @@ public sealed class NativeSqlCipherDashboardReader(
         if(!overview.Matches(actor))
             throw new InvalidDataException("Invalid canonical settings overview.");
         return overview;
+    }
+
+    public async Task<NativeAutomaticMonthlyExcelState> SaveMonthlyExportScheduleAsync(NativeIdentity actor,
+        NativeMonthlyExportScheduleIntent intent,CancellationToken ct=default)
+    {
+        using var nativeOperation = operations.Enter();
+        if(intent is null || !intent.IsValid(actor))throw new UnauthorizedAccessException("Invalid monthly export intent.");
+        var principal=await ResolveBackupPrincipalAsync(actor,ct).ConfigureAwait(false);
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(principal.Role))
+            throw new UnauthorizedAccessException("Monthly export administration required.");
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(ct,principal.SessionRevocation);
+        var service=new AlTamam.Application.Scheduling.AutomaticMonthlyExcelService(database);
+        var response=await service.ConfigureAsync(new JsonObject
+        {
+            ["enabled"]=intent.Enabled,["exportTime"]=intent.Time,["directory"]=intent.Directory,["operationId"]=intent.OperationId,
+            ["expectedConfiguration"]=new JsonObject{["enabled"]=intent.Before.Enabled,
+                ["exportTime"]=intent.Before.ExportTime,["directory"]=intent.Before.Directory}
+        },principal,lifetime.Token).ConfigureAwait(false);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!response.Success && response.Code is BridgeErrorCodes.ConflictStale or BridgeErrorCodes.ValidationError or
+            BridgeErrorCodes.ScheduleUnavailable or BridgeErrorCodes.Unauthorized)
+            throw new NativeMonthlyExportScheduleRejectedException();
+        var data=RequiredObject(response,"ConfigureAutoMonthlyExcel");
+        var receipt=new NativeAutomaticMonthlyExcelState(RequiredBoolean(data,"enabled"),RequiredText(data,"exportTime"),
+            RequiredText(data,"directory"),RequiredText(data,"lastSuccessDate"),RequiredText(data,"lastFailure"));
+        var saved=await service.ReadAsync(lifetime.Token).ConfigureAwait(false);
+        var current=new NativeAutomaticMonthlyExcelState(saved.Enabled,saved.ExportTime,saved.Directory,saved.LastSuccessDate,saved.LastFailure);
+        await VerifyContinuationIdentityAsync(actor,lifetime.Token).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if(!intent.Matches(receipt) || !intent.Matches(current))throw new InvalidDataException("Unverified monthly export configuration.");
+        return current;
     }
 
     private async Task<BridgePrincipal> ResolveBackupPrincipalAsync(NativeIdentity actor,CancellationToken ct)
