@@ -137,6 +137,9 @@
                         Command="{Binding OpenArchivedReturnCommand}"
                         CommandParameter="{Binding SelectedItem, ElementName=PersonnelGrid}"
                         AutomationProperties.Name="طلب إعادة نفس الفرد المؤرشف مع معاينة الهوية والتأكيد"/>
+                <Button Content="إخراج أسماء من القوة (أرشفة)" Style="{StaticResource PersonnelButton}"
+                        VerticalAlignment="Bottom" Command="{Binding OpenRemovalCommand}"
+                        AutomationProperties.Name="معاينة أرشفة أفراد من الصفحة الحالية دون حذف تاريخهم"/>
                 <Button Content="فصل الفرد المحدد"
                         Style="{StaticResource PersonnelButton}" VerticalAlignment="Bottom"
                         Command="{Binding OpenSeparationCommand}"
@@ -375,6 +378,63 @@
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.RowSpan="5" Panel.ZIndex="245" Background="#B80F172A"
+              DataContext="{Binding Removal}" Visibility="{Binding IsOpen, Converter={StaticResource PersonnelVisible}}"
+              KeyboardNavigation.TabNavigation="Cycle">
+            <Border Background="{DynamicResource NativeSurface}" CornerRadius="8" Margin="18" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" Content="إغلاق" Command="{Binding CloseCommand}" Padding="12,6"/>
+                            <TextBlock Text="إخراج أسماء من القوة — أرشفة" FontSize="20" FontWeight="Bold"/>
+                        </DockPanel>
+                        <TextBlock Text="حدد أفرادا من الصفحة الحالية فقط. تحفظ الأرشفة التاريخ وتعلق الحسابات المرتبطة، ولا تسجل حركة فصل." TextWrapping="Wrap" Margin="0,8"/>
+                        <ProgressBar Height="4" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource PersonnelVisible}}"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1">
+                        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <DataGrid ItemsSource="{Binding Options}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  CanUserDeleteRows="False" IsEnabled="{Binding CanEdit}" EnableRowVirtualization="True">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Header="اختيار" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="75"/>
+                                <DataGridTextColumn Header="الرقم (ع)" Binding="{Binding Number}" IsReadOnly="True" Width="110"/>
+                                <DataGridTextColumn Header="الرتبة" Binding="{Binding Rank}" IsReadOnly="True" Width="100"/>
+                                <DataGridTextColumn Header="الاسم" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding Candidates}" Visibility="{Binding HasPreview, Converter={StaticResource PersonnelVisible}}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" Margin="0,8,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="الاسم" Binding="{Binding Member.Name}" Width="*"/>
+                                <DataGridTextColumn Header="الموقع" Binding="{Binding Member.SiteName}" Width="130"/>
+                                <DataGridTextColumn Header="أيام التحضير" Binding="{Binding AttendanceDays}" Width="110"/>
+                                <DataGridTextColumn Header="مانع الأرشفة" Binding="{Binding Blocker}" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                    <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding SelectedCount, StringFormat='عدد المحددين: {0}'}"/>
+                        <TextBlock Text="سبب الأرشفة"/>
+                        <TextBox Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}" MaxLength="1000"
+                                 IsEnabled="{Binding CanEdit}" TextWrapping="Wrap"/>
+                        <StackPanel Visibility="{Binding HasPreview, Converter={StaticResource PersonnelVisible}}" IsEnabled="{Binding CanEdit}">
+                            <TextBlock Text="{Binding Preview.BusinessDate, StringFormat='تاريخ الأرشفة: {0}'}"/>
+                            <CheckBox Content="راجعت هويات الأفراد المحددين وأثر الأرشفة" IsChecked="{Binding IdentityReviewed}" Margin="0,4"/>
+                            <CheckBox Content="أقر بتعليق الحسابات المرتبطة بالأفراد" IsChecked="{Binding AccountSuspensionAcknowledged}" Margin="0,4"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource NativeDangerText}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding CompletionMessage}" TextWrapping="Wrap"/>
+                        <WrapPanel>
+                            <Button Content="معاينة الأرشفة" Command="{Binding PreviewCommand}" Padding="12,6" Margin="3"/>
+                            <Button Content="تأكيد الأرشفة" Command="{Binding ConfirmCommand}" Padding="12,6" Margin="3"/>
+                        </WrapPanel>
                     </StackPanel>
                 </Grid>
             </Border>

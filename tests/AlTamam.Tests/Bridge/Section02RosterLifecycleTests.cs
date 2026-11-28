@@ -125,6 +125,26 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task ArchiveExplicitReviewedVersions_RejectsEqualSumForgeryBeforeAnyWrite()
+    {
+        Execute("UPDATE Persons SET RowVersion=2;");
+        var svc=new PersonRosterService(_db);
+        var preview=await svc.PreviewArchivePersonsAsync(Selected(),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var data=Assert.IsType<JsonObject>(preview.Data);
+        var payload=Commit(data,(JsonArray)Selected()["personIds"]!);
+        payload["expectedVersions"]=new JsonArray(
+            new JsonObject{["personId"]="TST-LIFE-P1",["rowVersion"]=3L},
+            new JsonObject{["personId"]="TST-LIFE-P2",["rowVersion"]=1L});
+        Assert.False((await svc.ArchivePersonsAsync(Actor,"test-admin",payload,default)).Success);
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1;"));
+        Assert.Equal(0,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE';"));
+        payload["expectedVersions"]=data["expectedVersions"]!.DeepClone();
+        Assert.True((await svc.ArchivePersonsAsync(Actor,"test-admin",payload,default)).Success);
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM Persons WHERE OrganizationalStatus=4;"));
+    }
+
+    [Fact]
     public async Task ArchiveBatch_ClosesButNeverErasesHistory_RejectsReplay()
     {
         var service = new PersonRosterService(_db);

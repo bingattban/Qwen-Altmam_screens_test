@@ -169,7 +169,7 @@ def problems(content):
                   "Settings.CanOpenHistorical", "CanNavigate(NativeScreen.Settings)",
                   "_navigateCommand.Execute(NativeScreen.Settings)", "Settings.OpenHistoricalCommand.Execute(null)"):
         require("shell",token)
-    for token in ("CanLeaveForHistoricalReview => !_loading", "!Mutation.HasUnverifiedCommit",
+    for token in ("CanLeaveForHistoricalReview => !Removal.IsOpen && !_loading && !ColumnLayout.IsOpen", "!Mutation.HasUnverifiedCommit",
                   "!ReportHistory.IsOpen && !GroupReport.IsOpen", "Changed(nameof(CanLeaveForHistoricalReview))"):
         require("admin_vm",token)
     require("admin_xaml","DataContext.OpenAdministrativeHistoricalCommand")
@@ -552,6 +552,7 @@ if __name__ == "__main__":
         ("shell", "MonthlyAttendance.SetRosterExportEntry(true)"),
         ("shell", "MonthlyAttendance.SetRosterExportEntry(false)"),
         ("vm", "SetRosterExportEntry(false);"),
+        ("admin_vm", "CanLeaveForHistoricalReview => !Removal.IsOpen && !_loading && !ColumnLayout.IsOpen"),
         ("admin_xaml", "DataContext.OpenRosterExportCommand"),
         ("templates", "DataContext.OpenRosterExportCommand"),
         ("xaml", 'Text="{Binding PageHeading}"'),
