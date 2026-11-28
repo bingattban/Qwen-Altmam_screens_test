@@ -47,7 +47,7 @@ public sealed class NativeRosterRemovalViewModel:INotifyPropertyChanged
     public NativeRosterRemovalReceipt? Receipt=>Live?_receipt:null;
     public bool HasPreview=>Preview is not null;
     public IReadOnlyList<NativeRosterRemovalCandidate> Candidates=>Preview?.Candidates??[];
-    public string CompletionMessage=>Receipt is null?"":$"تمت أرشفة {_receipt.ArchivedPersonIds.Count} فرد من القوة بتاريخ {_receipt.BusinessDate} مع حفظ التاريخ.";
+    public string CompletionMessage=>Receipt is {} receipt?$"تمت أرشفة {receipt.ArchivedPersonIds.Count} فرد من القوة بتاريخ {receipt.BusinessDate} مع حفظ التاريخ.":"";
     public string Reason {get=>_reason;set{if(!CanEdit || value==_reason)return;_reason=value??"";Invalidate();}}
     public bool IdentityReviewed {get=>_identityReviewed;set{if(!CanEdit || !HasPreview)return;_identityReviewed=value;Notify();}}
     public bool AccountSuspensionAcknowledged {get=>_accountAcknowledged;set{if(!CanEdit || !HasPreview)return;_accountAcknowledged=value;Notify();}}

@@ -108,9 +108,9 @@ def problems(contents):
                   '.ListAsync(new JsonObject{["includeInactive"]=true},ct)',
                   'RequiredNumber(data,"total")!=rows.Length || !NativeRosterColumn.ValidCatalogue(rows)'):
         need("reader",token)
-    for token in ("CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen",
+    for token in ("CanLeaveForHistoricalReview => !Removal.IsOpen && !_loading && !ColumnLayout.IsOpen",
                   "ColumnLayout.Clear();","ColumnLayout.Attach(layoutReader,()=>_liveActor?.Invoke());",
-                  "if(ColumnLayout.IsOpen)return;"):
+                  "if(ColumnLayout.IsOpen || Removal.IsOpen)return;"):
         need("layout_admin",token)
     for token in ("Binding OpenColumnLayoutCommand","Binding ColumnLayout","Binding StoredValueCount"):
         need("layout_view",token)
@@ -612,7 +612,8 @@ if __name__=="__main__":
         ("reader",'payload["expectedSnapshot"]=previous.Snapshot'),
         ("layout_vm","_mutation.Take(_liveActor?.Invoke(),_rows)"),
         ("layout_view","Binding ConfirmCommand"),
-        ("layout_admin","CanLeaveForHistoricalReview => !_loading && !ColumnLayout.IsOpen"),
+        ("layout_admin","CanLeaveForHistoricalReview => !Removal.IsOpen && !_loading && !ColumnLayout.IsOpen"),
+        ("layout_admin","if(ColumnLayout.IsOpen || Removal.IsOpen)return;"),
         ("reader",'.ListAsync(new JsonObject{["includeInactive"]=true},ct)'),
         ("layout_view","Binding StoredValueCount"),
         ("reader","var before=await ReadRosterLayoutCoreAsync(actor,lifetime.Token)"),

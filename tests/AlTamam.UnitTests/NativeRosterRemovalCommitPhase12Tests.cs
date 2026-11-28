@@ -22,8 +22,9 @@ public sealed class NativeRosterRemovalCommitPhase12Tests
     [Fact]
     public async Task Nothing_selected_automatically_and_two_explicit_approvals_required()
     {
-        var b=new Probe();var vm=Open(b,()=>Actor,Rows());
+        var b=new Probe();NativeIdentity? live=Actor;var vm=Open(b,()=>live,Rows());
         Assert.True(vm.IsOpen);Assert.Equal(0,vm.SelectedCount);
+        Assert.Empty(vm.CompletionMessage);
         Assert.False(vm.CanPreview);Assert.False(vm.CanConfirm);
         vm.Options[1].IsSelected=true;vm.Reason="قرار إداري موثق";
         await vm.PreviewAsync();Assert.Equal(0,b.Commits);
@@ -32,6 +33,9 @@ public sealed class NativeRosterRemovalCommitPhase12Tests
         Assert.True(vm.CanConfirm);await vm.ConfirmAsync();
         Assert.Equal(1,b.Commits);Assert.Equal(new[]{"P-2"},vm.Receipt!.ArchivedPersonIds);
         await vm.ConfirmAsync();Assert.Equal(1,b.Commits);
+        Assert.Contains("تمت أرشفة 1 فرد",vm.CompletionMessage);
+        live=Actor with{SessionNonce="NEW"};
+        Assert.Null(vm.Receipt);Assert.Empty(vm.CompletionMessage);
     }
 
     [Fact]
@@ -54,6 +58,7 @@ public sealed class NativeRosterRemovalCommitPhase12Tests
         vm.Options[0].IsSelected=true;vm.Reason="قرار إداري موثق";
         await vm.PreviewAsync();vm.IdentityReviewed=true;vm.AccountSuspensionAcknowledged=true;
         await vm.ConfirmAsync();Assert.Null(vm.Receipt);Assert.True(vm.HasUnverifiedCommit);
+        Assert.Empty(vm.CompletionMessage);
         Assert.False(vm.CanConfirm);vm.Close();vm.Open(rows);
         Assert.False(vm.IsOpen);Assert.Equal(1,b.Commits);
     }
